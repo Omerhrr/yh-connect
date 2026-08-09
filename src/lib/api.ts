@@ -1,0 +1,988 @@
+// API client for the YH Connect FastAPI backend.
+// Configure the backend URL via NEXT_PUBLIC_API_URL (defaults to local dev server).
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000/api/v1";
+
+const TOKEN_KEY = "yhc_token";
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token: string | null) {
+  if (typeof window === "undefined") return;
+  if (token) window.localStorage.setItem(TOKEN_KEY, token);
+  else window.localStorage.removeItem(TOKEN_KEY);
+}
+
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const token = getToken();
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as Record<string, string> | undefined),
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+
+  if (!res.ok) {
+    let message = res.statusText;
+    try {
+      const data = await res.json();
+      message = data.detail || message;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, message);
+  }
+
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+// ─── Types ────────────────────────────────────────────────────────────────
+export type UserRole = "client" | "professional" | "admin";
+
+export type UserOut = {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string | null;
+  role: UserRole;
+  avatar_url?: string | null;
+  company_name?: string | null;
+  industry?: string | null;
+  company_logo_url?: string | null;
+  company_description?: string | null;
+  company_website?: string | null;
+  is_verified_business: boolean;
+  preferred_categories?: string[] | null;
+  is_verified: boolean;
+  email_verified: boolean;
+  kyc_status: "unverified" | "pending" | "verified" | "rejected";
+  email_notifications_enabled: boolean;
+  created_at: string;
+  has_professional_profile: boolean;
+  wallet_balance: number;
+};
+
+export type KycOut = {
+  kyc_status: "unverified" | "pending" | "verified" | "rejected";
+  kyc_note?: string | null;
+  kyc_verified_at?: string | null;
+};
+
+export type ClientPublicOut = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company_name?: string | null;
+  company_logo_url?: string | null;
+  company_description?: string | null;
+  company_website?: string | null;
+  industry?: string | null;
+  is_verified_business: boolean;
+  kyc_verified: boolean;
+  completed_project_count: number;
+  open_project_count: number;
+  hire_rate?: number | null;
+  member_since: string;
+  preferred_categories?: string[] | null;
+};
+
+export type NotificationOut = {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  read_at?: string | null;
+  created_at: string;
+};
+
+export type AuthResponse = {
+  access_token: string;
+  token_type: string;
+  user: UserOut;
+};
+
+export type CategoryOut = {
+  id: string;
+  label: string;
+  icon: string;
+  description?: string | null;
+  professional_count: number;
+  featured?: boolean;
+};
+
+export type PortfolioItemOut = {
+  id: string;
+  profile_id: string;
+  title: string;
+  description?: string | null;
+  image_urls: string[];
+  completed_date?: string | null;
+  created_at: string;
+};
+
+export type EmploymentHistoryOut = {
+  id: string;
+  profile_id: string;
+  title: string;
+  employer: string;
+  start_date: string;
+  end_date?: string | null;
+  description?: string | null;
+};
+
+export type EducationOut = {
+  id: string;
+  profile_id: string;
+  school: string;
+  degree?: string | null;
+  field_of_study?: string | null;
+  start_year?: number | null;
+  end_year?: number | null;
+};
+
+export type CertificationOut = {
+  id: string;
+  profile_id: string;
+  name: string;
+  issuing_body?: string | null;
+  issued_date?: string | null;
+  expiry_date?: string | null;
+  credential_url?: string | null;
+};
+
+export type LanguageEntry = { name: string; level: string };
+
+export type ProfessionalStats = {
+  total_projects: number;
+  completed_projects: number;
+  job_success_rate?: number | null;
+  member_since: string;
+  response_time_label: string;
+};
+
+export type WorkHistoryItem = {
+  project_id: string;
+  project_title: string;
+  client_name: string;
+  client_company?: string | null;
+  status: "open" | "in_progress" | "review" | "completed" | "cancelled";
+  created_at: string;
+  completed_at?: string | null;
+  amount_range_label: string;
+  review_rating?: number | null;
+  review_comment?: string | null;
+};
+
+export type ProfessionalOut = {
+  id: string;
+  user_id: string;
+  first_name: string;
+  last_name: string;
+  title: string;
+  category: CategoryOut;
+  bio?: string | null;
+  location?: string | null;
+  hourly_rate?: number | null;
+  years_experience?: string | null;
+  availability: string;
+  skills: string[];
+  service_locations: string[];
+  license_number?: string | null;
+  is_verified: boolean;
+  verification_status: "unverified" | "pending" | "verified" | "rejected";
+  bank_code?: string | null;
+  rating: number;
+  review_count: number;
+  portfolio_items: PortfolioItemOut[];
+  has_payout_details: boolean;
+  employment_history: EmploymentHistoryOut[];
+  education: EducationOut[];
+  certifications: CertificationOut[];
+  languages: LanguageEntry[];
+  stats?: ProfessionalStats | null;
+};
+
+export type ProjectOut = {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string;
+  category: CategoryOut;
+  location?: string | null;
+  budget_min: number;
+  budget_max: number;
+  budget_type: "fixed" | "hourly";
+  skills: string[];
+  status: "open" | "in_progress" | "review" | "completed" | "cancelled";
+  progress: number;
+  assigned_professional_id?: string | null;
+  created_at: string;
+  bid_count: number;
+  client_company_name?: string | null;
+  client_is_verified_business: boolean;
+  client_completed_project_count: number;
+  client_kyc_verified: boolean;
+  client_email_verified: boolean;
+  client_member_since?: string | null;
+  client_open_project_count: number;
+  client_hire_rate?: number | null;
+};
+
+export type BidStatus = "pending" | "shortlisted" | "accepted" | "rejected" | "withdrawn";
+
+export type BidOut = {
+  id: string;
+  project_id: string;
+  professional_id: string;
+  amount: number;
+  cover_letter?: string | null;
+  estimated_days?: number | null;
+  status: BidStatus;
+  created_at: string;
+  project_title?: string | null;
+  professional_name?: string | null;
+  professional_verification_status?: string | null;
+  professional_rating?: number | null;
+  professional_review_count?: number | null;
+  professional_portfolio_count?: number | null;
+  professional_hourly_rate?: number | null;
+};
+
+export type InviteStatus = "pending" | "accepted" | "declined";
+
+export type InviteOut = {
+  id: string;
+  project_id: string;
+  professional_id: string;
+  client_id: string;
+  proposed_amount?: number | null;
+  message?: string | null;
+  status: InviteStatus;
+  created_at: string;
+  project_title?: string | null;
+  professional_name?: string | null;
+  client_name?: string | null;
+};
+
+export type MilestoneStatus = "pending" | "in_progress" | "submitted" | "approved" | "funded" | "paid" | "refunded";
+
+export type MilestoneUpdateOut = {
+  id: string;
+  milestone_id: string;
+  created_by: string;
+  author_name?: string | null;
+  note?: string | null;
+  photo_urls: string[];
+  created_at: string;
+};
+
+export type MilestoneOut = {
+  id: string;
+  project_id: string;
+  title: string;
+  description?: string | null;
+  amount: number;
+  due_date?: string | null;
+  status: MilestoneStatus;
+  sort_order: number;
+  created_at: string;
+  updates: MilestoneUpdateOut[];
+};
+
+export type ChangeOrderOut = {
+  id: string;
+  project_id: string;
+  proposed_by: string;
+  description: string;
+  amount_delta: number;
+  status: "proposed" | "approved" | "rejected";
+  created_at: string;
+};
+
+export type WalletTransactionOut = {
+  id: string;
+  project_id?: string | null;
+  milestone_id?: string | null;
+  client_id?: string | null;
+  professional_id?: string | null;
+  type: "topup" | "funding" | "release" | "refund" | "withdrawal";
+  status: "pending" | "successful" | "failed";
+  amount: number;
+  platform_fee: number;
+  monnify_reference?: string | null;
+  note?: string | null;
+  created_at: string;
+  project_title?: string | null;
+};
+
+export type MessageOut = {
+  id: string;
+  project_id?: string | null;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  attachment_url?: string | null;
+  is_read: boolean;
+  created_at: string;
+  sender_name?: string | null;
+};
+
+export type ThreadOut = {
+  project_id: string;
+  project_title: string;
+  other_user_id: string;
+  other_user_name: string;
+  last_message: string;
+  last_message_at: string;
+  unread_count: number;
+};
+
+export type ReviewOut = {
+  id: string;
+  project_id: string;
+  reviewer_id: string;
+  reviewer_name?: string | null;
+  reviewee_id: string;
+  rating: number;
+  comment?: string | null;
+  response_body?: string | null;
+  responded_at?: string | null;
+  created_at: string;
+};
+
+export type FavoriteTargetType = "professional" | "project";
+
+export type FavoriteOut = {
+  id: string;
+  target_type: FavoriteTargetType;
+  target_id: string;
+  created_at: string;
+};
+
+export type DisputeCategory = "payment" | "quality" | "non_delivery" | "scope_disagreement" | "unresponsive" | "other";
+export type DisputeStatus = "open" | "under_review" | "escalated" | "resolved" | "withdrawn";
+export type DisputeOutcome = "refund_client" | "release_professional" | "partial_split" | "no_action";
+
+export const DISPUTE_CATEGORY_LABELS: Record<DisputeCategory, string> = {
+  payment: "Payment issue",
+  quality: "Quality of work",
+  non_delivery: "Work not delivered",
+  scope_disagreement: "Scope disagreement",
+  unresponsive: "Unresponsive party",
+  other: "Other",
+};
+
+export const DISPUTE_OUTCOME_LABELS: Record<DisputeOutcome, string> = {
+  refund_client: "Refund the client",
+  release_professional: "Release funds to professional",
+  partial_split: "Partial split (manual)",
+  no_action: "No fund action needed",
+};
+
+export type DisputeOut = {
+  id: string;
+  project_id: string;
+  project_title?: string | null;
+  milestone_id?: string | null;
+  milestone_title?: string | null;
+  milestone_amount?: number | null;
+  category: DisputeCategory;
+  raised_by: string;
+  raised_by_name?: string | null;
+  other_party_id?: string | null;
+  other_party_name?: string | null;
+  reason: string;
+  evidence_urls: string[];
+  status: DisputeStatus;
+  outcome?: DisputeOutcome | null;
+  resolution_note?: string | null;
+  resolved_by_name?: string | null;
+  resolved_at?: string | null;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type DisputeMessageOut = {
+  id: string;
+  sender_id: string;
+  sender_name?: string | null;
+  is_admin: boolean;
+  body: string;
+  created_at: string;
+};
+
+export type DisputeEventOut = {
+  id: string;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  from_status?: string | null;
+  to_status: string;
+  note?: string | null;
+  created_at: string;
+};
+
+export type DisputeDetailOut = DisputeOut & {
+  messages: DisputeMessageOut[];
+  events: DisputeEventOut[];
+};
+
+// ─── Admin / CMS ─────────────────────────────────────────────────────────
+export type AdminUserOut = {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: UserRole;
+  is_active: boolean;
+  is_verified: boolean;
+  company_name?: string | null;
+  created_at: string;
+};
+
+export type AdminProjectOut = {
+  id: string;
+  title: string;
+  status: "open" | "in_progress" | "review" | "completed" | "cancelled";
+  client_id: string;
+  assigned_professional_id?: string | null;
+  budget_min: number;
+  budget_max: number;
+  created_at: string;
+};
+
+export type AdminWalletTransactionOut = {
+  id: string;
+  project_id?: string | null;
+  project_title?: string | null;
+  milestone_id?: string | null;
+  client_id?: string | null;
+  client_name?: string | null;
+  professional_id?: string | null;
+  professional_name?: string | null;
+  type: "topup" | "funding" | "release" | "refund" | "withdrawal";
+  status: "pending" | "successful" | "failed";
+  amount: number;
+  platform_fee: number;
+  monnify_reference?: string | null;
+  note?: string | null;
+  created_at: string;
+};
+
+export type AdminWalletSummary = {
+  total_funded: number;
+  total_released: number;
+  total_refunded: number;
+  total_in_escrow: number;
+  total_platform_fees: number;
+  total_topped_up: number;
+  total_withdrawn: number;
+  pending_transaction_count: number;
+  failed_transaction_count: number;
+};
+
+export type AdminUserDetailOut = {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string | null;
+  role: UserRole;
+  is_active: boolean;
+  is_verified: boolean;
+  avatar_url?: string | null;
+  company_name?: string | null;
+  industry?: string | null;
+  company_logo_url?: string | null;
+  company_description?: string | null;
+  company_website?: string | null;
+  is_verified_business: boolean;
+  created_at: string;
+  professional_profile?: ProfessionalOut | null;
+  bids: BidOut[];
+  projects: ProjectOut[];
+};
+
+export type AdminProjectDetailOut = {
+  project: ProjectOut;
+  bids: BidOut[];
+  milestones: MilestoneOut[];
+  disputes: DisputeOut[];
+};
+
+export type PlatformSettingOut = {
+  key: string;
+  value: string;
+  value_type: string;
+  updated_at: string;
+};
+
+export type AnalyticsOverview = {
+  signups_this_week: number;
+  signups_this_month: number;
+  total_users: number;
+  active_projects: number;
+  total_projects: number;
+  open_disputes: number;
+  pending_verifications: number;
+  gmv: number;
+  platform_revenue: number;
+};
+
+export type PendingVerification = {
+  profile_id: string;
+  name: string;
+  title: string;
+  id_document_url?: string | null;
+  license_document_url?: string | null;
+  insurance_document_url?: string | null;
+};
+
+export type ContentPageOut = {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  updated_by?: string | null;
+  updated_at: string;
+};
+
+export type BlogPostOut = {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt?: string | null;
+  body: string;
+  cover_image_url?: string | null;
+  author_name?: string | null;
+  published: boolean;
+  published_at?: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HighlightOut = {
+  id: string;
+  type: "testimonial" | "stat" | "banner";
+  title: string;
+  body?: string | null;
+  image_url?: string | null;
+  sort_order: number;
+  active: boolean;
+};
+
+// ─── Auth ────────────────────────────────────────────────────────────────
+export const api = {
+  // Admin
+  adminUsers: (params?: { role?: UserRole; q?: string }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params || {}).filter(([, v]) => !!v) as [string, string][]
+    ).toString();
+    return request<AdminUserOut[]>(`/admin/users${qs ? `?${qs}` : ""}`);
+  },
+  updateAdminUser: (id: string, payload: { is_active?: boolean; role?: UserRole }) =>
+    request<AdminUserOut>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  adminUserDetail: (id: string) => request<AdminUserDetailOut>(`/admin/users/${id}`),
+  adminProjects: (status?: string) =>
+    request<AdminProjectOut[]>(`/admin/projects${status ? `?status_filter=${status}` : ""}`),
+  adminProjectDetail: (id: string) => request<AdminProjectDetailOut>(`/admin/projects/${id}`),
+  cancelAdminProject: (id: string) =>
+    request<AdminProjectOut>(`/admin/projects/${id}/cancel`, { method: "PATCH" }),
+  adminWalletSummary: () => request<AdminWalletSummary>("/admin/wallet/summary"),
+  adminWalletTransactions: (params?: { type_filter?: string; status_filter?: string; project_id?: string; user_id?: string }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params || {}).filter(([, v]) => !!v) as [string, string][]
+    ).toString();
+    return request<AdminWalletTransactionOut[]>(`/admin/wallet/transactions${qs ? `?${qs}` : ""}`);
+  },
+  adminDisputes: (params?: { status_filter?: string; category_filter?: string; q?: string }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params || {}).filter(([, v]) => !!v) as [string, string][]
+    ).toString();
+    return request<DisputeOut[]>(`/admin/disputes${qs ? `?${qs}` : ""}`);
+  },
+  adminDisputeDetail: (id: string) => request<DisputeDetailOut>(`/admin/disputes/${id}`),
+  resolveDispute: (id: string, payload: { status: DisputeStatus; outcome?: DisputeOutcome; resolution_note?: string }) =>
+    request<DisputeDetailOut>(`/disputes/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  adminSettings: () => request<PlatformSettingOut[]>("/admin/settings"),
+  updateAdminSettings: (settings: Record<string, string>) =>
+    request<PlatformSettingOut[]>("/admin/settings", { method: "PATCH", body: JSON.stringify({ settings }) }),
+  adminAnalyticsOverview: () => request<AnalyticsOverview>("/admin/analytics/overview"),
+  registerAdmin: (payload: { email: string; password: string; first_name: string; last_name: string }) =>
+    request<{ access_token: string; user: UserOut }>("/admin/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  pendingVerifications: () => request<PendingVerification[]>("/admin/verifications"),
+  reviewVerification: (profileId: string, payload: { status: "verified" | "rejected"; note?: string }) =>
+    request<{ verification_status: string }>(`/admin/verifications/${profileId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  // CMS, public reads
+  contentPage: (slug: string) => request<ContentPageOut>(`/content/pages/${slug}`),
+  publishedBlogPosts: () => request<BlogPostOut[]>("/content/blog"),
+  blogPost: (slug: string) => request<BlogPostOut>(`/content/blog/${slug}`),
+  activeHighlights: () => request<HighlightOut[]>("/content/highlights"),
+
+  // CMS, admin
+  adminContentPages: () => request<ContentPageOut[]>("/admin/content/pages"),
+  upsertContentPage: (payload: { slug: string; title: string; body: string }) =>
+    request<ContentPageOut>("/admin/content/pages", { method: "POST", body: JSON.stringify(payload) }),
+  patchContentPage: (id: string, payload: { title?: string; body?: string }) =>
+    request<ContentPageOut>(`/admin/content/pages/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteContentPage: (id: string) => request<void>(`/admin/content/pages/${id}`, { method: "DELETE" }),
+
+  adminBlogPosts: () => request<BlogPostOut[]>("/admin/content/blog"),
+  createBlogPost: (payload: Partial<BlogPostOut> & { slug: string; title: string }) =>
+    request<BlogPostOut>("/admin/content/blog", { method: "POST", body: JSON.stringify(payload) }),
+  patchBlogPost: (id: string, payload: Partial<BlogPostOut>) =>
+    request<BlogPostOut>(`/admin/content/blog/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteBlogPost: (id: string) => request<void>(`/admin/content/blog/${id}`, { method: "DELETE" }),
+
+  adminHighlights: () => request<HighlightOut[]>("/admin/content/highlights"),
+  createHighlight: (payload: { type: string; title: string; body?: string; image_url?: string; sort_order?: number; active?: boolean }) =>
+    request<HighlightOut>("/admin/content/highlights", { method: "POST", body: JSON.stringify(payload) }),
+  patchHighlight: (id: string, payload: Partial<HighlightOut>) =>
+    request<HighlightOut>(`/admin/content/highlights/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteHighlight: (id: string) => request<void>(`/admin/content/highlights/${id}`, { method: "DELETE" }),
+
+  createCategory: (payload: { id: string; label: string; icon?: string; description?: string }) =>
+    request<CategoryOut>("/admin/categories", { method: "POST", body: JSON.stringify(payload) }),
+  patchCategory: (id: string, payload: { label?: string; icon?: string; description?: string }) =>
+    request<CategoryOut>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteCategory: (id: string) => request<void>(`/admin/categories/${id}`, { method: "DELETE" }),
+  registerClient: (payload: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    phone?: string;
+    company_name?: string;
+    industry?: string;
+  }) => request<AuthResponse>("/auth/register/client", { method: "POST", body: JSON.stringify(payload) }),
+
+  registerProfessional: (payload: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name: string;
+    phone?: string;
+    title: string;
+    category_id: string;
+    bio?: string;
+    location?: string;
+    hourly_rate?: number;
+    years_experience?: string;
+    skills: string[];
+    license_number?: string;
+  }) => request<AuthResponse>("/auth/register/professional", { method: "POST", body: JSON.stringify(payload) }),
+
+  login: (email: string, password: string) =>
+    request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+
+  me: () => request<UserOut>("/auth/me"),
+  updateMe: (payload: { first_name?: string; last_name?: string; phone?: string; avatar_url?: string; email_notifications_enabled?: boolean }) =>
+    request<UserOut>("/auth/me", { method: "PATCH", body: JSON.stringify(payload) }),
+
+  switchRole: (targetRole: "client" | "professional") =>
+    request<AuthResponse>("/auth/switch-role", { method: "POST", body: JSON.stringify({ target_role: targetRole }) }),
+  becomeTalent: (payload: {
+    title: string;
+    category_id: string;
+    bio?: string;
+    location?: string;
+    hourly_rate?: number;
+    years_experience?: string;
+    skills: string[];
+    license_number?: string;
+  }) => request<AuthResponse>("/auth/become-talent", { method: "POST", body: JSON.stringify(payload) }),
+
+  forgotPassword: (email: string) =>
+    request<{ message: string }>("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, new_password: string) =>
+    request<{ message: string }>("/auth/reset-password", { method: "POST", body: JSON.stringify({ token, new_password }) }),
+  verifyEmail: (token: string) =>
+    request<{ message: string }>("/auth/verify-email", { method: "POST", body: JSON.stringify({ token }) }),
+  resendVerification: () =>
+    request<{ message: string }>("/auth/resend-verification", { method: "POST" }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<AuthResponse>("/auth/change-password", { method: "POST", body: JSON.stringify({ current_password, new_password }) }),
+  logoutEverywhere: () =>
+    request<AuthResponse>("/auth/logout-everywhere", { method: "POST" }),
+
+  notifications: () => request<NotificationOut[]>("/notifications"),
+  unreadNotificationCount: () => request<{ count: number }>("/notifications/unread-count"),
+  markNotificationRead: (id: string) => request<NotificationOut>(`/notifications/${id}/read`, { method: "POST" }),
+  markAllNotificationsRead: () => request<{ message: string }>("/notifications/read-all", { method: "POST" }),
+
+  // Categories
+  categories: () => request<CategoryOut[]>("/categories"),
+
+  // Professionals
+  professionals: (params?: { category_id?: string; location?: string; q?: string; min_rating?: number; sort_by?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request<ProfessionalOut[]>(`/professionals${qs ? `?${qs}` : ""}`);
+  },
+  myProfile: () => request<ProfessionalOut>("/professionals/me"),
+  professional: (id: string) => request<ProfessionalOut>(`/professionals/${id}`),
+  updateMyProfile: (payload: {
+    title?: string;
+    category_id?: string;
+    bio?: string;
+    location?: string;
+    hourly_rate?: number;
+    years_experience?: string;
+    availability?: string;
+    skills?: string[];
+    license_number?: string;
+    service_locations?: string[];
+    languages?: LanguageEntry[];
+  }) => request<ProfessionalOut>("/professionals/me", { method: "PATCH", body: JSON.stringify(payload) }),
+  workHistory: (profileId: string) => request<WorkHistoryItem[]>(`/professionals/${profileId}/work-history`),
+
+  addEmployment: (payload: { title: string; employer: string; start_date: string; end_date?: string; description?: string }) =>
+    request<EmploymentHistoryOut>("/professionals/me/employment", { method: "POST", body: JSON.stringify(payload) }),
+  deleteEmployment: (id: string) => request<void>(`/professionals/me/employment/${id}`, { method: "DELETE" }),
+
+  addEducation: (payload: { school: string; degree?: string; field_of_study?: string; start_year?: number; end_year?: number }) =>
+    request<EducationOut>("/professionals/me/education", { method: "POST", body: JSON.stringify(payload) }),
+  deleteEducation: (id: string) => request<void>(`/professionals/me/education/${id}`, { method: "DELETE" }),
+
+  addCertification: (payload: { name: string; issuing_body?: string; issued_date?: string; expiry_date?: string; credential_url?: string }) =>
+    request<CertificationOut>("/professionals/me/certifications", { method: "POST", body: JSON.stringify(payload) }),
+  deleteCertification: (id: string) => request<void>(`/professionals/me/certifications/${id}`, { method: "DELETE" }),
+
+  // Projects
+  projects: (params?: { category_id?: string; q?: string; location?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams(
+      Object.entries(params || {})
+        .filter(([, v]) => v !== undefined && v !== null && v !== "")
+        .map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request<ProjectOut[]>(`/projects${qs ? `?${qs}` : ""}`);
+  },
+  myProjects: () => request<ProjectOut[]>("/projects/mine"),
+  project: (id: string) => request<ProjectOut>(`/projects/${id}`),
+  reportProject: (id: string, reason: string, details?: string) =>
+    request<{ id: string; project_id: string; reporter_id: string; reason: string; details?: string | null; created_at: string }>(
+      `/projects/${id}/report`,
+      { method: "POST", body: JSON.stringify({ reason, details }) }
+    ),
+  createProject: (payload: {
+    title: string;
+    description: string;
+    category_id: string;
+    location?: string;
+    budget_min: number;
+    budget_max: number;
+    budget_type: "fixed" | "hourly";
+    skills: string[];
+  }) => request<ProjectOut>("/projects", { method: "POST", body: JSON.stringify(payload) }),
+
+  // Bids
+  createBid: (projectId: string, payload: { amount: number; cover_letter?: string; estimated_days?: number }) =>
+    request<BidOut>(`/projects/${projectId}/bids`, { method: "POST", body: JSON.stringify(payload) }),
+  projectBids: (projectId: string) => request<BidOut[]>(`/projects/${projectId}/bids`),
+  myBids: () => request<BidOut[]>("/bids/mine"),
+  updateBid: (bidId: string, status: BidStatus) =>
+    request<BidOut>(`/bids/${bidId}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  // Invites (direct hire)
+  createInvite: (projectId: string, payload: { professional_id: string; proposed_amount?: number; message?: string }) =>
+    request<InviteOut>(`/projects/${projectId}/invite`, { method: "POST", body: JSON.stringify(payload) }),
+  projectInvites: (projectId: string) => request<InviteOut[]>(`/projects/${projectId}/invites`),
+  myInvites: () => request<InviteOut[]>("/invites/mine"),
+  respondToInvite: (inviteId: string, status: "accepted" | "declined") =>
+    request<InviteOut>(`/invites/${inviteId}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  // Milestones
+  milestones: (projectId: string) => request<MilestoneOut[]>(`/projects/${projectId}/milestones`),
+  createMilestone: (projectId: string, payload: { title: string; description?: string; amount: number; due_date?: string }) =>
+    request<MilestoneOut>(`/projects/${projectId}/milestones`, { method: "POST", body: JSON.stringify(payload) }),
+  postMilestoneUpdate: (milestoneId: string, payload: { note?: string; photo_urls?: string[] }) =>
+    request<MilestoneUpdateOut>(`/milestones/${milestoneId}/updates`, { method: "POST", body: JSON.stringify(payload) }),
+  submitMilestone: (milestoneId: string) => request<MilestoneOut>(`/milestones/${milestoneId}/submit`, { method: "POST" }),
+  approveMilestone: (milestoneId: string) => request<MilestoneOut>(`/milestones/${milestoneId}/approve`, { method: "POST" }),
+
+  // Change orders
+  changeOrders: (projectId: string) => request<ChangeOrderOut[]>(`/projects/${projectId}/change-orders`),
+  createChangeOrder: (projectId: string, payload: { description: string; amount_delta: number }) =>
+    request<ChangeOrderOut>(`/projects/${projectId}/change-orders`, { method: "POST", body: JSON.stringify(payload) }),
+  updateChangeOrder: (changeOrderId: string, status: "approved" | "rejected") =>
+    request<ChangeOrderOut>(`/change-orders/${changeOrderId}?status=${status}`, { method: "PATCH" }),
+
+  // Wallet / payments (Monnify)
+  topupWallet: (amount: number, redirectUrl?: string) =>
+    request<{ transaction_id: string; monnify_reference: string; checkout_url?: string | null; reserved_account?: unknown; amount: number; wallet_balance: number }>(
+      "/wallet/topup",
+      { method: "POST", body: JSON.stringify({ amount, redirect_url: redirectUrl }) }
+    ),
+  fundMilestone: (milestoneId: string, redirectUrl?: string) =>
+    request<{ transaction_id: string; monnify_reference: string; checkout_url?: string | null; reserved_account?: unknown; amount: number }>(
+      `/milestones/${milestoneId}/fund`,
+      { method: "POST", body: JSON.stringify({ redirect_url: redirectUrl }) }
+    ),
+  withdrawWallet: (amount: number) =>
+    request<{ transaction_id: string; amount: number; wallet_balance: number; status: string }>(
+      "/wallet/withdraw",
+      { method: "POST", body: JSON.stringify({ amount }) }
+    ),
+  releaseMilestone: (milestoneId: string) => request<WalletTransactionOut>(`/milestones/${milestoneId}/release`, { method: "POST" }),
+  walletTransactions: () => request<WalletTransactionOut[]>("/wallet/transactions"),
+  setPayoutDetails: (payload: { bank_code: string; bank_account_number: string }) =>
+    request<{ bank_code: string; bank_account_number: string; bank_account_name: string }>(
+      "/professionals/me/payout-details",
+      { method: "PUT", body: JSON.stringify(payload) }
+    ),
+
+  // Verification
+  submitVerification: (payload: { id_document_url?: string; license_document_url?: string; insurance_document_url?: string }) =>
+    request<{ verification_status: string }>("/professionals/me/verification", { method: "POST", body: JSON.stringify(payload) }),
+
+  // Portfolio
+  addPortfolioItem: (payload: { title: string; description?: string; image_urls?: string[]; completed_date?: string }) =>
+    request<PortfolioItemOut>("/professionals/me/portfolio", { method: "POST", body: JSON.stringify(payload) }),
+  deletePortfolioItem: (itemId: string) => request<void>(`/professionals/me/portfolio/${itemId}`, { method: "DELETE" }),
+
+  // Disputes
+  createDispute: (payload: { project_id: string; milestone_id?: string; category: DisputeCategory; reason: string; evidence_urls?: string[] }) =>
+    request<DisputeOut>("/disputes", { method: "POST", body: JSON.stringify(payload) }),
+  myDisputes: () => request<DisputeOut[]>("/disputes/mine"),
+  disputeDetail: (id: string) => request<DisputeDetailOut>(`/disputes/${id}`),
+  addDisputeMessage: (id: string, body: string) =>
+    request<DisputeMessageOut>(`/disputes/${id}/messages`, { method: "POST", body: JSON.stringify({ body }) }),
+  withdrawDispute: (id: string) => request<DisputeOut>(`/disputes/${id}/withdraw`, { method: "POST" }),
+
+  // Messaging (REST polling)
+  messageThreads: () => request<ThreadOut[]>("/messages/threads"),
+  projectMessages: (projectId: string, otherUserId?: string, after?: string) => {
+    const qs = new URLSearchParams();
+    if (otherUserId) qs.set("other_user_id", otherUserId);
+    if (after) qs.set("after", after);
+    const s = qs.toString();
+    return request<MessageOut[]>(`/projects/${projectId}/messages${s ? `?${s}` : ""}`);
+  },
+  sendProjectMessage: (projectId: string, payload: { recipient_id: string; body: string; attachment_url?: string }) =>
+    request<MessageOut>(`/projects/${projectId}/messages`, { method: "POST", body: JSON.stringify(payload) }),
+  markThreadRead: (projectId: string, otherUserId: string) =>
+    request<{ status: string }>(`/projects/${projectId}/messages/read?other_user_id=${otherUserId}`, { method: "POST" }),
+
+  // Reviews
+  createReview: (payload: { project_id: string; reviewee_id: string; rating: number; comment?: string }) =>
+    request<ReviewOut>("/reviews", { method: "POST", body: JSON.stringify(payload) }),
+  reviewsForUser: (userId: string) => request<ReviewOut[]>(`/reviews/for/${userId}`),
+  respondToReview: (reviewId: string, responseBody: string) =>
+    request<ReviewOut>(`/reviews/${reviewId}/respond`, { method: "PATCH", body: JSON.stringify({ response_body: responseBody }) }),
+
+  // Favorites
+  favorites: () => request<FavoriteOut[]>("/favorites"),
+  addFavorite: (targetType: FavoriteTargetType, targetId: string) =>
+    request<FavoriteOut>("/favorites", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId }) }),
+  removeFavorite: (targetType: FavoriteTargetType, targetId: string) =>
+    request<void>(`/favorites/${targetType}/${targetId}`, { method: "DELETE" }),
+  favoriteProfessionals: () => request<ProfessionalOut[]>("/favorites/professionals"),
+  favoriteProjects: () => request<ProjectOut[]>("/favorites/projects"),
+
+  // Client profile
+  updateClientProfile: (payload: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string;
+    avatar_url?: string;
+    company_name?: string;
+    industry?: string;
+    company_logo_url?: string;
+    company_description?: string;
+    company_website?: string;
+    preferred_categories?: string[];
+  }) => request<UserOut>("/clients/me", { method: "PATCH", body: JSON.stringify(payload) }),
+  getClientPublic: (clientId: string) => request<ClientPublicOut>(`/clients/${clientId}`),
+  myKyc: () => request<KycOut>("/clients/me/kyc"),
+  submitKyc: (payload: { nin: string; dob: string }) =>
+    request<KycOut>("/clients/me/kyc", { method: "POST", body: JSON.stringify(payload) }),
+
+  // File upload, returns a public URL for the uploaded file
+  uploadFile: async (file: File): Promise<{ url: string }> => {
+    const token = getToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/uploads`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+    });
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const data = await res.json();
+        message = data.detail || message;
+      } catch {
+        // ignore
+      }
+      throw new ApiError(res.status, message);
+    }
+    return res.json();
+  },
+
+  downloadReceipt: async (transactionId: string): Promise<void> => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/wallet/transactions/${transactionId}/receipt`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) throw new ApiError(res.status, "Could not download receipt");
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `yh-connect-receipt-${transactionId.slice(0, 8)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+};
+
+// Common Nigerian bank codes for the payout details form (Monnify uses NIBSS bank codes).
+export const NIGERIAN_BANKS = [
+  { code: "044", name: "Access Bank" },
+  { code: "023", name: "Citibank Nigeria" },
+  { code: "050", name: "Ecobank Nigeria" },
+  { code: "011", name: "First Bank of Nigeria" },
+  { code: "214", name: "First City Monument Bank" },
+  { code: "058", name: "Guaranty Trust Bank" },
+  { code: "030", name: "Heritage Bank" },
+  { code: "301", name: "Jaiz Bank" },
+  { code: "082", name: "Keystone Bank" },
+  { code: "526", name: "Parallex Bank" },
+  { code: "076", name: "Polaris Bank" },
+  { code: "101", name: "Providus Bank" },
+  { code: "221", name: "Stanbic IBTC Bank" },
+  { code: "068", name: "Standard Chartered Bank" },
+  { code: "232", name: "Sterling Bank" },
+  { code: "100", name: "Suntrust Bank" },
+  { code: "032", name: "Union Bank of Nigeria" },
+  { code: "033", name: "United Bank For Africa" },
+  { code: "215", name: "Unity Bank" },
+  { code: "035", name: "Wema Bank" },
+  { code: "057", name: "Zenith Bank" },
+];

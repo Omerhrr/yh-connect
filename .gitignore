@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+
+# Env files (real secrets — never commit these)
+.env
+.env.local
+.env.local.example
+.env.*.local
+backend/.env
+
+# Next.js
+.next/
+out/
+build/
+dist/
+
+# Backend runtime data
+backend/yhconnect.db
+backend/uploads/
+backend/.pytest_cache/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

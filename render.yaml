@@ -1,0 +1,77 @@
+## Render Blueprint for YH Connect.
+##
+## Usage: push this repo to GitHub, then on Render click "New +" -> "Blueprint",
+## connect the repo, and Render will read this file and create both services
+## plus the database automatically.
+##
+## After the first deploy, go to the backend service's "Environment" tab and
+## fill in the values marked sync: false below (SMTP credentials, live payment
+## keys, etc.) - they're intentionally left blank here so nothing secret ends
+## up committed to git.
+##
+## Docs: https://render.com/docs/blueprint-spec
+
+databases:
+  - name: yh-connect-db
+    plan: free
+    databaseName: yhconnect
+    user: yhconnect
+
+services:
+  # --- Backend: FastAPI -----------------------------------------------------
+  - type: web
+    name: yh-connect-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: yh-connect-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: BACKEND_CORS_ORIGINS
+        value: '["https://yh-connect-web.onrender.com"]'
+      - key: FRONTEND_BASE_URL
+        value: https://yh-connect-web.onrender.com
+      - key: PUBLIC_BASE_URL
+        value: https://yh-connect-api.onrender.com
+      - key: KYC_ENFORCEMENT_ENABLED
+        value: "false"
+      # Leave blank/simulated until you have real credentials - the app
+      # degrades gracefully (emails log to console, payments/KYC simulate).
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: EMAIL_FROM
+        value: "YH Connect <no-reply@yhconnect.ng>"
+      - key: MONNIFY_API_KEY
+        sync: false
+      - key: MONNIFY_SECRET_KEY
+        sync: false
+      - key: MONNIFY_CONTRACT_CODE
+        sync: false
+      - key: MONNIFY_WEBHOOK_SECRET
+        sync: false
+      - key: VERIFYME_API_KEY
+        sync: false
+
+  # --- Frontend: Next.js -----------------------------------------------------
+  - type: web
+    name: yh-connect-web
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://yh-connect-api.onrender.com/api/v1
