@@ -87,6 +87,7 @@ def upgrade() -> None:
                 name='milestonestatus',
             ),
             type_=sa.String(), existing_nullable=False,
+            postgresql_using='status::text',
         )
 
     with op.batch_alter_table('notifications') as batch_op:
@@ -98,6 +99,7 @@ def upgrade() -> None:
                 name='notificationtype',
             ),
             type_=sa.String(), existing_nullable=False,
+            postgresql_using='type::text',
         )
 
 
