@@ -1,4 +1,7 @@
+import logging
 import os
+import sys
+import traceback
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +15,8 @@ from app.core.limiter import limiter
 from app.db.run_migrations import run_migrations
 from app.seed import run as seed_categories
 import app.models  # noqa: F401 ensures all models are registered on Base
+
+logger = logging.getLogger("app.startup")
 
 app = FastAPI(title=settings.PROJECT_NAME, openapi_url=f"{settings.API_V1_PREFIX}/openapi.json")
 app.state.limiter = limiter
@@ -34,10 +39,26 @@ app.add_middleware(
 
 @app.on_event("startup")
 def on_startup():
-    run_migrations()
-    seed_categories()
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+    # Startup failures on Render have been showing up as a bare "Exited with
+    # status 3" with no visible traceback (likely stdout buffering combined
+    # with how Uvicorn's lifespan handler surfaces the error). Wrap each
+    # step individually, force-flush, and re-raise so the failure is both
+    # loud in the logs AND still fails the deploy/health check as it should.
+    try:
+        logger.info("startup: running migrations...")
+        run_migrations()
+        logger.info("startup: migrations complete, seeding categories...")
+        seed_categories()
+        logger.info("startup: seed complete, mounting uploads dir...")
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+        logger.info("startup: complete.")
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+        sys.stdout.flush()
+        logger.exception("startup failed")
+        raise
 
 
 @app.get("/")
