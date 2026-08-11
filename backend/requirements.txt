@@ -5,6 +5,13 @@ pydantic==2.10.4
 pydantic-settings==2.7.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# passlib 1.7.4 (last released 2020) is incompatible with bcrypt>=4.1, which
+# changed its 72-byte-password handling to raise instead of silently
+# truncating. That breaks passlib's internal self-test the first time it's
+# used, with "password cannot be longer than 72 bytes" - on every hash/verify
+# call, i.e. every login and registration. Pin bcrypt explicitly so a fresh
+# install (like Render's) doesn't resolve to an incompatible version.
+bcrypt==4.0.1
 python-multipart==0.0.20
 psycopg2-binary==2.9.10
 alembic==1.14.0
