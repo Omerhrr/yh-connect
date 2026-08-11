@@ -19,6 +19,7 @@ Recommended: unset SEED_SECRET in the Render dashboard once you've used
 this, to close it back up.
 """
 import hmac
+import traceback
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -45,31 +46,42 @@ def bootstrap_seed(
     _check_secret(secret)
     results: dict[str, str] = {}
 
-    db = SessionLocal()
+    # Deliberately catching everything and returning it in the response body
+    # (rather than letting it 500 into a bare "Internal Server Error") so the
+    # real error is visible right in the browser, this has been hard to get
+    # out of Render's log viewer for whatever reason.
     try:
-        existing = db.query(User).filter(User.email == admin_email).first()
-        if existing:
-            results["admin"] = f"already exists (role={existing.role.value}), left untouched"
-        else:
-            admin = User(
-                email=admin_email,
-                hashed_password=hash_password(admin_password),
-                first_name="Admin",
-                last_name="User",
-                role=UserRole.admin,
-                is_verified=True,
-                is_active=True,
-            )
-            db.add(admin)
-            db.commit()
-            results["admin"] = f"created: {admin_email} / {admin_password}"
-    finally:
-        db.close()
+        db = SessionLocal()
+        try:
+            existing = db.query(User).filter(User.email == admin_email).first()
+            if existing:
+                results["admin"] = f"already exists (role={existing.role.value}), left untouched"
+            else:
+                admin = User(
+                    email=admin_email,
+                    hashed_password=hash_password(admin_password),
+                    first_name="Admin",
+                    last_name="User",
+                    role=UserRole.admin,
+                    is_verified=True,
+                    is_active=True,
+                )
+                db.add(admin)
+                db.commit()
+                results["admin"] = f"created: {admin_email} / {admin_password}"
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
-    if demo:
-        from app.seed_demo_users import run as seed_demo
+        if demo:
+            from app.seed_demo_users import run as seed_demo
 
-        seed_demo()
-        results["demo"] = "seeded (see backend/demo_credentials.csv on the instance, or check the API for the accounts)"
+            seed_demo()
+            results["demo"] = "seeded (see backend/demo_credentials.csv on the instance, or check the API for the accounts)"
+    except Exception as e:
+        results["error"] = f"{type(e).__name__}: {e}"
+        results["traceback"] = traceback.format_exc()
 
     return results
