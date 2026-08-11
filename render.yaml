@@ -46,6 +46,13 @@ services:
         value: https://yh-connect-api.onrender.com
       - key: KYC_ENFORCEMENT_ENABLED
         value: "false"
+      # Gates the one-off POST-deploy bootstrap endpoint
+      # (/api/v1/internal/seed) used to create the first admin account and
+      # optionally seed demo data on a fresh database. Set this to some
+      # random string in the Render dashboard, use the endpoint once, then
+      # clear it again to close the door.
+      - key: SEED_SECRET
+        sync: false
       # Leave blank/simulated until you have real credentials - the app
       # degrades gracefully (emails log to console, payments/KYC simulate).
       - key: SMTP_HOST

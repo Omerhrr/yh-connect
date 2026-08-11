@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # (password reset, email verification).
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
+    # Gates the one-off /api/v1/internal/seed bootstrap endpoint (see that
+    # module for why it exists). Left blank by default so the endpoint fails
+    # closed unless explicitly set in the environment.
+    SEED_SECRET: str = ""
+
     @property
     def email_configured(self) -> bool:
         return bool(self.SMTP_HOST and self.SMTP_USER)

@@ -9,6 +9,7 @@ from app.api.v1 import (
     content,
     disputes,
     favorites,
+    internal,
     invites,
     messages,
     milestones,
@@ -45,3 +46,4 @@ api_router.include_router(clients.router)
 api_router.include_router(uploads.router)
 api_router.include_router(notifications.router)
 api_router.include_router(favorites.router)
+api_router.include_router(internal.router)
