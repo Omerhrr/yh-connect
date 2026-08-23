@@ -81,16 +81,16 @@ services:
   # --- Frontend: Next.js -----------------------------------------------------
   # buildCommand runs `next build` (production, optimized, no Turbopack dev
   # server) and startCommand runs `next start` against that build output -
-  # this is Next's production mode, not `next dev`. NODE_ENV is intentionally
-  # NOT set to "production" here: Render (and npm) treat that as a signal to
-  # skip devDependencies during `npm install`, but the build itself needs
-  # devDependencies like @tailwindcss/postcss - Next sets NODE_ENV=production
-  # internally for the actual `next build`/`next start` run regardless.
+  # this is Next's production mode, not `next dev`. Build-only tooling
+  # (tailwindcss, @tailwindcss/postcss, typescript, @types/*) lives in
+  # "dependencies" rather than "devDependencies" in package.json, since
+  # Render's cached installs weren't reliably honoring --include=dev between
+  # deploys and the build needs those packages present either way.
   - type: web
     name: yh-connect-web
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
