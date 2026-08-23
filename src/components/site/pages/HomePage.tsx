@@ -100,12 +100,12 @@ function HeroBackgroundSlideshow({ images }: { images: string[] }) {
           src={src}
           alt=""
           aria-hidden="true"
-          className="absolute inset-0 h-full w-full object-cover scale-110 blur-md transition-opacity duration-[2000ms] ease-in-out"
-          style={{ opacity: i === index ? 0.35 : 0 }}
+          className="absolute inset-0 h-full w-full object-cover scale-110 blur-sm transition-opacity duration-[2000ms] ease-in-out"
+          style={{ opacity: i === index ? 0.45 : 0 }}
         />
       ))}
       {/* keep text legible over any photo, and blend edges into the gradient */}
-      <div className="absolute inset-0 bg-gradient-to-br from-background/70 via-background/60 to-background/70" />
+      <div className="absolute inset-0 bg-gradient-to-br from-background/55 via-background/45 to-background/55" />
     </div>
   );
 }
