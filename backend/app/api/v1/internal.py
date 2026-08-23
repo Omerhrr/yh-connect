@@ -42,6 +42,10 @@ def bootstrap_seed(
     admin_email: str = Query("admin@yhconnect.ng"),
     admin_password: str = Query("AdminPass123!"),
     demo: bool = Query(False, description="Also seed demo clients/professionals/projects"),
+    reset_password: bool = Query(
+        False,
+        description="If an account with admin_email already exists, overwrite its password with admin_password instead of leaving it untouched. Use this to recover access when the original admin password was lost.",
+    ),
 ):
     _check_secret(secret)
     results: dict[str, str] = {}
@@ -54,8 +58,14 @@ def bootstrap_seed(
         db = SessionLocal()
         try:
             existing = db.query(User).filter(User.email == admin_email).first()
-            if existing:
-                results["admin"] = f"already exists (role={existing.role.value}), left untouched"
+            if existing and reset_password:
+                existing.hashed_password = hash_password(admin_password)
+                existing.is_active = True
+                existing.token_version += 1  # log out any stale sessions/tokens
+                db.commit()
+                results["admin"] = f"password reset for existing {existing.role.value} account: {admin_email} / {admin_password}"
+            elif existing:
+                results["admin"] = f"already exists (role={existing.role.value}), left untouched (pass reset_password=true to overwrite its password)"
             else:
                 admin = User(
                     email=admin_email,
