@@ -65,14 +65,14 @@ def _check_production_config():
         logger.warning(
             "PRODUCTION WARNING: Monnify is not configured (MONNIFY_API_KEY/"
             "SECRET_KEY/CONTRACT_CODE unset). Wallet top-ups will simulate "
-            "success and credit balance with no real payment taking place."
-        )
-    if not settings.verifyme_configured:
-        logger.warning(
-            "PRODUCTION WARNING: VerifyMe is not configured (VERIFYME_API_KEY "
-            "unset). Any syntactically valid NIN will auto-verify identity "
+            "success and credit balance with no real payment taking place, "
+            "and any syntactically valid NIN will auto-verify identity "
             "(Tier 2) with no real check taking place."
         )
+    # NIN identity verification now goes through Monnify (see above) rather
+    # than a separate VerifyMe contract, so there's no second credential to
+    # check here — the monnify_configured warning above covers both payments
+    # and NIN verification going unconfigured.
 
 
 @app.on_event("startup")

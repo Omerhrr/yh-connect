@@ -140,6 +140,42 @@ class MonnifyClient:
         data = resp.json()
         return data.get("responseBody", {})
 
+    def verify_nin(self, nin: str) -> dict[str, Any]:
+        """Look up NIMC's record for a NIN via Monnify's Verification API
+        (₦60/successful request, Live environment only — no sandbox). Returns
+        the raw responseBody (Monnify's own field naming, believed to be
+        camelCase like the rest of their API, e.g. firstName/lastName/
+        dateOfBirth) so the caller decides how to match it against the name
+        on file; Monnify's role here is just "does this NIN exist and what
+        does NIMC have on record for it", not a name-match verdict itself.
+
+        NOTE: Monnify's NIN endpoint has no sandbox to test against, so this
+        path/payload is built from their published docs and the same
+        request/response conventions their other /vas verification endpoints
+        (e.g. BVN Details Match) use. Confirm the exact path and field names
+        against Monnify's dashboard/Postman collection before relying on this
+        in production, and adjust here if they differ.
+        """
+        if not self.is_configured:
+            return {"simulated": True, "found": True, "firstName": None, "lastName": None}
+
+        resp = httpx.post(
+            f"{self.base_url}/api/v1/vas/nin-details",
+            headers=self._headers(),
+            json={"nin": nin},
+            timeout=20,
+        )
+        if resp.status_code == 404:
+            return {"simulated": False, "found": False}
+        resp.raise_for_status()
+        data = resp.json()
+        if not data.get("requestSuccessful"):
+            raise MonnifyError(data.get("responseMessage", "Monnify NIN verification failed"))
+        body = data.get("responseBody", {}) or {}
+        body["simulated"] = False
+        body["found"] = True
+        return body
+
     def resolve_account_name(self, account_number: str, bank_code: str) -> dict[str, Any]:
         if not self.is_configured:
             return {"simulated": True, "accountName": "Simulated Account Holder"}

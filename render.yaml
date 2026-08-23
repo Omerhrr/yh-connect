@@ -75,8 +75,6 @@ services:
         sync: false
       - key: MONNIFY_WEBHOOK_SECRET
         sync: false
-      - key: VERIFYME_API_KEY
-        sync: false
 
   # --- Frontend: Next.js -----------------------------------------------------
   # buildCommand runs `next build` (production, optimized, no Turbopack dev

@@ -55,9 +55,9 @@ class Settings(BaseSettings):
     # "profile_name_change_cooldown_hours".
     PROFILE_NAME_CHANGE_COOLDOWN_HOURS: float = 24.0
 
-    # VerifyMe (client KYC, NIN identity verification, https://docs.verifyme.ng/)
-    VERIFYME_BASE_URL: str = "https://vapi.verifyme.ng"
-    VERIFYME_API_KEY: str = ""
+    # NIN identity verification (client + professional KYC) now goes through
+    # Monnify's Verification API (see MONNIFY_* above) rather than a separate
+    # VerifyMe contract, so no separate credentials are needed here.
 
     # Temporary kill switch while the rest of the platform is still being
     # built, set to true once ready to enforce KYC again on invites,
@@ -118,10 +118,6 @@ class Settings(BaseSettings):
     @property
     def monnify_configured(self) -> bool:
         return bool(self.MONNIFY_API_KEY and self.MONNIFY_SECRET_KEY and self.MONNIFY_CONTRACT_CODE)
-
-    @property
-    def verifyme_configured(self) -> bool:
-        return bool(self.VERIFYME_API_KEY)
 
 
 settings = Settings()
