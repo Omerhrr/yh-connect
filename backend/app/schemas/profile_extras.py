@@ -62,6 +62,9 @@ class CertificationOut(BaseModel):
     issued_date: Optional[date] = None
     expiry_date: Optional[date] = None
     credential_url: Optional[str] = None
+    verification_status: str = "unverified"  # unverified | pending | verified | rejected
+    verification_note: Optional[str] = None
+    badge_name: Optional[str] = None
 
     class Config:
         from_attributes = True

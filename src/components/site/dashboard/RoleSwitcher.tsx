@@ -116,6 +116,12 @@ export function RoleSwitcher({ className = "", onSwitched }: { className?: strin
       setSession(res.user, res.access_token);
       toast.success(`Switched to ${targetLabel} mode`);
       onSwitched?.();
+      // Client-side navigation, not a hard reload: setSession above has
+      // already updated the in-memory store synchronously, so the new
+      // layout's auth guard sees the correct role on its very first render.
+      // A hard reload (window.location.href) forces the store to rehydrate
+      // from localStorage from scratch, which can lose the race against the
+      // guard's redirect and dead-end back on the login page.
       router.push(targetHref);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not switch modes");

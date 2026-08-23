@@ -16,6 +16,7 @@ class NotificationType(str, enum.Enum):
     bid_received = "bid_received"
     bid_accepted = "bid_accepted"
     bid_rejected = "bid_rejected"
+    bid_shortlisted = "bid_shortlisted"
     milestone_funded = "milestone_funded"
     milestone_released = "milestone_released"
     dispute_opened = "dispute_opened"

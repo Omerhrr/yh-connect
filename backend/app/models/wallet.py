@@ -18,6 +18,7 @@ class WalletTransactionType(str, enum.Enum):
     release = "release"        # escrow pays out into the professional's wallet balance
     refund = "refund"          # escrow refunds client's wallet balance
     withdrawal = "withdrawal"  # professional withdraws from their wallet balance to their bank
+    adjustment = "adjustment"  # admin credit/debit to a user's wallet balance
 
 
 class WalletTransactionStatus(str, enum.Enum):

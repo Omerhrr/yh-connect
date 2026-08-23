@@ -10,6 +10,7 @@ import { UserAvatar } from "@/components/site/UserAvatar";
 import { ThemeToggle } from "@/components/site/ThemeToggle";
 import { RoleSwitcher } from "@/components/site/dashboard/RoleSwitcher";
 import type { DashboardNavItem } from "@/components/site/dashboard/navConfig";
+import { useProjectUnread } from "@/hooks/useProjectUnread";
 import { api, type NotificationOut } from "@/lib/api";
 import { useTheme } from "@/store/theme";
 import { toast } from "sonner";
@@ -56,10 +57,27 @@ export function DashboardShell({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationOut[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const [resendingVerification, setResendingVerification] = useState(false);
+  // Per-project unread totals, so the My Projects / Active Jobs nav items can
+  // carry the same count the dashboard cards show.
+  const { unreadByProject } = useProjectUnread();
+  const projectsHref = role === "client" ? "/client/dashboard/projects" : role === "talent" ? "/talent/dashboard/active" : "";
+  const projectUnreadTotal = Object.values(unreadByProject).reduce((a, b) => a + b, 0);
+
+  /** Unread badge count for a nav item: Messages shows the total unread
+      messages; the projects/jobs item shows the sum across all projects. */
+  const navBadgeCount = (item: DashboardNavItem) => {
+    if (item.href === messagesHref) return unreadMessages;
+    if (projectsHref && item.href === projectsHref) return projectUnreadTotal;
+    return 0;
+  };
 
   useEffect(() => {
-    const loadUnread = () => api.unreadNotificationCount().then((r) => setUnreadCount(r.count)).catch(() => {});
+    const loadUnread = () => {
+      api.unreadNotificationCount().then((r) => setUnreadCount(r.count)).catch(() => {});
+      api.unreadMessageCount().then((r) => setUnreadMessages(r.count)).catch(() => {});
+    };
     loadUnread();
     const interval = setInterval(loadUnread, 30000);
     return () => clearInterval(interval);
@@ -88,6 +106,39 @@ export function DashboardShell({
     setNotifOpen(false);
   };
 
+  const markAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
+      setUnreadCount(0);
+    } catch {
+      toast.error("Could not mark notifications as read");
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!confirm("Clear all notifications? This can't be undone.")) return;
+    try {
+      await api.clearNotifications();
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch {
+      toast.error("Could not clear notifications");
+    }
+  };
+
+  const dismissNotification = async (e: React.MouseEvent, n: NotificationOut) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      await api.deleteNotification(n.id);
+      setNotifications((prev) => prev.filter((x) => x.id !== n.id));
+      if (!n.read_at) setUnreadCount((c) => Math.max(0, c - 1));
+    } catch {
+      toast.error("Could not remove notification");
+    }
+  };
+
   const resendVerification = async () => {
     setResendingVerification(true);
     try {
@@ -106,7 +157,7 @@ export function DashboardShell({
   const activeMobileText = role === "client" ? "text-primary" : role === "talent" ? "text-emerald-600" : "text-slate-800";
   const brandAccent = role === "client" ? "text-primary" : role === "talent" ? "text-emerald-600" : "text-slate-700";
 
-  const bottomNavItems = navItems.slice(0, 4);
+  const bottomNavItems = navItems.filter((item) => item.mobile);
 
   return (
     <div className="min-h-screen flex bg-muted/20">
@@ -137,6 +188,11 @@ export function DashboardShell({
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {sidebarOpen && <span>{item.label}</span>}
+                {navBadgeCount(item) > 0 && (
+                  <span className="ml-auto text-[10px] font-semibold rounded-full bg-red-500 text-white px-1.5 py-0.5 min-w-[18px] text-center">
+                    {navBadgeCount(item) > 99 ? "99+" : navBadgeCount(item)}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -190,6 +246,11 @@ export function DashboardShell({
                   >
                     <Icon className="h-4 w-4 shrink-0" />
                     <span>{item.label}</span>
+                    {navBadgeCount(item) > 0 && (
+                      <span className="ml-auto text-[10px] font-semibold rounded-full bg-red-500 text-white px-1.5 py-0.5 min-w-[18px] text-center">
+                        {navBadgeCount(item) > 99 ? "99+" : navBadgeCount(item)}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -262,6 +323,16 @@ export function DashboardShell({
               </button>
               {notifOpen && (
                 <div className="absolute right-0 top-full mt-1 w-72 rounded-lg border bg-popover shadow-lg py-2 z-50 max-h-96 overflow-y-auto">
+                  {notifications.length > 0 && (
+                    <div className="flex items-center justify-between px-3 pb-2 border-b">
+                      <button onClick={markAllRead} className="text-xs font-medium text-primary hover:underline disabled:opacity-50" disabled={unreadCount === 0}>
+                        Mark all as read
+                      </button>
+                      <button onClick={clearAllNotifications} className="text-xs text-muted-foreground hover:text-destructive">
+                        Clear all
+                      </button>
+                    </div>
+                  )}
                   {notifications.length === 0 && (
                     <p className="px-3 py-2 text-xs text-muted-foreground">You&apos;re all caught up, no notifications yet.</p>
                   )}
@@ -270,10 +341,19 @@ export function DashboardShell({
                       key={n.id}
                       href={n.link || "#"}
                       onClick={() => handleNotificationClick(n)}
-                      className={`block px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-b-0 ${!n.read_at ? "bg-primary/5" : ""}`}
+                      className={`group flex items-start gap-2 px-3 py-2 text-sm hover:bg-muted/60 border-b last:border-b-0 ${!n.read_at ? "bg-primary/5" : ""}`}
                     >
-                      <p className="font-medium truncate">{n.title}</p>
-                      {n.body && <p className="text-xs text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium truncate">{n.title}</p>
+                        {n.body && <p className="text-xs text-muted-foreground truncate mt-0.5">{n.body}</p>}
+                      </div>
+                      <button
+                        onClick={(e) => dismissNotification(e, n)}
+                        className="shrink-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-0.5"
+                        aria-label="Dismiss notification"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </Link>
                   ))}
                   {messagesHref && (
@@ -359,7 +439,14 @@ export function DashboardShell({
                   active ? activeMobileText : "text-muted-foreground"
                 }`}
               >
-                <Icon className="h-5 w-5" />
+                <span className="relative">
+                  <Icon className="h-5 w-5" />
+                  {navBadgeCount(item) > 0 && (
+                    <span className="absolute -top-1.5 -right-2.5 text-[9px] font-semibold rounded-full bg-red-500 text-white px-1 min-w-[14px] text-center">
+                      {navBadgeCount(item) > 9 ? "9+" : navBadgeCount(item)}
+                    </span>
+                  )}
+                </span>
                 <span className="truncate max-w-[64px]">{item.label}</span>
               </Link>
             );

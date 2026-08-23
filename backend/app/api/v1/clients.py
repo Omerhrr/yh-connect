@@ -1,14 +1,17 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_role
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.models.project import Project, ProjectStatus
 from app.models.user import KycStatus, User, UserRole
+from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
 from app.schemas.user import ClientProfileUpdate, ClientPublicOut, KycOut, KycSubmit, UserOut
 from app.services.nin_verification import NinVerificationError, nin_verification_client
+from app.services.username import is_username_taken, is_valid_username, normalize_username
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
@@ -20,11 +23,26 @@ def update_my_client_profile(
     db: Session = Depends(get_db),
 ):
     data = payload.model_dump(exclude_unset=True)
+    if "username" in data and data["username"] is not None:
+        username = normalize_username(data["username"])
+        if not is_valid_username(username):
+            raise HTTPException(
+                status_code=400,
+                detail="Usernames must be 3-20 characters, lowercase letters, numbers, and underscores only.",
+            )
+        if is_username_taken(db, username, exclude_user_id=current_user.id):
+            raise HTTPException(status_code=409, detail="Username taken")
+        data["username"] = username
     for field, value in data.items():
         setattr(current_user, field, value)
     db.commit()
     db.refresh(current_user)
-    return current_user
+    # UserOut.from_user rather than the raw ORM object: the response schema's
+    # email_verified / has_professional_profile fields are derived (from
+    # email_verified_at / profile), and model_validate alone leaves them at
+    # their defaults, which would make the frontend briefly think the client
+    # is unverified after every profile save.
+    return UserOut.from_user(current_user)
 
 
 @router.get("/me/kyc", response_model=KycOut)
@@ -37,7 +55,9 @@ def get_my_kyc(current_user: User = Depends(require_role(UserRole.client)), db: 
 
 
 @router.post("/me/kyc", response_model=KycOut)
+@limiter.limit("10/hour")
 def submit_my_kyc(
+    request: Request,
     payload: KycSubmit,
     current_user: User = Depends(require_role(UserRole.client)),
     db: Session = Depends(get_db),
@@ -96,6 +116,16 @@ def _client_public_out(client: User, db: Session) -> ClientPublicOut:
             .count()
         )
         hire_rate = round((hired_count / total_count) * 100)
+    payment_verified = (
+        db.query(WalletTransaction)
+        .filter(
+            WalletTransaction.client_id == client.id,
+            WalletTransaction.type == WalletTransactionType.funding,
+            WalletTransaction.status == WalletTransactionStatus.successful,
+        )
+        .first()
+        is not None
+    )
     return ClientPublicOut(
         id=client.id,
         first_name=client.first_name,
@@ -107,6 +137,7 @@ def _client_public_out(client: User, db: Session) -> ClientPublicOut:
         industry=client.industry,
         is_verified_business=client.is_verified_business,
         kyc_verified=client.kyc_status == KycStatus.verified,
+        payment_verified=payment_verified,
         completed_project_count=completed_count,
         open_project_count=open_count,
         hire_rate=hire_rate,

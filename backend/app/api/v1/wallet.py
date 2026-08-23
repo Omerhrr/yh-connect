@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
 from app.models.milestone import Milestone, MilestoneStatus
+from app.models.payout_account import PayoutAccount
 from app.models.profile import ProfessionalProfile
 from app.models.project import Project, ProjectStatus
 from app.models.user import User, UserRole
@@ -15,7 +16,8 @@ from app.models.notification import NotificationType
 from app.schemas.wallet import (
     FundMilestoneRequest,
     FundMilestoneResponse,
-    PayoutDetailsIn,
+    PayoutAccountCreate,
+    PayoutAccountOut,
     WalletTopupRequest,
     WalletTopupResponse,
     WalletTransactionOut,
@@ -26,7 +28,9 @@ from app.services.disputes import has_blocking_dispute
 from app.services.escrow import disburse_milestone, EscrowActionError
 from app.services.monnify import monnify_client
 from app.services.notify import notify
+from app.services.payout import names_match
 from app.services.platform_settings import get_platform_fee_percent
+from app.services.project_log import post_system_message
 
 router = APIRouter(tags=["wallet"])
 
@@ -49,12 +53,17 @@ def topup_wallet(
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount greater than zero")
 
-    result = monnify_client.init_transaction(
-        amount=payload.amount,
-        customer_email=current_user.email,
-        customer_name=f"{current_user.first_name} {current_user.last_name}",
-        redirect_url=payload.redirect_url,
-    )
+    try:
+        result = monnify_client.init_transaction(
+            amount=payload.amount,
+            customer_email=current_user.email,
+            customer_name=f"{current_user.first_name} {current_user.last_name}",
+            redirect_url=payload.redirect_url,
+        )
+    except Exception as e:
+        # MonnifyError and httpx transport errors (timeouts, DNS, 5xx)
+        # land here too; surface a clean 400 instead of an unhandled 500.
+        raise HTTPException(status_code=400, detail=f"Could not start payment: {e}")
     reference = result.get("transactionReference") or result.get("paymentReference")
 
     tx = WalletTransaction(
@@ -106,20 +115,39 @@ def withdraw_wallet(
             detail=f"Insufficient wallet balance. You have ₦{current_user.wallet_balance:,.2f} available.",
         )
 
-    profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
-    if not profile or not profile.bank_code or not profile.bank_account_number:
+    account = (
+        db.query(PayoutAccount)
+        .filter(PayoutAccount.professional_id == current_user.id, PayoutAccount.is_default.is_(True))
+        .first()
+    )
+    if not account:
         raise HTTPException(
             status_code=400,
-            detail="Add your payout bank details before requesting a withdrawal.",
+            detail="Add and select a payout bank account before requesting a withdrawal.",
+        )
+    # The core protection against a compromised account being drained to an
+    # attacker's bank account: the resolved account holder name has to
+    # plausibly be this professional, checked when the account was added.
+    if not account.name_match:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"This account is registered to \"{account.account_name}\", which doesn't match your profile "
+                f"name. For your security, withdrawals are blocked to accounts that don't match your name — "
+                f"add an account in your own name, or contact support if this is genuinely yours."
+            ),
         )
 
-    result = monnify_client.disburse(
-        amount=payload.amount,
-        bank_code=profile.bank_code,
-        account_number=profile.bank_account_number,
-        account_name=profile.bank_account_name or f"{current_user.first_name} {current_user.last_name}",
-        narration="YH Connect wallet withdrawal",
-    )
+    try:
+        result = monnify_client.disburse(
+            amount=payload.amount,
+            bank_code=account.bank_code,
+            account_number=account.account_number,
+            account_name=account.account_name,
+            narration="YH Connect wallet withdrawal",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not process the withdrawal: {e}")
 
     current_user.wallet_balance -= payload.amount
     tx = WalletTransaction(
@@ -141,7 +169,7 @@ def withdraw_wallet(
     notify(
         db, current_user.id, NotificationType.general,
         f"₦{payload.amount:,.2f} withdrawal initiated",
-        body=f"Your withdrawal to {profile.bank_account_name or 'your bank account'} is on its way.",
+        body=f"Your withdrawal to {account.account_name} is on its way.",
         link="/talent/dashboard/earnings", email_also=True,
     )
 
@@ -193,6 +221,7 @@ def fund_milestone(
     )
     db.add(tx)
     milestone.status = MilestoneStatus.funded
+    post_system_message(db, project, current_user.id, f"💰 Milestone \"{milestone.title}\" funded — ₦{milestone.amount:,.2f} in escrow.")
 
     db.commit()
     db.refresh(tx)
@@ -214,7 +243,10 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     import json as _json
-    payload = _json.loads(raw_body)
+    try:
+        payload = _json.loads(raw_body)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
     event_data = payload.get("eventData", payload)
     reference = event_data.get("transactionReference") or event_data.get("paymentReference")
     payment_status = (event_data.get("paymentStatus") or "").upper()
@@ -278,11 +310,27 @@ def release_milestone_payout(
         raise HTTPException(status_code=400, detail="No professional assigned to this project")
     if has_blocking_dispute(db, project.id, milestone.id):
         raise HTTPException(status_code=400, detail="This milestone is under dispute and its funds are on hold until it's resolved")
+    # Belt-and-braces on top of the status check: the status field alone has
+    # been wrong before (see approve_milestone), so also require a real,
+    # successful escrow funding transaction to exist for this exact milestone
+    # before any money moves out to the professional.
+    funded_tx = (
+        db.query(WalletTransaction)
+        .filter(
+            WalletTransaction.milestone_id == milestone.id,
+            WalletTransaction.type == WalletTransactionType.funding,
+            WalletTransaction.status == WalletTransactionStatus.successful,
+        )
+        .first()
+    )
+    if not funded_tx:
+        raise HTTPException(status_code=400, detail="No escrow funding found for this milestone, it can't be released")
 
     try:
         tx = disburse_milestone(db, milestone, project, current_user.id, note=f"Payout for milestone '{milestone.title}'")
     except EscrowActionError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    post_system_message(db, project, current_user.id, f"🎉 Milestone \"{milestone.title}\" released — ₦{tx.amount:,.2f} paid out.")
     db.commit()
     db.refresh(tx)
     return _tx_out(tx)
@@ -308,7 +356,8 @@ def download_receipt(transaction_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=403, detail="Not authorized")
 
     from app.services.receipts import build_transaction_receipt_pdf
-    pdf_bytes = build_transaction_receipt_pdf(tx)
+    from app.services.platform_settings import get_receipt_settings
+    pdf_bytes = build_transaction_receipt_pdf(tx, get_receipt_settings(db))
     filename = f"yh-connect-receipt-{tx.id[:8]}.pdf"
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
@@ -317,21 +366,102 @@ def download_receipt(transaction_id: str, current_user: User = Depends(get_curre
     )
 
 
-@router.put("/professionals/me/payout-details")
-def set_payout_details(
-    payload: PayoutDetailsIn,
+@router.get("/professionals/me/payout-accounts", response_model=list[PayoutAccountOut])
+def list_payout_accounts(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
+    return (
+        db.query(PayoutAccount)
+        .filter(PayoutAccount.professional_id == current_user.id)
+        .order_by(PayoutAccount.is_default.desc(), PayoutAccount.created_at.desc())
+        .all()
+    )
+
+
+@router.post("/professionals/me/payout-accounts", response_model=PayoutAccountOut, status_code=201)
+def add_payout_account(
+    payload: PayoutAccountCreate,
     current_user: User = Depends(require_role(UserRole.professional)),
     db: Session = Depends(get_db),
 ):
-    profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
-    if not profile:
-        raise HTTPException(status_code=404, detail="Profile not found")
+    """Add a bank account a professional can withdraw to. Multiple accounts
+    are allowed (e.g. personal + business), each independently name-checked
+    against the professional's own account name — see app/services/payout.py
+    for why, and wallet.py withdraw for where mismatches get blocked."""
+    existing = (
+        db.query(PayoutAccount)
+        .filter(
+            PayoutAccount.professional_id == current_user.id,
+            PayoutAccount.bank_code == payload.bank_code,
+            PayoutAccount.account_number == payload.account_number,
+        )
+        .first()
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="This bank account has already been added")
 
-    resolved = monnify_client.resolve_account_name(payload.bank_account_number, payload.bank_code)
+    try:
+        resolved = monnify_client.resolve_account_name(payload.account_number, payload.bank_code)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not verify this bank account: {e}")
     account_name = resolved.get("accountName", "")
+    if not account_name:
+        raise HTTPException(status_code=400, detail="Could not resolve an account name for these details, double-check the account number and bank")
 
-    profile.bank_code = payload.bank_code
-    profile.bank_account_number = payload.bank_account_number
-    profile.bank_account_name = account_name
+    is_first = (
+        db.query(PayoutAccount).filter(PayoutAccount.professional_id == current_user.id).first() is None
+    )
+    account = PayoutAccount(
+        professional_id=current_user.id,
+        bank_code=payload.bank_code,
+        bank_name=payload.bank_name,
+        account_number=payload.account_number,
+        account_name=account_name,
+        name_match=names_match(f"{current_user.first_name} {current_user.last_name}", account_name),
+        is_default=is_first,
+    )
+    db.add(account)
     db.commit()
-    return {"bank_code": profile.bank_code, "bank_account_number": profile.bank_account_number, "bank_account_name": profile.bank_account_name}
+    db.refresh(account)
+    return account
+
+
+@router.patch("/professionals/me/payout-accounts/{account_id}/default", response_model=PayoutAccountOut)
+def set_default_payout_account(
+    account_id: str,
+    current_user: User = Depends(require_role(UserRole.professional)),
+    db: Session = Depends(get_db),
+):
+    account = db.get(PayoutAccount, account_id)
+    if not account or account.professional_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Payout account not found")
+    db.query(PayoutAccount).filter(PayoutAccount.professional_id == current_user.id, PayoutAccount.id != account_id).update(
+        {"is_default": False}
+    )
+    account.is_default = True
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@router.delete("/professionals/me/payout-accounts/{account_id}", status_code=204)
+def delete_payout_account(
+    account_id: str,
+    current_user: User = Depends(require_role(UserRole.professional)),
+    db: Session = Depends(get_db),
+):
+    account = db.get(PayoutAccount, account_id)
+    if not account or account.professional_id != current_user.id:
+        raise HTTPException(status_code=404, detail="Payout account not found")
+    was_default = account.is_default
+    db.delete(account)
+    db.flush()
+    if was_default:
+        next_account = (
+            db.query(PayoutAccount)
+            .filter(PayoutAccount.professional_id == current_user.id)
+            .order_by(PayoutAccount.created_at.desc())
+            .first()
+        )
+        if next_account:
+            next_account.is_default = True
+    db.commit()
+    return None

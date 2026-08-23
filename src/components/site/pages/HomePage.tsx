@@ -8,6 +8,7 @@ import {
   Briefcase,
   Building2,
   Calculator,
+  ChevronDown,
   ClipboardList,
   Construction,
   Database,
@@ -17,6 +18,7 @@ import {
   Hammer,
   HardHat,
   HeadphonesIcon,
+  ArrowUp,
   Lock,
   Mail,
   MapPin,
@@ -36,17 +38,18 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+
 import { Input } from "@/components/ui/input";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useNav } from "@/store/nav";
+import { formatNaira, formatBudgetRange } from "@/lib/utils";
 import { CmsPage } from "@/components/site/CmsPage";
-import { api, type BlogPostOut, type CategoryOut, type HighlightOut, type ProfessionalOut, type ProjectOut } from "@/lib/api";
+import { useSiteContent } from "@/lib/siteContent";
+import { api, type BlogPostOut, type CategoryOut, type FaqItemOut, type HighlightOut, type ProfessionalOut, type ProjectOut } from "@/lib/api";
 import {
   CATEGORIES,
-  HOW_IT_WORKS_STEPS,
-  WHY_CHOOSE,
   CLIENT_BENEFITS,
   TALENT_BENEFITS,
 } from "@/data/content";
@@ -73,21 +76,53 @@ const ICON_MAP: Record<string, React.ElementType> = {
   HeadphonesIcon,
 };
 
-function formatNaira(amount: number) {
-  return "₦" + amount.toLocaleString("en-NG");
+// Blurred, slowly cross-fading background photos behind the hero content.
+// Renders nothing if no images are configured, so the hero looks exactly as
+// it always has until an admin uploads at least one photo in CMS. With 2+
+// images it rotates between them for a subtle animated feel.
+function HeroBackgroundSlideshow({ images }: { images: string[] }) {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (images.length < 2) return;
+    const t = setInterval(() => setIndex((i) => (i + 1) % images.length), 5000);
+    return () => clearInterval(t);
+  }, [images.length]);
+
+  if (images.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {images.map((src, i) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={src + i}
+          src={src}
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover scale-110 blur-md transition-opacity duration-[2000ms] ease-in-out"
+          style={{ opacity: i === index ? 0.35 : 0 }}
+        />
+      ))}
+      {/* keep text legible over any photo, and blend edges into the gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-background/70 via-background/60 to-background/70" />
+    </div>
+  );
 }
 
 // ─── Hero ───────────────────────────────────────────────────────────────────
 function Hero() {
   const { navigate } = useNav();
   const [search, setSearch] = useState("");
+  const hero = useSiteContent("homepage.hero");
 
-  const runSearch = () => {
-    navigate("find-talent", undefined, search.trim() ? { q: search.trim() } : undefined);
+  const getStarted = () => {
+    navigate("client-register", undefined, search.trim() ? { need: search.trim() } : undefined);
   };
 
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-primary/10 py-20 md:py-32">
+      <HeroBackgroundSlideshow images={hero.background_images ?? []} />
       {/* decorative blobs */}
       <div className="pointer-events-none absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-primary/5 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-[400px] w-[400px] rounded-full bg-primary/5 blur-3xl" />
@@ -95,15 +130,11 @@ function Hero() {
       <div className="container mx-auto px-4 relative z-10">
         <div className="mx-auto max-w-3xl text-center">
           <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl md:text-6xl leading-tight">
-            Hire{" "}
-            <span className="text-primary">Verified Construction</span>{" "}
-            Professionals. Build with Confidence.
+            {hero.heading}
           </h1>
 
           <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto">
-            YH Connect bridges ambitious clients with verified Nigerian architects,
-            engineers, contractors and construction trades. Post projects, review
-            proposals, track site progress, and pay securely via escrow, all in one place.
+            {hero.subheading}
           </p>
 
           {/* Search bar */}
@@ -111,25 +142,25 @@ function Hero() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="What do you need built or designed?"
+                placeholder={hero.search_placeholder}
                 className="pl-9 h-12 rounded-full"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                onKeyDown={(e) => e.key === "Enter" && getStarted()}
               />
             </div>
             <Button
               size="lg"
               className="rounded-full px-6 h-12"
-              onClick={runSearch}
+              onClick={getStarted}
             >
-              Find Professionals <ArrowRight className="ml-2 h-4 w-4" />
+              {hero.cta_label} <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
 
           <p className="mt-4 text-xs text-muted-foreground">
             Popular:{" "}
-            {["Structural Engineer", "Architect", "General Contractor", "Quantity Surveyor"].map((t) => (
+            {hero.popular_searches.map((t) => (
               <button
                 key={t}
                 className="underline underline-offset-2 hover:text-foreground mx-1 transition-colors"
@@ -139,6 +170,12 @@ function Hero() {
               </button>
             ))}
           </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Escrow-protected payments</span>
+            <span className="flex items-center gap-1.5"><BadgeCheck className="h-3.5 w-3.5 text-primary" /> Verified professionals</span>
+            <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-primary" /> Free to post a project</span>
+          </div>
         </div>
       </div>
     </section>
@@ -148,9 +185,14 @@ function Hero() {
 // ─── Highlights (admin CMS-managed stats/testimonials/banners) ──────────────
 function Highlights() {
   const [highlights, setHighlights] = useState<HighlightOut[] | null>(null);
+  const [categoryCount, setCategoryCount] = useState<number | null>(null);
 
   useEffect(() => {
     api.activeHighlights().then(setHighlights).catch(() => setHighlights([]));
+    api
+      .categories()
+      .then((cats) => setCategoryCount(cats.length))
+      .catch(() => setCategoryCount(CATEGORIES.length));
   }, []);
 
   if (!highlights || highlights.length === 0) return null;
@@ -158,6 +200,18 @@ function Highlights() {
   const stats = highlights.filter((h) => h.type === "stat").sort((a, b) => a.sort_order - b.sort_order);
   const testimonials = highlights.filter((h) => h.type === "testimonial").sort((a, b) => a.sort_order - b.sort_order);
   const banners = highlights.filter((h) => h.type === "banner").sort((a, b) => a.sort_order - b.sort_order);
+
+  // When the CMS hasn't been configured with stats yet, show honest product
+  // facts so the trust band never renders empty.
+  const fallbackStats =
+    stats.length === 0
+      ? [
+          { title: `${categoryCount ?? CATEGORIES.length}+`, body: "Construction categories" },
+          { title: "Free", body: "to post projects" },
+          { title: "Escrow", body: "protected payments" },
+          { title: "Verified", body: "identity & licenses" },
+        ]
+      : stats;
 
   return (
     <>
@@ -172,20 +226,19 @@ function Highlights() {
         </div>
       )}
 
-      {stats.length > 0 && (
-        <section className="py-10 border-y bg-muted/20">
-          <div className="container mx-auto px-4">
-            <div className="grid gap-6 text-center grid-cols-2 md:grid-cols-4">
-              {stats.map((s) => (
-                <div key={s.id}>
-                  <p className="text-2xl md:text-3xl font-extrabold text-primary">{s.title}</p>
-                  {s.body && <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>}
-                </div>
-              ))}
-            </div>
+      <section className="py-10 border-y bg-muted/20">
+        <div className="container mx-auto px-4">
+          <div className="grid gap-6 text-center grid-cols-2 md:grid-cols-4">
+            {fallbackStats.map((s, i) => (
+              <div key={i}>
+                <p className="text-2xl md:text-3xl font-extrabold text-primary">{s.title}</p>
+                {s.body && <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>}
+                {i >= stats.length && <span className="sr-only">(fallback stat)</span>}
+              </div>
+            ))}
           </div>
-        </section>
-      )}
+        </div>
+      </section>
 
       {testimonials.length > 0 && (
         <section className="py-16">
@@ -251,16 +304,19 @@ function Categories() {
 }
 
 // ─── How It Works ───────────────────────────────────────────────────────────
+const HOW_IT_WORKS_ICONS = ["FileText", "Users", "ShieldCheck"];
+
 function HowItWorks() {
   const { navigate } = useNav();
+  const content = useSiteContent("homepage.how_it_works");
   return (
     <section className="py-20" id="how-it-works">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
-          <Badge variant="secondary" className="rounded-full mb-3">Simple Process</Badge>
-          <h2 className="text-3xl font-bold">How YH Connect Works</h2>
+          <Badge variant="secondary" className="rounded-full mb-3">{content.badge}</Badge>
+          <h2 className="text-3xl font-bold">{content.title}</h2>
           <p className="mt-3 text-muted-foreground max-w-xl mx-auto">
-            Get your project done in three simple steps: post, review, and pay.
+            {content.subtitle}
           </p>
         </div>
 
@@ -268,14 +324,14 @@ function HowItWorks() {
           {/* connecting line on desktop */}
           <div className="hidden md:block absolute top-12 left-[16.67%] right-[16.67%] h-px bg-border" />
 
-          {HOW_IT_WORKS_STEPS.map((step) => {
-            const Icon = ICON_MAP[step.icon] ?? FileText;
+          {content.steps.map((step, i) => {
+            const Icon = ICON_MAP[HOW_IT_WORKS_ICONS[i] ?? ""] ?? FileText;
             return (
-              <div key={step.step} className="relative text-center flex flex-col items-center gap-4">
+              <div key={step.title} className="relative text-center flex flex-col items-center gap-4">
                 <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground text-xl font-bold shadow-lg">
                   <Icon className="h-8 w-8" />
                   <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-background border-2 border-primary text-primary text-xs font-bold">
-                    {step.step}
+                    {String(i + 1).padStart(2, "0")}
                   </span>
                 </div>
                 <div>
@@ -291,10 +347,10 @@ function HowItWorks() {
 
         <div className="mt-12 text-center flex flex-col sm:flex-row gap-3 justify-center">
           <Button size="lg" onClick={() => navigate("client-register")}>
-            Post a Project Free <ArrowRight className="ml-2 h-4 w-4" />
+            {content.primary_cta_label} <ArrowRight className="ml-2 h-4 w-4" />
           </Button>
           <Button size="lg" variant="outline" onClick={() => navigate("talent-register")}>
-            Become a Talent
+            {content.secondary_cta_label}
           </Button>
         </div>
       </div>
@@ -337,13 +393,20 @@ function FeaturedTalent() {
             <Link
               key={talent.id}
               href={`/find-talent/${talent.id}`}
-              className="block rounded-xl border bg-background p-5 hover:shadow-md transition-shadow"
+              className="flex flex-col rounded-xl border bg-background p-5 hover:shadow-md hover:border-primary/40 transition-all group"
             >
               <div className="relative mx-auto mb-4 h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xl">
                 {talent.first_name.charAt(0)}
+                {talent.verification_status === "verified" && (
+                  <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white">
+                    <BadgeCheck className="h-3 w-3" />
+                  </span>
+                )}
               </div>
-              <div className="text-center">
-                <p className="font-semibold text-sm">{talent.first_name} {talent.last_name}</p>
+              <div className="text-center flex-1">
+                <p className="font-semibold text-sm">
+                  {talent.first_name} {talent.last_name}
+                </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{talent.title}</p>
                 <div className="flex items-center justify-center gap-1 mt-2">
                   <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
@@ -364,6 +427,9 @@ function FeaturedTalent() {
                   </div>
                 )}
               </div>
+              <span className="mt-4 text-xs text-primary font-medium flex items-center justify-center gap-0.5">
+                View Profile <ArrowRight className="h-3 w-3" />
+              </span>
             </Link>
           ))}
         </div>
@@ -404,16 +470,21 @@ function RecentProjects() {
 
         <div className="grid md:grid-cols-3 gap-5">
           {recent.map((proj) => (
-            <div
+            <Link
               key={proj.id}
-              className="rounded-xl border bg-background p-5 hover:shadow-md transition-shadow cursor-pointer"
-              onClick={() => navigate("find-work")}
+              href={`/find-work/${proj.id}`}
+              className="block rounded-xl border bg-background p-5 hover:shadow-md hover:border-primary/40 transition-all group"
             >
               <div className="flex items-start justify-between mb-3">
                 <Badge variant="outline" className="text-xs rounded-full">{proj.category.label}</Badge>
                 <span className="text-xs text-muted-foreground">{new Date(proj.created_at).toLocaleDateString()}</span>
               </div>
-              <h3 className="font-semibold text-sm leading-snug">{proj.title}</h3>
+              <h3 className="font-semibold text-sm leading-snug group-hover:text-primary transition-colors">{proj.title}</h3>
+              {proj.location && (
+                <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3 w-3" /> {proj.location}
+                </p>
+              )}
               <p className="mt-2 text-xs text-muted-foreground line-clamp-2 leading-relaxed">
                 {proj.description}
               </p>
@@ -426,17 +497,21 @@ function RecentProjects() {
                   ))}
                 </div>
               )}
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-4 flex items-center justify-between border-t pt-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Budget</p>
                   <p className="text-sm font-semibold text-primary">
-                    {formatNaira(proj.budget_min)} to {formatNaira(proj.budget_max)}
-                    {proj.budget_type === "hourly" ? "/hr" : ""}
+                    {formatBudgetRange(proj.budget_min, proj.budget_max, proj.budget_type === "hourly")}
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">{proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}</p>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">{proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}</p>
+                  <span className="text-xs text-primary font-medium flex items-center gap-0.5">
+                    View details <ArrowRight className="h-3 w-3" />
+                  </span>
+                </div>
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -445,20 +520,23 @@ function RecentProjects() {
 }
 
 // ─── Why Choose ─────────────────────────────────────────────────────────────
+const WHY_CHOOSE_ICONS = ["BadgeCheck", "Lock", "HardHat", "HeadphonesIcon"];
+
 function WhyChoose() {
+  const content = useSiteContent("homepage.why_choose");
   return (
     <section className="py-20 bg-muted/20">
       <div className="container mx-auto px-4">
         <div className="text-center mb-12">
-          <Badge variant="secondary" className="rounded-full mb-3">Why YH Connect</Badge>
-          <h2 className="text-3xl font-bold">Built for the Construction Industry</h2>
+          <Badge variant="secondary" className="rounded-full mb-3">{content.badge}</Badge>
+          <h2 className="text-3xl font-bold">{content.title}</h2>
           <p className="mt-3 text-muted-foreground max-w-lg mx-auto">
-            We understand the unique needs of Nigerian architects, engineers, contractors and clients.
+            {content.subtitle}
           </p>
         </div>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {WHY_CHOOSE.map((item) => {
-            const Icon = ICON_MAP[item.icon] ?? BadgeCheck;
+          {content.items.map((item, i) => {
+            const Icon = ICON_MAP[WHY_CHOOSE_ICONS[i] ?? ""] ?? BadgeCheck;
             return (
               <div key={item.title} className="rounded-xl border bg-background p-6 text-center">
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -546,18 +624,128 @@ function ForWho() {
   );
 }
 
+// ─── For Clients / For Talents audience landing pages ──────────────────────
+function AudienceHero({ eyebrow, title, subtitle, primaryCta, primaryAction, secondaryCta, secondaryAction }: {
+  eyebrow: string;
+  title: React.ReactNode;
+  subtitle: string;
+  primaryCta: string;
+  primaryAction: () => void;
+  secondaryCta: string;
+  secondaryAction: () => void;
+}) {
+  return (
+    <section className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-primary/10 py-20 md:py-24">
+      <div className="pointer-events-none absolute -top-32 -right-32 h-[400px] w-[400px] rounded-full bg-primary/5 blur-3xl" />
+      <div className="container mx-auto px-4 relative z-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <Badge variant="secondary" className="rounded-full mb-4">{eyebrow}</Badge>
+          <h1 className="text-4xl font-extrabold tracking-tight sm:text-5xl leading-tight">{title}</h1>
+          <p className="mt-5 text-lg text-muted-foreground max-w-2xl mx-auto">{subtitle}</p>
+          <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <Button size="lg" className="rounded-full px-7" onClick={primaryAction}>
+              {primaryCta} <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+            <Button size="lg" variant="outline" className="rounded-full px-7" onClick={secondaryAction}>
+              {secondaryCta}
+            </Button>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Escrow-protected</span>
+            <span className="flex items-center gap-1.5"><BadgeCheck className="h-3.5 w-3.5 text-primary" /> Verified professionals</span>
+            <span className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-primary" /> Free to join</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AudienceBenefits({ benefits, tone, icon }: { benefits: string[]; tone: "primary" | "emerald"; icon: React.ElementType }) {
+  const Icon = icon;
+  const color = tone === "emerald" ? "bg-emerald-100 text-emerald-700" : "bg-primary/10 text-primary";
+  return (
+    <section className="py-16">
+      <div className="container mx-auto px-4 max-w-4xl">
+        <h2 className="text-2xl font-bold text-center mb-10">Everything you need, in one place</h2>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {benefits.map((b) => (
+            <div key={b} className="flex items-start gap-3 rounded-xl border bg-background p-5">
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${color}`}>
+                <Icon className="h-4.5 w-4.5" />
+              </div>
+              <p className="text-sm text-muted-foreground leading-relaxed pt-1.5">{b}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AudienceLanding({ variant }: { variant: "client" | "talent" }) {
+  const { navigate } = useNav();
+  const isClient = variant === "client";
+
+  return (
+    <>
+      <AudienceHero
+        eyebrow={isClient ? "For Clients" : "For Professionals"}
+        title={
+          isClient ? (
+            <>Hire verified construction pros, <span className="text-primary">without the guesswork</span></>
+          ) : (
+            <>Turn your skills into <span className="text-emerald-600">steady construction work</span></>
+          )
+        }
+        subtitle={
+          isClient
+            ? "Post a project in minutes, compare proposals from verified architects, engineers and contractors, and pay only when you approve the work, milestone by milestone."
+            : "Create a free profile, showcase your portfolio and licenses, and get matched with clients who need your exact skills, with escrow-backed payments on every job."
+        }
+        primaryCta={isClient ? "Post a Project Free" : "Create Free Profile"}
+        primaryAction={() => navigate(isClient ? "client-register" : "talent-register")}
+        secondaryCta={isClient ? "Browse Professionals" : "Browse Projects"}
+        secondaryAction={() => navigate(isClient ? "find-talent" : "find-work")}
+      />
+
+      <Highlights />
+
+      <AudienceBenefits
+        tone={isClient ? "primary" : "emerald"}
+        icon={isClient ? BadgeCheck : Users}
+        benefits={isClient ? CLIENT_BENEFITS : TALENT_BENEFITS}
+      />
+
+      {isClient ? <FeaturedTalent /> : <RecentProjects />}
+
+      <HowItWorks />
+
+      <CTABanner />
+    </>
+  );
+}
+
+export function ForClientsPage() {
+  return <AudienceLanding variant="client" />;
+}
+
+export function ForTalentsPage() {
+  return <AudienceLanding variant="talent" />;
+}
+
 // ─── CTA Banner ─────────────────────────────────────────────────────────────
 function CTABanner() {
   const { navigate } = useNav();
+  const content = useSiteContent("homepage.cta_banner");
   return (
     <section className="py-20 bg-primary text-primary-foreground">
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-3xl md:text-4xl font-bold mb-4">
-          Ready to Get Started?
+          {content.title}
         </h2>
         <p className="text-primary-foreground/80 max-w-xl mx-auto mb-8">
-          Join thousands of clients and professionals already using YH Connect to
-          collaborate and grow.
+          {content.subtitle}
         </p>
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <Button
@@ -566,7 +754,7 @@ function CTABanner() {
             className="rounded-full px-8"
             onClick={() => navigate("client-register")}
           >
-            Hire a Professional
+            {content.primary_label}
           </Button>
           <Button
             size="lg"
@@ -574,7 +762,7 @@ function CTABanner() {
             className="rounded-full px-8 border-primary-foreground/40 text-primary-foreground hover:bg-primary-foreground/10"
             onClick={() => navigate("talent-register")}
           >
-            Offer Your Services
+            {content.secondary_label}
           </Button>
         </div>
       </div>
@@ -652,30 +840,55 @@ export function FindTalentPage() {
         </select>
         <Button onClick={load}>Search</Button>
       </div>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {(pros ?? []).map((talent) => (
           <Link
             key={talent.id}
             href={`/find-talent/${talent.id}`}
-            className="block rounded-xl border bg-background p-5 hover:shadow-md transition-shadow cursor-pointer"
+            className="flex flex-col rounded-xl border bg-background p-5 hover:shadow-md transition-shadow cursor-pointer"
           >
-            <div className="relative mx-auto mb-4 h-16 w-16 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xl">
-              {talent.first_name.charAt(0)}
-            </div>
-            <div className="text-center">
-              <p className="font-semibold text-sm">{talent.first_name} {talent.last_name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{talent.title}</p>
-              <p className="text-xs text-muted-foreground">{talent.location}</p>
-              <div className="flex items-center justify-center gap-1 mt-2">
-                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-                <span className="text-xs font-medium">{talent.rating || "New"}</span>
-                <span className="text-xs text-muted-foreground">({talent.review_count})</span>
+            <div className="flex items-start gap-3">
+              <div className="relative h-14 w-14 shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
+                {talent.first_name.charAt(0)}
+                {talent.verification_status === "verified" && (
+                  <span className="absolute -bottom-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-emerald-500 text-white">
+                    <BadgeCheck className="h-3 w-3" />
+                  </span>
+                )}
               </div>
-              {talent.hourly_rate && <p className="text-sm font-semibold text-primary mt-2">₦{talent.hourly_rate}/hr</p>}
-              <Button size="sm" className="mt-3 w-full rounded-full pointer-events-none">
-                View Profile
-              </Button>
+              <div className="min-w-0">
+                <p className="font-semibold leading-tight">{talent.first_name} {talent.last_name.charAt(0)}.</p>
+                <p className="text-sm text-muted-foreground truncate">{talent.location || talent.title}</p>
+              </div>
             </div>
+
+            <div className="flex items-center gap-3 mt-3 text-sm">
+              {talent.hourly_rate != null && <span className="font-semibold">₦{talent.hourly_rate}/hr</span>}
+              <span className="flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                <span className="font-medium">{talent.rating || "New"}</span>
+                <span className="text-muted-foreground">({talent.review_count})</span>
+              </span>
+            </div>
+
+            {talent.bio && (
+              <p className="mt-3 text-sm text-muted-foreground line-clamp-3 flex-1">{talent.bio}</p>
+            )}
+
+            {talent.skills.length > 0 && (
+              <div className="flex items-center gap-1.5 mt-3 overflow-hidden">
+                {talent.skills.slice(0, 2).map((sk) => (
+                  <Badge key={sk} variant="secondary" className="text-xs rounded-md shrink-0">{sk}</Badge>
+                ))}
+                {talent.skills.length > 2 && (
+                  <span className="text-xs text-muted-foreground shrink-0">+{talent.skills.length - 2}</span>
+                )}
+              </div>
+            )}
+
+            <span className="mt-4 text-xs text-primary font-medium flex items-center justify-center gap-0.5">
+              See Profile <ArrowRight className="h-3 w-3" />
+            </span>
           </Link>
         ))}
       </div>
@@ -750,25 +963,31 @@ export function FindWorkPage() {
           <Link
             key={proj.id}
             href={`/find-work/${proj.id}`}
-            className="block rounded-xl border bg-background p-5 hover:shadow-md transition-shadow"
+            className="flex flex-col rounded-xl border bg-background p-5 hover:shadow-md hover:border-primary/40 transition-all group"
           >
             <div className="flex items-start justify-between mb-3">
               <Badge variant="outline" className="text-xs rounded-full">{proj.category.label}</Badge>
+              <span className="text-xs text-muted-foreground">{new Date(proj.created_at).toLocaleDateString()}</span>
             </div>
-            <h3 className="font-semibold text-sm leading-snug">{proj.title}</h3>
-            <p className="mt-2 text-xs text-muted-foreground line-clamp-3">{proj.description}</p>
+            <h3 className="font-semibold text-sm leading-snug group-hover:text-primary transition-colors">{proj.title}</h3>
+            {proj.location && (
+              <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
+                <MapPin className="h-3 w-3" /> {proj.location}
+              </p>
+            )}
+            <p className="mt-2 text-xs text-muted-foreground line-clamp-3 flex-1">{proj.description}</p>
             <div className="mt-3 flex flex-wrap gap-1">
               {proj.skills.slice(0, 3).map((sk) => (
                 <Badge key={sk} variant="secondary" className="text-xs rounded-full">{sk}</Badge>
               ))}
             </div>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="mt-4 flex items-center justify-between border-t pt-3">
               <p className="text-sm font-semibold text-primary">
-                {formatNaira(proj.budget_min)} to {formatNaira(proj.budget_max)}{proj.budget_type === "hourly" ? "/hr" : ""}
+                {formatBudgetRange(proj.budget_min, proj.budget_max, proj.budget_type === "hourly")}
               </p>
-              <Button size="sm" className="rounded-full pointer-events-none">
-                View & Apply
-              </Button>
+              <span className="text-xs text-primary font-medium flex items-center gap-0.5">
+                View & Apply <ArrowRight className="h-3 w-3" />
+              </span>
             </div>
           </Link>
         ))}
@@ -889,6 +1108,149 @@ export function BlogPostPage({ slug }: { slug: string }) {
         <img src={post.cover_image_url} alt={post.title} className="w-full rounded-xl mt-6 object-cover max-h-96" />
       )}
       <div className="prose prose-sm max-w-none mt-6 whitespace-pre-wrap">{post.body}</div>
+    </div>
+  );
+}
+
+// ─── FAQ page ─────────────────────────────────────────────────────────────
+function FaqAccordionItem({ item, open, onToggle }: { item: FaqItemOut; open: boolean; onToggle: () => void }) {
+  return (
+    <div className="rounded-xl border bg-background overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-4 p-4 text-left hover:bg-muted/30 transition-colors"
+        aria-expanded={open}
+      >
+        <span className="font-medium text-sm">{item.question}</span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+          {item.answer}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function FaqPage() {
+  const [items, setItems] = useState<FaqItemOut[] | null>(null);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    api.activeFaq().then(setItems).catch(() => setItems([]));
+  }, []);
+
+  const categories = ["all", ...Array.from(new Set((items || []).map((i) => i.category)))];
+
+  const filtered = (items || []).filter((i) => {
+    if (activeCategory !== "all" && i.category !== activeCategory) return false;
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return i.question.toLowerCase().includes(q) || i.answer.toLowerCase().includes(q);
+  });
+
+  const grouped = filtered.reduce<Record<string, FaqItemOut[]>>((acc, item) => {
+    (acc[item.category] ||= []).push(item);
+    return acc;
+  }, {});
+
+  const toggle = (id: string) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  return (
+    <div>
+      <div className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
+        <div className="container mx-auto px-4 py-14 max-w-4xl text-center">
+          <Badge variant="secondary" className="rounded-full text-xs mb-3 bg-white/15 text-primary-foreground border-0 hover:bg-white/15">
+            Support
+          </Badge>
+          <h1 className="text-3xl md:text-4xl font-bold">Frequently Asked Questions</h1>
+          <p className="mt-3 text-sm md:text-base text-primary-foreground/85 max-w-xl mx-auto">
+            Answers to common questions about posting projects, getting hired, payments, and escrow.
+          </p>
+          <div className="mt-6 max-w-md mx-auto relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary-foreground/70" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search FAQs..."
+              className="pl-9 bg-white/10 border-white/20 text-primary-foreground placeholder:text-primary-foreground/60 focus-visible:ring-white/40"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-10 max-w-3xl">
+        {items === null && <p className="text-sm text-muted-foreground text-center">Loading…</p>}
+
+        {items !== null && items.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center">No FAQs published yet. Check back soon.</p>
+        )}
+
+        {items !== null && items.length > 0 && (
+          <>
+            {categories.length > 2 && (
+              <div className="flex flex-wrap gap-2 justify-center mb-8">
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setActiveCategory(c)}
+                    className={`text-xs font-medium rounded-full px-3 py-1.5 border transition-colors ${
+                      activeCategory === c
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-muted-foreground border-input hover:bg-muted"
+                    }`}
+                  >
+                    {c === "all" ? "All" : c}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {filtered.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center">No FAQs match your search.</p>
+            )}
+
+            <div className="space-y-8">
+              {Object.entries(grouped).map(([category, categoryItems]) => (
+                <div key={category}>
+                  {activeCategory === "all" && categories.length > 2 && (
+                    <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">{category}</h2>
+                  )}
+                  <div className="space-y-2.5">
+                    {categoryItems.map((item) => (
+                      <FaqAccordionItem key={item.id} item={item} open={openIds.has(item.id)} onToggle={() => toggle(item.id)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="mt-12 rounded-xl border bg-muted/30 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-center sm:text-left">
+          <div className="flex items-center gap-2.5 justify-center sm:justify-start">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Mail className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Still have questions?</p>
+              <p className="text-xs text-muted-foreground">We&apos;re happy to help.</p>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <a href="mailto:hello@yhconnect.ng">hello@yhconnect.ng</a>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1112,6 +1474,31 @@ export function TermsPage() {
   );
 }
 
+// ─── Back to top bubble ──────────────────────────────────────────────────────
+function BackToTop() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setVisible(window.scrollY > 480);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+      aria-label="Back to top"
+      className={`fixed bottom-6 right-6 z-50 flex h-11 w-11 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:bg-primary/90 hover:-translate-y-0.5 ${
+        visible ? "opacity-100 translate-y-0 pointer-events-auto" : "opacity-0 translate-y-4 pointer-events-none"
+      }`}
+    >
+      <ArrowUp className="h-5 w-5" />
+    </button>
+  );
+}
+
 // ─── Default export: full home page ─────────────────────────────────────────
 export function HomePage() {
   return (
@@ -1125,6 +1512,7 @@ export function HomePage() {
       <WhyChoose />
       <ForWho />
       <CTABanner />
+      <BackToTop />
     </>
   );
 }

@@ -18,6 +18,10 @@ class MilestoneUpdateIn(BaseModel):
     photo_urls: list[str] = []
 
 
+class MilestoneRejectIn(BaseModel):
+    note: str
+
+
 class MilestoneUpdateOut(BaseModel):
     id: str
     milestone_id: str
@@ -34,6 +38,9 @@ class MilestoneUpdateOut(BaseModel):
 class MilestoneOut(BaseModel):
     id: str
     project_id: str
+    # Who defined this milestone (client or the assigned professional).
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
     title: str
     description: Optional[str] = None
     amount: float
@@ -41,6 +48,13 @@ class MilestoneOut(BaseModel):
     status: MilestoneStatus
     sort_order: int
     created_at: datetime
+    submitted_at: Optional[datetime] = None
+    # So the client sees the fee before they fund/release, not after, and
+    # can see exactly what the professional nets.
+    platform_fee_percent: float = 0.0
+    net_to_professional: float = 0.0
+    rejection_note: Optional[str] = None
+    rejected_at: Optional[datetime] = None
     updates: list[MilestoneUpdateOut] = []
 
     class Config:
@@ -59,6 +73,7 @@ class ChangeOrderOut(BaseModel):
     description: str
     amount_delta: float
     status: str
+    resulting_milestone_id: Optional[str] = None
     created_at: datetime
 
     class Config:

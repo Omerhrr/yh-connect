@@ -44,6 +44,15 @@ class ProfessionalOut(BaseModel):
     license_number: Optional[str] = None
     is_verified: bool
     verification_status: str = "unverified"
+    # Rejection reasons set by admins, surfaced to the professional so they
+    # know what to fix before resubmitting.
+    verification_note: Optional[str] = None
+    address_verification_status: str = "unverified"
+    address_verification_note: Optional[str] = None
+    # Talent tier (1-3). Only the professional's own view (/professionals/me)
+    # includes it; public listings and profiles return None so clients never
+    # see it. The concept is personal to the talent, not a client-facing badge.
+    tier: Optional[int] = None
     rating: float
     review_count: int
     portfolio_items: list[PortfolioItemOut] = []

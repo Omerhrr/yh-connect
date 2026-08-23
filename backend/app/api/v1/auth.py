@@ -15,8 +15,10 @@ from app.core.security import (
 )
 from app.db.session import get_db
 from app.models.auth_token import PasswordResetToken
+from app.models.category import Category
 from app.models.profile import ProfessionalProfile
 from app.models.user import User, UserRole
+from app.services.platform_settings import get_profile_name_change_cooldown_hours
 from app.schemas.user import (
     BecomeTalentRequest,
     ChangePasswordRequest,
@@ -28,10 +30,14 @@ from app.schemas.user import (
     SwitchRoleRequest,
     Token,
     UserOut,
+    UsernameAvailabilityOut,
+    UsernameSuggestionsOut,
+    UserSearchResult,
     UserSelfUpdate,
     VerifyEmailRequest,
 )
 from app.services.email import send_password_reset_email, send_verification_email, send_welcome_email
+from app.services.username import is_username_taken, is_valid_username, normalize_username, suggest_usernames
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -43,7 +49,10 @@ def _issue_token(user: User) -> Token:
 
 def _start_email_verification(user: User, db: Session) -> None:
     token = generate_token()
-    user.email_verification_token = token
+    # Store a one-way hash at rest, same convention as password reset
+    # tokens, so a database read alone can't be used to verify someone's
+    # email; the raw token only ever exists in the emailed link.
+    user.email_verification_token = hash_token(token)
     user.email_verification_sent_at = datetime.utcnow()
     db.commit()
     verify_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/verify-email?token={token}"
@@ -78,6 +87,8 @@ def register_client(request: Request, payload: ClientRegister, db: Session = Dep
 def register_professional(request: Request, payload: ProfessionalRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email.ilike(payload.email)).first():
         raise HTTPException(status_code=409, detail="An account with this email already exists")
+    if not db.get(Category, payload.category_id):
+        raise HTTPException(status_code=400, detail="Unknown category")
     user = User(
         email=payload.email,
         hashed_password=hash_password(payload.password),
@@ -114,8 +125,28 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     user = db.query(User).filter(User.email.ilike(payload.email)).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
+    if user.is_deleted:
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="This account has been disabled")
+        # Lazy expiry, same "check on the read that matters" pattern used
+        # everywhere else in this app (no scheduler) — a time-bound
+        # suspension whose window has passed just quietly lifts itself here.
+        if user.suspended_until and datetime.utcnow() >= user.suspended_until:
+            user.is_active = True
+            user.suspended_at = None
+            user.suspended_until = None
+            user.suspension_reason = None
+            db.commit()
+        else:
+            if user.suspended_until:
+                until_text = f"until {user.suspended_until.strftime('%B %d, %Y')}"
+            else:
+                until_text = "until further notice"
+            reason_text = f" Reason: {user.suspension_reason}" if user.suspension_reason else ""
+            raise HTTPException(
+                status_code=403,
+                detail=f"This account has been suspended {until_text}.{reason_text}",
+            )
     return _issue_token(user)
 
 
@@ -131,11 +162,88 @@ def update_me(
     db: Session = Depends(get_db),
 ):
     data = payload.model_dump(exclude_unset=True)
+    if "username" in data and data["username"] is not None:
+        username = normalize_username(data["username"])
+        if not is_valid_username(username):
+            raise HTTPException(
+                status_code=400,
+                detail="Usernames must be 3-20 characters, lowercase letters, numbers, and underscores only.",
+            )
+        if is_username_taken(db, username, exclude_user_id=current_user.id):
+            raise HTTPException(status_code=409, detail="Username taken")
+        data["username"] = username
+    name_changing = (
+        ("first_name" in data and data["first_name"] != current_user.first_name)
+        or ("last_name" in data and data["last_name"] != current_user.last_name)
+    )
+    if name_changing and current_user.name_changed_at:
+        cooldown_hours = get_profile_name_change_cooldown_hours(db)
+        elapsed = datetime.utcnow() - current_user.name_changed_at
+        remaining = timedelta(hours=cooldown_hours) - elapsed
+        if remaining.total_seconds() > 0:
+            remaining_hours = max(remaining.total_seconds() / 3600, 0.1)
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Your name was changed recently. For account security (this slows down anyone who's "
+                    f"compromised your account and is trying to rename it to match a bank account they control), "
+                    f"you can change it again in about {remaining_hours:.1f} hour{'s' if remaining_hours >= 1.05 else ''}."
+                ),
+            )
     for field, value in data.items():
         setattr(current_user, field, value)
+    if name_changing:
+        current_user.name_changed_at = datetime.utcnow()
     db.commit()
     db.refresh(current_user)
     return UserOut.from_user(current_user)
+
+
+@router.get("/username/suggestions", response_model=UsernameSuggestionsOut)
+def username_suggestions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    return UsernameSuggestionsOut(suggestions=suggest_usernames(db, current_user.first_name, current_user.last_name))
+
+
+@router.get("/username/check", response_model=UsernameAvailabilityOut)
+def check_username(username: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    normalized = normalize_username(username)
+    if not is_valid_username(normalized):
+        return UsernameAvailabilityOut(
+            username=normalized, available=False,
+            reason="3-20 characters, lowercase letters, numbers, and underscores only.",
+        )
+    if is_username_taken(db, normalized, exclude_user_id=current_user.id):
+        return UsernameAvailabilityOut(username=normalized, available=False, reason="Username taken")
+    return UsernameAvailabilityOut(username=normalized, available=True)
+
+
+@router.get("/users/search", response_model=list[UserSearchResult])
+def search_users(q: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Look someone up by username — the point of having one. Requires
+    login (same bar as browsing professionals/projects elsewhere in the
+    app) so usernames aren't a public enumeration surface."""
+    normalized = normalize_username(q).lstrip("@")
+    if len(normalized) < 2:
+        return []
+    matches = (
+        db.query(User)
+        .filter(User.username.ilike(f"{normalized}%"), User.is_active.is_(True))
+        .order_by(User.username)
+        .limit(10)
+        .all()
+    )
+    return [
+        UserSearchResult(
+            id=u.id,
+            username=u.username,
+            first_name=u.first_name,
+            last_name=u.last_name,
+            role=u.role,
+            avatar_url=u.avatar_url,
+            professional_profile_id=u.profile.id if u.profile else None,
+        )
+        for u in matches
+    ]
 
 
 @router.post("/switch-role", response_model=Token)
@@ -176,6 +284,8 @@ def become_talent(
         raise HTTPException(status_code=400, detail="Admin accounts cannot become talent")
     if current_user.profile is not None:
         raise HTTPException(status_code=409, detail="You already have a professional profile, use switch-role instead")
+    if not db.get(Category, payload.category_id):
+        raise HTTPException(status_code=400, detail="Unknown category")
 
     profile = ProfessionalProfile(
         user_id=current_user.id,
@@ -216,7 +326,8 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
 
 
 @router.post("/reset-password")
-def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def reset_password(request: Request, payload: ResetPasswordRequest, db: Session = Depends(get_db)):
     token_hash = hash_token(payload.token)
     reset = db.query(PasswordResetToken).filter(PasswordResetToken.token_hash == token_hash).first()
     if (
@@ -238,7 +349,9 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 
 
 @router.post("/change-password")
+@limiter.limit("10/hour")
 def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -262,8 +375,9 @@ EMAIL_VERIFICATION_TOKEN_TTL_HOURS = 24
 
 
 @router.post("/verify-email")
-def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email_verification_token == payload.token).first()
+@limiter.limit("20/hour")
+def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email_verification_token == hash_token(payload.token)).first()
     if not user:
         raise HTTPException(status_code=400, detail="This verification link is invalid or has expired")
     if (
@@ -278,7 +392,8 @@ def verify_email(payload: VerifyEmailRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification")
-def resend_verification(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@limiter.limit("5/hour")
+def resend_verification(request: Request, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.email_verified_at:
         return {"message": "Email already verified."}
     _start_email_verification(current_user, db)

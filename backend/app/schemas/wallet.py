@@ -65,3 +65,23 @@ class WalletTransactionOut(BaseModel):
 class PayoutDetailsIn(BaseModel):
     bank_code: str
     bank_account_number: str
+
+
+class PayoutAccountCreate(BaseModel):
+    bank_code: str
+    bank_name: Optional[str] = None
+    account_number: str
+
+
+class PayoutAccountOut(BaseModel):
+    id: str
+    bank_code: str
+    bank_name: Optional[str] = None
+    account_number: str
+    account_name: str
+    name_match: bool
+    is_default: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

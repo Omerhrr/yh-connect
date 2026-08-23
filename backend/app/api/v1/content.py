@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import require_role
 from app.db.session import get_db
 from app.models.category import Category
-from app.models.content import BlogPost, ContentPage, HomepageHighlight
+from app.models.content import BlogPost, ContentPage, FaqItem, HomepageHighlight, SiteContentBlock
 from app.models.user import User, UserRole
 from app.schemas.content import (
     BlogPostCreate,
@@ -17,13 +18,76 @@ from app.schemas.content import (
     ContentPageOut,
     ContentPagePatch,
     ContentPageUpsert,
+    FaqItemCreate,
+    FaqItemOut,
+    FaqItemPatch,
     HighlightCreate,
     HighlightOut,
     HighlightPatch,
+    SiteContentBlockOut,
+    SiteContentBlockUpsert,
 )
 from app.schemas.category import CategoryOut
 
 router = APIRouter(tags=["content"])
+
+
+# ─── Site content blocks (header/footer/homepage CMS) ──────────────────────
+@router.get("/site-content")
+def get_site_content(db: Session = Depends(get_db)):
+    """Public: every customized content block, as {key: data}. Sections with
+    no row here simply weren't customized yet, the frontend falls back to
+    its hardcoded defaults for anything missing (see src/lib/siteContent.ts),
+    so a partially-filled-in CMS never breaks the site."""
+    blocks = db.query(SiteContentBlock).all()
+    out = {}
+    for b in blocks:
+        try:
+            out[b.key] = json.loads(b.data)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+@router.get("/admin/site-content", response_model=list[SiteContentBlockOut])
+def admin_list_site_content(current_user: User = Depends(require_role(UserRole.admin)), db: Session = Depends(get_db)):
+    blocks = db.query(SiteContentBlock).all()
+    return [
+        SiteContentBlockOut(key=b.key, data=json.loads(b.data) if b.data else {}, updated_at=b.updated_at)
+        for b in blocks
+    ]
+
+
+@router.put("/admin/site-content/{key}", response_model=SiteContentBlockOut)
+def admin_upsert_site_content(
+    key: str,
+    payload: SiteContentBlockUpsert,
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    block = db.get(SiteContentBlock, key)
+    data_json = json.dumps(payload.data)
+    if block:
+        block.data = data_json
+        block.updated_by = current_user.id
+        block.updated_at = datetime.utcnow()
+    else:
+        block = SiteContentBlock(key=key, data=data_json, updated_by=current_user.id)
+        db.add(block)
+    db.commit()
+    db.refresh(block)
+    return SiteContentBlockOut(key=block.key, data=json.loads(block.data), updated_at=block.updated_at)
+
+
+@router.delete("/admin/site-content/{key}", status_code=204)
+def admin_reset_site_content(
+    key: str, current_user: User = Depends(require_role(UserRole.admin)), db: Session = Depends(get_db)
+):
+    """Reset a section back to the hardcoded default by deleting its override."""
+    block = db.get(SiteContentBlock, key)
+    if block:
+        db.delete(block)
+        db.commit()
 
 
 # ─── Public reads ────────────────────────────────────────────────────────
@@ -59,6 +123,16 @@ def list_active_highlights(db: Session = Depends(get_db)):
         db.query(HomepageHighlight)
         .filter(HomepageHighlight.active.is_(True))
         .order_by(HomepageHighlight.sort_order)
+        .all()
+    )
+
+
+@router.get("/content/faq", response_model=list[FaqItemOut])
+def list_active_faq(db: Session = Depends(get_db)):
+    return (
+        db.query(FaqItem)
+        .filter(FaqItem.active.is_(True))
+        .order_by(FaqItem.category, FaqItem.sort_order)
         .all()
     )
 
@@ -219,6 +293,53 @@ def admin_delete_highlight(
     highlight = db.get(HomepageHighlight, highlight_id)
     if highlight:
         db.delete(highlight)
+        db.commit()
+
+
+# ─── Admin: FAQ ───────────────────────────────────────────────────────────
+@router.get("/admin/content/faq", response_model=list[FaqItemOut])
+def admin_list_faq(current_user: User = Depends(require_role(UserRole.admin)), db: Session = Depends(get_db)):
+    return db.query(FaqItem).order_by(FaqItem.category, FaqItem.sort_order).all()
+
+
+@router.post("/admin/content/faq", response_model=FaqItemOut, status_code=201)
+def admin_create_faq(
+    payload: FaqItemCreate,
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    item = FaqItem(**payload.model_dump())
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.patch("/admin/content/faq/{item_id}", response_model=FaqItemOut)
+def admin_patch_faq(
+    item_id: str,
+    payload: FaqItemPatch,
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    item = db.get(FaqItem, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="FAQ item not found")
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(item, field, value)
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@router.delete("/admin/content/faq/{item_id}", status_code=204)
+def admin_delete_faq(
+    item_id: str, current_user: User = Depends(require_role(UserRole.admin)), db: Session = Depends(get_db)
+):
+    item = db.get(FaqItem, item_id)
+    if item:
+        db.delete(item)
         db.commit()
 
 

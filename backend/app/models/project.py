@@ -42,6 +42,10 @@ class Project(Base):
     skills: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
     status: Mapped[ProjectStatus] = mapped_column(Enum(ProjectStatus), default=ProjectStatus.open)
     progress: Mapped[int] = mapped_column(Integer, default=0)
+    # Final-review sign-off: while the project is in "review", the assigned
+    # professional can leave a closing note for the client before they
+    # confirm completion.
+    closing_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -73,5 +77,8 @@ class Project(Base):
             return self.progress
         from app.models.milestone import MilestoneStatus
         total = len(self.milestones)
-        done = sum(1 for m in self.milestones if m.status in (MilestoneStatus.approved, MilestoneStatus.funded, MilestoneStatus.paid))
+        # Terminal states (paid out, or refunded via dispute) count as done so
+        # a completed project can reach 100% even when a milestone was
+        # refunded instead of paid.
+        done = sum(1 for m in self.milestones if m.status in (MilestoneStatus.approved, MilestoneStatus.funded, MilestoneStatus.paid, MilestoneStatus.refunded))
         return round((done / total) * 100) if total else 0

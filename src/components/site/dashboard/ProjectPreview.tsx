@@ -15,17 +15,20 @@ import {
   Briefcase,
   Check,
   Heart,
+  Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApplyDialog } from "@/components/site/pages/DashboardPages";
 import { api, ApiError, type ProjectOut, type BidStatus } from "@/lib/api";
 import { BID_STATUS_COLORS } from "@/lib/statusColors";
+import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import { toast } from "sonner";
 
 const BID_STATUS_LABELS: Record<BidStatus, string> = {
   pending: "Applied",
   shortlisted: "Shortlisted",
+  offered: "Offer received",
   accepted: "Accepted",
   rejected: "Not selected",
   withdrawn: "Withdrawn",
@@ -38,10 +41,6 @@ const REPORT_REASONS = [
   "Duplicate posting",
   "Other",
 ];
-
-function fmtNaira(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
 
 function fmtMemberSince(d?: string | null) {
   if (!d) return null;
@@ -198,6 +197,12 @@ function AboutClientPanel({ project }: { project: ProjectOut }) {
             <span>Verified business</span>
           </div>
         )}
+        {project.client_payment_verified && (
+          <div className="flex items-center gap-1.5" title="Has successfully funded a project before">
+            <Wallet className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Payment verified</span>
+          </div>
+        )}
         {fmtMemberSince(project.client_member_since) && (
           <div className="flex items-center gap-1.5 text-muted-foreground">
             <Calendar className="h-3.5 w-3.5" />
@@ -238,7 +243,9 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
   const [applyOpen, setApplyOpen] = useState(false);
   const [flagOpen, setFlagOpen] = useState(false);
   const [bidStatus, setBidStatus] = useState<BidStatus | null>(null);
+  const [myBidId, setMyBidId] = useState("");
   const [saved, setSaved] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     api
@@ -251,7 +258,10 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
       .myBids()
       .then((bids) => {
         const mine = bids.find((b) => b.project_id === projectId);
-        if (mine) setBidStatus(mine.status);
+        if (mine) {
+          setBidStatus(mine.status);
+          setMyBidId(mine.id);
+        }
       })
       .catch(() => {});
     api
@@ -259,6 +269,21 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
       .then((favs) => setSaved(favs.some((f) => f.target_type === "project" && f.target_id === projectId)))
       .catch(() => {});
   }, [projectId, user]);
+
+  const withdrawProposal = async () => {
+    if (!bidStatus) return;
+    if (!confirm(`Withdraw your proposal on "${project?.title}"? You can re-apply anytime while the project is still open.`)) return;
+    setWithdrawing(true);
+    try {
+      await api.withdrawBid(myBidId);
+      setBidStatus("withdrawn");
+      toast.success("Proposal withdrawn");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not withdraw proposal");
+    } finally {
+      setWithdrawing(false);
+    }
+  };
 
   // Anonymous visitors and clients can view this page (register-on-intent),
   // but only logged-in professionals can actually apply, save, or flag.
@@ -300,7 +325,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
           <div className="flex flex-wrap gap-4 text-sm border-y py-3">
             <div>
               <p className="text-xs text-muted-foreground">Budget</p>
-              <p className="font-semibold text-emerald-600">{fmtNaira(project.budget_min)} – {fmtNaira(project.budget_max)}</p>
+              <p className="font-semibold text-emerald-600">{formatBudgetRange(project.budget_min, project.budget_max, project.budget_type === "hourly")}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Project type</p>
@@ -332,14 +357,27 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
       {/* Right: apply / save / flag / client trust sidebar */}
       <div className="space-y-4 lg:sticky lg:top-4">
         <div className="rounded-xl border bg-background p-4 space-y-3">
-          {project.status === "open" && bidStatus && (
-            <Badge className={`w-full justify-center py-1.5 text-xs rounded-full ${BID_STATUS_COLORS[bidStatus]}`}>
-              {BID_STATUS_LABELS[bidStatus]}
-            </Badge>
+          {project.status === "open" && bidStatus && bidStatus !== "withdrawn" && (
+            <>
+              <Badge className={`w-full justify-center py-1.5 text-xs rounded-full ${BID_STATUS_COLORS[bidStatus]}`}>
+                {BID_STATUS_LABELS[bidStatus]}
+              </Badge>
+              {(bidStatus === "pending" || bidStatus === "shortlisted") && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-muted-foreground hover:text-destructive"
+                  onClick={withdrawProposal}
+                  disabled={withdrawing}
+                >
+                  {withdrawing ? "Withdrawing..." : "Withdraw proposal"}
+                </Button>
+              )}
+            </>
           )}
-          {project.status === "open" && !bidStatus && (
+          {project.status === "open" && (!bidStatus || bidStatus === "withdrawn") && (
             <Button className="w-full bg-emerald-600 hover:bg-emerald-700" onClick={() => requireProfessional(() => setApplyOpen(true))}>
-              Apply now
+              {bidStatus === "withdrawn" ? "Apply again" : "Apply now"}
             </Button>
           )}
           {project.status !== "open" && (

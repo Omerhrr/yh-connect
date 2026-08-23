@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -5,11 +6,20 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
-from app.models.project import Project, ProjectStatus
+from app.models.bid import Bid, BidStatus
+from app.models.category import Category
+from app.models.change_order import ChangeOrder, ChangeOrderStatus
+from app.models.milestone import Milestone, MilestoneStatus
+from app.models.profile import ProfessionalProfile
+from app.models.project import BudgetType, Project, ProjectStatus
 from app.models.user import User, UserRole, KycStatus
+from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
 from app.models.project_report import ProjectReport
-from app.schemas.project import ProjectCreate, ProjectOut, ProjectUpdate, ProjectReportCreate, ProjectReportOut
+from app.models.notification import NotificationType
+from app.schemas.project import ClosingNoteIn, ProjectCreate, ProjectOut, ProjectUpdate, ProjectReportCreate, ProjectReportOut
+from app.services.disputes import has_any_blocking_dispute, has_blocking_dispute
 from app.services.nlp_search import extract_keywords, match_categories
+from app.services.notify import notify
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
@@ -42,6 +52,45 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         )
         if total_count > 0:
             hire_rate = round((hired_count / total_count) * 100)
+    payment_verified = bool(client) and (
+        db.query(WalletTransaction)
+        .filter(
+            WalletTransaction.client_id == client.id,
+            WalletTransaction.type == WalletTransactionType.funding,
+            WalletTransaction.status == WalletTransactionStatus.successful,
+        )
+        .first()
+        is not None
+    )
+    contract_amount = None
+    milestones_total = 0.0
+    remaining_unallocated = None
+    if project.assigned_professional_id:
+        accepted_bid = (
+            db.query(Bid)
+            .filter(Bid.project_id == project.id, Bid.status == BidStatus.accepted)
+            .order_by(Bid.created_at.desc())
+            .first()
+        )
+        if accepted_bid:
+            contract_amount = accepted_bid.offered_amount if accepted_bid.offered_amount is not None else accepted_bid.amount
+            # Approved change orders permanently move the contract price —
+            # scope additions raise it, scope reductions lower it — even the
+            # ones that were too small/negative to spin up their own
+            # milestone (create_change_order/update_change_order only create
+            # a milestone for amount_delta > 0).
+            approved_delta = (
+                db.query(ChangeOrder)
+                .filter(ChangeOrder.project_id == project.id, ChangeOrder.status == ChangeOrderStatus.approved)
+                .with_entities(ChangeOrder.amount_delta)
+                .all()
+            )
+            contract_amount += sum(d for (d,) in approved_delta)
+            milestones_total = sum(
+                m.amount for m in project.milestones
+                if m.status not in (MilestoneStatus.rejected, MilestoneStatus.refunded)
+            )
+            remaining_unallocated = round(contract_amount - milestones_total, 2)
     return ProjectOut(
         id=project.id,
         client_id=project.client_id,
@@ -56,12 +105,17 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         status=project.status,
         progress=project.computed_progress,
         assigned_professional_id=project.assigned_professional_id,
+        closing_note=project.closing_note,
         created_at=project.created_at,
         bid_count=len(project.bids),
+        contract_amount=contract_amount,
+        milestones_total=milestones_total,
+        remaining_unallocated=remaining_unallocated,
         client_company_name=client.company_name if client else None,
         client_is_verified_business=bool(client.is_verified_business) if client else False,
         client_completed_project_count=completed_count,
         client_kyc_verified=bool(client and client.kyc_status == KycStatus.verified),
+        client_payment_verified=payment_verified,
         client_email_verified=bool(client and client.email_verified_at is not None),
         client_member_since=client.created_at if client else None,
         client_open_project_count=open_count,
@@ -149,6 +203,8 @@ def create_project(
     current_user: User = Depends(require_role(UserRole.client)),
     db: Session = Depends(get_db),
 ):
+    if not db.get(Category, payload.category_id):
+        raise HTTPException(status_code=400, detail="Unknown category")
     project = Project(
         client_id=current_user.id,
         category_id=payload.category_id,
@@ -163,7 +219,42 @@ def create_project(
     db.add(project)
     db.commit()
     db.refresh(project)
+    _notify_matching_professionals(db, project)
     return _to_out(project, db)
+
+
+def _notify_matching_professionals(db: Session, project: Project) -> None:
+    """Tell professionals whose profile fits this project that it exists,
+    instead of relying on them to stumble onto it in Find Work. Matches on
+    category first (the strong signal), then narrows to a skills overlap
+    when the project listed any — falling back to the full category match
+    if nobody's listed skills happen to overlap, same "don't over-filter
+    down to nothing" idea as the search fallback in list_projects."""
+    matching = (
+        db.query(ProfessionalProfile)
+        .filter(ProfessionalProfile.category_id == project.category_id)
+        .filter(ProfessionalProfile.availability != "offline")
+        .all()
+    )
+    if project.skills_list:
+        wanted = {s.strip().lower() for s in project.skills_list}
+        with_overlap = [p for p in matching if wanted & {s.strip().lower() for s in p.skills_list}]
+        if with_overlap:
+            matching = with_overlap
+
+    budget_note = (
+        f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}" if project.budget_type == BudgetType.fixed
+        else f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}/hr"
+    )
+    for p in matching:
+        notify(
+            db, p.user_id, NotificationType.general,
+            f"New project in your category: \"{project.title}\"",
+            body=f"{project.location or 'Remote'} · {budget_note}",
+            link=f"/talent/dashboard/find-work/{project.id}",
+            email_also=True,
+        )
+    db.commit()
 
 
 @router.get("/mine", response_model=list[ProjectOut])
@@ -222,8 +313,192 @@ def update_project(
         raise HTTPException(status_code=404, detail="Project not found")
     if project.client_id != current_user.id and current_user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Not authorized to modify this project")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    if current_user.role != UserRole.admin:
+        # Status / assignment / progress drive the hiring and escrow flow and
+        # are owned by the accept-a-bid and milestone transitions, not by a
+        # free-form PATCH; a client could otherwise mark a project completed
+        # or assign any professional without accepting a proposal.
+        for field in ("status", "assigned_professional_id", "progress"):
+            data.pop(field, None)
+    if "category_id" in data and data["category_id"] is not None:
+        if not db.get(Category, data["category_id"]):
+            raise HTTPException(status_code=400, detail="Unknown category")
+    if "skills" in data and data["skills"] is not None:
+        data["skills"] = ",".join(data["skills"])
+    for field, value in data.items():
         setattr(project, field, value)
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+
+@router.post("/{project_id}/complete", response_model=ProjectOut)
+def complete_project(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    """Client moves an in-progress project into final review (the "review"
+    state): the work is done as far as the client is concerned, and the
+    assigned professional gets a chance to leave a closing note or raise any
+    final issues before the client confirms completion. Guards: no open
+    dispute, and no escrow money left sitting in funded or approved milestones
+    (release or refund those first, or raise a dispute), so funds are never
+    stranded."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to move this project to review")
+    if project.status != ProjectStatus.in_progress:
+        raise HTTPException(status_code=400, detail="Only in-progress projects can move to final review")
+    if has_any_blocking_dispute(db, project.id):
+        raise HTTPException(status_code=400, detail="Resolve the open dispute on this project before completing it")
+    funded = (
+        db.query(Milestone)
+        .filter(
+            Milestone.project_id == project.id,
+            Milestone.status.in_([MilestoneStatus.funded, MilestoneStatus.approved]),
+        )
+        .count()
+    )
+    if funded:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{funded} milestone{'s' if funded != 1 else ''} still hold{'s' if funded == 1 else ''} escrow funds. "
+                "Release or refund them (or open a dispute) before completing the project."
+            ),
+        )
+    project.status = ProjectStatus.review
+    if project.assigned_professional_id:
+        notify(
+            db, project.assigned_professional_id, NotificationType.general,
+            f"\"{project.title}\" is under final review",
+            body="The client has moved the project to final review. You can leave a closing note before they sign off.",
+            link=f"/talent/dashboard/find-work/{project.id}", email_also=True,
+        )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+
+@router.post("/{project_id}/confirm", response_model=ProjectOut)
+def confirm_project(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    """Final sign-off: client confirms completion of a project under review.
+    This is the only transition into `completed` (besides the milestone
+    auto-path, which now also lands in review first), so the professional's
+    closing note window always happens before reviews unlock."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to confirm this project")
+    if project.status != ProjectStatus.review:
+        raise HTTPException(status_code=400, detail="Only projects under final review can be confirmed complete")
+    if has_any_blocking_dispute(db, project.id):
+        raise HTTPException(status_code=400, detail="Resolve the open dispute before confirming completion")
+    project.status = ProjectStatus.completed
+    project.completed_at = datetime.utcnow()
+    notify(
+        db, project.client_id, NotificationType.general,
+        f"\"{project.title}\" is complete",
+        body="You confirmed final sign-off. You can leave a review for the professional.",
+        link=f"/client/dashboard/projects/{project.id}", email_also=True,
+    )
+    if project.assigned_professional_id:
+        notify(
+            db, project.assigned_professional_id, NotificationType.general,
+            f"\"{project.title}\" is complete",
+            body="The client confirmed final sign-off. You can leave a review for the client.",
+            link=f"/talent/dashboard/find-work/{project.id}", email_also=False,
+        )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+
+@router.post("/{project_id}/reopen", response_model=ProjectOut)
+def reopen_project(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    """Client pulls a project out of final review back into active work (e.g.
+    the professional's closing note surfaced a real remaining issue), so more
+    milestones can be added and funded."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to reopen this project")
+    if project.status != ProjectStatus.review:
+        raise HTTPException(status_code=400, detail="Only projects under final review can be reopened")
+    project.status = ProjectStatus.in_progress
+    if project.assigned_professional_id:
+        notify(
+            db, project.assigned_professional_id, NotificationType.general,
+            f"\"{project.title}\" was reopened",
+            body="The client reopened the project for more work. New milestones can be added.",
+            link=f"/talent/dashboard/find-work/{project.id}", email_also=False,
+        )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+
+@router.post("/{project_id}/closing-note", response_model=ProjectOut)
+def post_closing_note(
+    project_id: str,
+    payload: ClosingNoteIn,
+    current_user: User = Depends(require_role(UserRole.professional)),
+    db: Session = Depends(get_db),
+):
+    """The assigned professional replies during final review: a closing note
+    (or a flag that work isn't done) that the client sees before signing off.
+    Empty note clears it. Posting a note notifies the client."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.assigned_professional_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Only the assigned professional can leave a closing note")
+    if project.status != ProjectStatus.review:
+        raise HTTPException(status_code=400, detail="A closing note can only be left while the project is under final review")
+    note = payload.note.strip()
+    project.closing_note = note or None
+    notify(
+        db, project.client_id, NotificationType.general,
+        f"Closing note from {current_user.first_name} on \"{project.title}\"",
+        body=note or "The professional cleared their closing note.",
+        link=f"/client/dashboard/projects/{project.id}", email_also=True,
+    )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+
+@router.post("/{project_id}/close", response_model=ProjectOut)
+def close_project(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    """A client can close their own open project (no one hired yet).
+    Distinct from the admin force-cancel: this is the normal "I'm no longer
+    pursuing this" path and only applies while the project is still open."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to close this project")
+    if project.status != ProjectStatus.open:
+        raise HTTPException(status_code=400, detail="Only open projects can be closed")
+    project.status = ProjectStatus.cancelled
     db.commit()
     db.refresh(project)
     return _to_out(project, db)

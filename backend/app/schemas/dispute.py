@@ -3,7 +3,18 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from app.models.dispute import DisputeCategory, DisputeOutcome, DisputeStatus
+from app.models.dispute import DisputeCategory, DisputeOutcome, DisputeStatus, ProposalStatus
+
+
+class ProposeResolution(BaseModel):
+    outcome: DisputeOutcome
+    split_professional_amount: Optional[float] = None
+    note: Optional[str] = None
+
+
+class RespondProposal(BaseModel):
+    accept: bool
+    note: Optional[str] = None
 
 
 class DisputeCreate(BaseModel):
@@ -22,6 +33,13 @@ class DisputeResolve(BaseModel):
     status: DisputeStatus
     outcome: Optional[DisputeOutcome] = None
     resolution_note: Optional[str] = None
+    # Required when outcome == "partial_split": how much of the milestone
+    # amount (before platform fee) goes to the professional, the rest is
+    # refunded to the client. Without this, "partial split" was previously
+    # decorative, it recorded an outcome but never actually moved money,
+    # letting the professional still claim the full amount via the normal
+    # release endpoint afterward.
+    split_professional_amount: Optional[float] = None
 
 
 class DisputeMessageOut(BaseModel):
@@ -56,6 +74,7 @@ class DisputeOut(BaseModel):
     milestone_id: Optional[str] = None
     milestone_title: Optional[str] = None
     milestone_amount: Optional[float] = None
+    milestone_status: Optional[str] = None
     category: DisputeCategory
     raised_by: str
     raised_by_name: Optional[str] = None
@@ -69,6 +88,14 @@ class DisputeOut(BaseModel):
     resolved_by_name: Optional[str] = None
     resolved_at: Optional[datetime] = None
     message_count: int = 0
+    # First-tier direct resolution, before this ever needs admin mediation.
+    proposal_status: ProposalStatus = ProposalStatus.none
+    proposed_outcome: Optional[DisputeOutcome] = None
+    proposed_split_amount: Optional[float] = None
+    proposed_by: Optional[str] = None
+    proposed_by_name: Optional[str] = None
+    proposal_note: Optional[str] = None
+    proposal_expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 

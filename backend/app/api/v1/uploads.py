@@ -1,15 +1,16 @@
 import os
 import uuid
 
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, Request, UploadFile, File, HTTPException
 
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.models.user import User
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
-ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".pdf"}
+ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".webm", ".ogg", ".mp3", ".wav", ".m4a"}
 MAX_SIZE = 10 * 1024 * 1024  # 10MB
 
 
@@ -25,11 +26,24 @@ def _sniff_matches_extension(contents: bytes, ext: str) -> bool:
         return contents[:4] == b"RIFF" and contents[8:12] == b"WEBP"
     if ext == ".pdf":
         return contents[:5] == b"%PDF-"
+    if ext == ".webm":
+        # WebM/Matroska container, what browser MediaRecorder produces by default.
+        return contents[:4] == b"\x1a\x45\xdf\xa3"
+    if ext == ".ogg":
+        return contents[:4] == b"OggS"
+    if ext == ".wav":
+        return contents[:4] == b"RIFF" and contents[8:12] == b"WAVE"
+    if ext == ".mp3":
+        return contents[:3] == b"ID3" or contents[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")
+    if ext == ".m4a":
+        # ISO base media file format ("ftyp" box), Safari/iOS MediaRecorder output.
+        return contents[4:8] == b"ftyp"
     return False
 
 
 @router.post("")
-async def upload_file(file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
+@limiter.limit("60/hour")
+async def upload_file(request: Request, file: UploadFile = File(...), current_user: User = Depends(get_current_user)):
     ext = os.path.splitext(file.filename or "")[1].lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")

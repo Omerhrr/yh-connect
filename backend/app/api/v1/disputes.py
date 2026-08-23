@@ -1,12 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
-from app.models.dispute import BLOCKING_STATUSES, Dispute, DisputeEvent, DisputeMessage, DisputeStatus
-from app.models.milestone import Milestone
+from app.models.dispute import BLOCKING_STATUSES, Dispute, DisputeEvent, DisputeMessage, DisputeStatus, ProposalStatus
+from app.models.milestone import Milestone, MilestoneStatus
 from app.models.notification import NotificationType
 from app.models.project import Project
 from app.models.user import User, UserRole
@@ -17,9 +17,17 @@ from app.schemas.dispute import (
     DisputeMessageOut,
     DisputeOut,
     DisputeResolve,
+    ProposeResolution,
+    RespondProposal,
 )
-from app.services.disputes import build_dispute_detail_out, build_dispute_out
-from app.services.escrow import EscrowActionError, disburse_milestone, refund_milestone
+from app.services.disputes import (
+    apply_dispute_outcome,
+    build_dispute_detail_out,
+    build_dispute_out,
+    check_and_expire_proposals,
+    DisputeOutcomeError,
+)
+from app.services.platform_settings import get_dispute_direct_resolution_hours
 from app.services.notify import notify
 
 router = APIRouter(prefix="/disputes", tags=["disputes"])
@@ -106,12 +114,113 @@ def my_disputes(current_user: User = Depends(get_current_user), db: Session = De
         .order_by(Dispute.created_at.desc())
         .all()
     )
+    # Opportunistic auto-accept check, same lazy-trigger pattern as
+    # milestone auto-release — no scheduler in this app.
+    check_and_expire_proposals(db, disputes)
     return [build_dispute_out(d, db) for d in disputes]
 
 
 @router.get("/{dispute_id}", response_model=DisputeDetailOut)
 def get_dispute(dispute_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dispute = _get_party_dispute(dispute_id, current_user, db)
+    check_and_expire_proposals(db, [dispute])
+    return build_dispute_detail_out(dispute, db)
+
+
+@router.post("/{dispute_id}/propose-resolution", response_model=DisputeOut)
+def propose_resolution(
+    dispute_id: str,
+    payload: ProposeResolution,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Either party proposes a settlement directly to the other, before this
+    ever needs an admin — mirrors Fiverr's Resolution Center. If the outcome
+    involves money and there's a milestone attached, it only actually moves
+    once the other party accepts (or the window lapses)."""
+    dispute = _get_party_dispute(dispute_id, current_user, db)
+    if dispute.status not in (DisputeStatus.open, DisputeStatus.under_review):
+        raise HTTPException(status_code=400, detail="This dispute can't take a new proposal in its current state")
+    if payload.outcome == "no_action" and dispute.milestone_id:
+        milestone = db.get(Milestone, dispute.milestone_id)
+        if milestone and milestone.status in (MilestoneStatus.funded, MilestoneStatus.approved):
+            raise HTTPException(status_code=400, detail="This milestone has funds in escrow — propose a refund, release, or split instead of \"no action\"")
+    if payload.outcome == "partial_split" and payload.split_professional_amount is None:
+        raise HTTPException(status_code=400, detail="Specify how much of the milestone amount goes to the professional")
+
+    hours = get_dispute_direct_resolution_hours(db)
+    dispute.proposal_status = ProposalStatus.pending
+    dispute.proposed_outcome = payload.outcome
+    dispute.proposed_split_amount = payload.split_professional_amount
+    dispute.proposed_by = current_user.id
+    dispute.proposal_note = payload.note
+    dispute.proposal_expires_at = datetime.utcnow() + timedelta(hours=hours)
+    dispute.updated_at = datetime.utcnow()
+    db.add(DisputeEvent(
+        dispute_id=dispute.id, actor_id=current_user.id, from_status=dispute.status.value, to_status=dispute.status.value,
+        note=f"Proposed resolution: {payload.outcome.value.replace('_', ' ')}" + (f" (₦{payload.split_professional_amount:,.2f} to professional)" if payload.split_professional_amount is not None else ""),
+    ))
+
+    project = dispute.project
+    other_party = project.assigned_professional_id if current_user.id == project.client_id else project.client_id
+    if other_party:
+        role_path = "talent" if other_party == project.assigned_professional_id else "client"
+        notify(
+            db, other_party, NotificationType.general,
+            f"Proposed resolution for the dispute on \"{project.title}\"",
+            body=f"{payload.note or 'A settlement was proposed.'} Respond within {hours:.0f} hours, or it auto-accepts.",
+            link=f"/{role_path}/dashboard/disputes/{dispute.id}", email_also=True,
+        )
+    db.commit()
+    db.refresh(dispute)
+    return build_dispute_out(dispute, db)
+
+
+@router.post("/{dispute_id}/respond-proposal", response_model=DisputeDetailOut)
+def respond_proposal(
+    dispute_id: str,
+    payload: RespondProposal,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    dispute = _get_party_dispute(dispute_id, current_user, db)
+    if dispute.proposal_status != ProposalStatus.pending:
+        raise HTTPException(status_code=400, detail="There's no pending proposal to respond to")
+    if dispute.proposed_by == current_user.id:
+        raise HTTPException(status_code=403, detail="You can't respond to your own proposal")
+
+    project = dispute.project
+    if payload.accept:
+        try:
+            fund_note = apply_dispute_outcome(db, dispute, dispute.proposed_outcome, dispute.proposed_split_amount, current_user.id, source="accepted proposal")
+        except DisputeOutcomeError as e:
+            raise HTTPException(status_code=400, detail=f"Could not complete the fund action: {e}")
+        dispute.proposal_status = ProposalStatus.accepted
+        dispute.status = DisputeStatus.resolved
+        dispute.outcome = dispute.proposed_outcome
+        dispute.resolved_by = current_user.id
+        dispute.resolved_at = datetime.utcnow()
+        note = f"Proposal accepted.{f' ({fund_note})' if fund_note else ''}"
+        notif_body = f"The proposed resolution was accepted.{f' {fund_note}' if fund_note else ''}"
+    else:
+        dispute.proposal_status = ProposalStatus.declined
+        note = f"Proposal declined.{f' {payload.note}' if payload.note else ''}"
+        notif_body = payload.note or "The proposed resolution was declined. It's still open for another proposal, or you can escalate to an admin."
+    dispute.updated_at = datetime.utcnow()
+
+    db.add(DisputeEvent(dispute_id=dispute.id, actor_id=current_user.id, from_status=dispute.status.value, to_status=dispute.status.value, note=note))
+
+    for party_id in (project.client_id, project.assigned_professional_id):
+        if not party_id or party_id == current_user.id:
+            continue
+        role_path = "client" if party_id == project.client_id else "talent"
+        notify(
+            db, party_id, NotificationType.dispute_resolved if payload.accept else NotificationType.general,
+            f"Proposal {'accepted' if payload.accept else 'declined'} on \"{project.title}\"",
+            body=notif_body, link=f"/{role_path}/dashboard/disputes/{dispute.id}", email_also=True,
+        )
+    db.commit()
+    db.refresh(dispute)
     return build_dispute_detail_out(dispute, db)
 
 
@@ -198,10 +307,42 @@ def resolve_dispute(
     if payload.status == DisputeStatus.resolved and not payload.outcome:
         raise HTTPException(status_code=400, detail="An outcome is required to resolve a dispute")
 
+    # A milestone-scoped dispute only has real escrowed money riding on the
+    # outcome once that milestone is actually `funded` (money moved into
+    # escrow, awaiting release). "no_action" would previously leave a funded
+    # milestone sitting there with the dispute no longer blocking it, so the
+    # professional could just claim the full amount afterward through the
+    # ordinary release endpoint, silently ignoring whatever "no action" was
+    # supposed to mean — so it's still blocked in that case. But a dispute
+    # tied to a milestone that was never funded (e.g. a second milestone
+    # proposed for an amount that's already accounted for elsewhere) has no
+    # money at stake at all, so "no action" must be available to close it out.
+    dispute_milestone = db.get(Milestone, dispute.milestone_id) if dispute.milestone_id else None
+    if (
+        payload.status == DisputeStatus.resolved
+        and dispute_milestone
+        and dispute_milestone.status in (MilestoneStatus.funded, MilestoneStatus.approved)
+        and payload.outcome == "no_action"
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="This dispute is tied to a funded milestone, choose refund, release, or a partial split instead of \"no action\".",
+        )
+    if payload.status == DisputeStatus.resolved and payload.outcome == "partial_split":
+        if not dispute.milestone_id:
+            raise HTTPException(status_code=400, detail="Partial split requires a milestone-scoped dispute")
+        if payload.split_professional_amount is None:
+            raise HTTPException(status_code=400, detail="Specify how much of the milestone amount goes to the professional")
+
     prev = dispute.status
     dispute.status = payload.status
     dispute.resolution_note = payload.resolution_note
     dispute.updated_at = datetime.utcnow()
+    if dispute.proposal_status == ProposalStatus.pending:
+        # An admin stepping in overrides any pending direct-resolution
+        # proposal — don't leave it dangling to auto-accept later against a
+        # dispute an admin already closed out differently.
+        dispute.proposal_status = ProposalStatus.expired
 
     fund_note = None
     if payload.status == DisputeStatus.resolved:
@@ -209,20 +350,10 @@ def resolve_dispute(
         dispute.resolved_by = current_user.id
         dispute.resolved_at = datetime.utcnow()
 
-        if dispute.milestone_id and payload.outcome in ("refund_client", "release_professional"):
-            milestone = db.get(Milestone, dispute.milestone_id)
-            project = dispute.project
-            try:
-                if payload.outcome == "refund_client" and milestone.status.value in ("funded", "approved"):
-                    disburse_note = f"Dispute resolution: refund for milestone '{milestone.title}'"
-                    refund_milestone(db, milestone, project, current_user.id, note=disburse_note)
-                    fund_note = "₦ refunded to the client."
-                elif payload.outcome == "release_professional" and milestone.status.value in ("funded", "approved"):
-                    disburse_note = f"Dispute resolution: release for milestone '{milestone.title}'"
-                    disburse_milestone(db, milestone, project, current_user.id, note=disburse_note)
-                    fund_note = "Funds released to the professional."
-            except EscrowActionError as e:
-                raise HTTPException(status_code=400, detail=f"Could not complete the fund action: {e}")
+        try:
+            fund_note = apply_dispute_outcome(db, dispute, payload.outcome, payload.split_professional_amount, current_user.id, source="admin resolution")
+        except DisputeOutcomeError as e:
+            raise HTTPException(status_code=400, detail=f"Could not complete the fund action: {e}")
 
     db.add(DisputeEvent(
         dispute_id=dispute.id, actor_id=current_user.id, from_status=prev.value, to_status=payload.status.value,

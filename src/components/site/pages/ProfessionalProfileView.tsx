@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   BadgeCheck,
   Star,
@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { api, type ProfessionalOut, type ReviewOut, type WorkHistoryItem } from "@/lib/api";
 import { ReviewCard } from "@/components/site/shared/ReviewCard";
+import { CertificationBadges } from "@/components/site/shared/TalentTier";
 
 function fmtDate(d?: string | null) {
   if (!d) return "Present";
@@ -27,7 +28,7 @@ function fmtMemberSince(d: string) {
 }
 
 // ─── Stats bar: real platform-derived numbers, not placeholders ──────────────
-function StatsBar({ pro }: { pro: ProfessionalOut }) {
+export function StatsBar({ pro }: { pro: ProfessionalOut }) {
   const stats = pro.stats;
   if (!stats) return null;
 
@@ -65,7 +66,7 @@ function StatsBar({ pro }: { pro: ProfessionalOut }) {
 }
 
 // ─── Work history: real completed/active YH Connect projects with this pro ───
-function WorkHistoryFeed({ profileId }: { profileId: string }) {
+export function WorkHistoryFeed({ profileId, emptyState }: { profileId: string; emptyState?: ReactNode }) {
   const [items, setItems] = useState<WorkHistoryItem[] | null>(null);
 
   useEffect(() => {
@@ -73,7 +74,7 @@ function WorkHistoryFeed({ profileId }: { profileId: string }) {
   }, [profileId]);
 
   if (items === null) return null;
-  if (items.length === 0) return null;
+  if (items.length === 0) return emptyState ?? null;
 
   return (
     <div className="rounded-xl border bg-background p-6 space-y-3">
@@ -137,6 +138,7 @@ export function ProfessionalProfileView({
               <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
               <span className="text-xs">{pro.rating || "New"} ({pro.review_count} review{pro.review_count === 1 ? "" : "s"})</span>
             </div>
+            <CertificationBadges certifications={pro.certifications} className="mt-2" />
           </div>
           {pro.hourly_rate && <span className="text-lg font-semibold text-primary shrink-0">₦{pro.hourly_rate}/hr</span>}
         </div>

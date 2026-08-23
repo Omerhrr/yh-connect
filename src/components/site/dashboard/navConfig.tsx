@@ -22,14 +22,16 @@ export type DashboardNavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
+  /** Include this item in the mobile bottom tab bar (max ~4 per role). */
+  mobile?: boolean;
 };
 
 export const CLIENT_NAV: DashboardNavItem[] = [
-  { href: "/client/dashboard", label: "Overview", icon: BarChart3 },
-  { href: "/client/dashboard/projects", label: "My Projects", icon: Briefcase },
-  { href: "/client/dashboard/find-talent", label: "Find Professionals", icon: Users },
+  { href: "/client/dashboard", label: "Overview", icon: BarChart3, mobile: true },
+  { href: "/client/dashboard/projects", label: "My Projects", icon: Briefcase, mobile: true },
+  { href: "/client/dashboard/find-talent", label: "Find Professionals", icon: Users, mobile: true },
   { href: "/client/dashboard/saved", label: "Saved", icon: Heart },
-  { href: "/client/dashboard/messages", label: "Messages", icon: MessageSquare },
+  { href: "/client/dashboard/messages", label: "Messages", icon: MessageSquare, mobile: true },
   { href: "/client/dashboard/payments", label: "Payments", icon: Wallet },
   { href: "/client/dashboard/disputes", label: "Disputes", icon: ShieldAlert },
   { href: "/client/dashboard/profile", label: "My Profile", icon: User },
@@ -37,12 +39,13 @@ export const CLIENT_NAV: DashboardNavItem[] = [
 ];
 
 export const TALENT_NAV: DashboardNavItem[] = [
-  { href: "/talent/dashboard", label: "Overview", icon: BarChart3 },
-  { href: "/talent/dashboard/find-work", label: "Find Projects", icon: Search },
+  { href: "/talent/dashboard", label: "Overview", icon: BarChart3, mobile: true },
+  { href: "/talent/dashboard/find-work", label: "Find Projects", icon: Search, mobile: true },
+  { href: "/talent/dashboard/active", label: "Active Jobs", icon: Package, mobile: true },
+  { href: "/talent/dashboard/history", label: "Work History", icon: FolderKanban },
+  { href: "/talent/dashboard/messages", label: "Messages", icon: MessageSquare, mobile: true },
   { href: "/talent/dashboard/saved", label: "Saved", icon: Heart },
   { href: "/talent/dashboard/proposals", label: "My Proposals", icon: FileText },
-  { href: "/talent/dashboard/active", label: "Active Jobs", icon: Package },
-  { href: "/talent/dashboard/messages", label: "Messages", icon: MessageSquare },
   { href: "/talent/dashboard/earnings", label: "Earnings", icon: Wallet },
   { href: "/talent/dashboard/disputes", label: "Disputes", icon: ShieldAlert },
   { href: "/talent/dashboard/profile", label: "My Profile", icon: User },

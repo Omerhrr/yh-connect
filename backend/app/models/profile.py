@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import String, Float, ForeignKey, Text
+from sqlalchemy import String, Float, ForeignKey, Text, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -38,6 +39,14 @@ class ProfessionalProfile(Base):
     license_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     insurance_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     verification_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Tier 3 gate: proof of address (utility bill, bank statement, etc.),
+    # separate from the tier 2 NIN identity check on User.kyc_status and from
+    # the general verification bundle above. Admin-reviewed, not automated.
+    address_verification_status: Mapped[str] = mapped_column(String, default="unverified", server_default="unverified")  # unverified|pending|verified|rejected
+    address_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    address_verification_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Payout details (Phase 7, Monnify disbursement)
     bank_code: Mapped[str | None] = mapped_column(String, nullable=True)

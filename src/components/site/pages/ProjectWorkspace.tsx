@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   X,
   Plus,
@@ -23,9 +23,9 @@ import {
   Users,
   Clock,
   Milestone as MilestoneIcon,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMessageSocket } from "@/hooks/useMessageSocket";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/store/auth";
@@ -36,22 +36,23 @@ import {
   type ProjectOut,
   type BidOut,
   type ChangeOrderOut,
-  type MessageOut,
   type ProfessionalOut,
   type DisputeOut,
   type DisputeCategory,
+  type InviteOut,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
+import { CATEGORIES } from "@/data/content";
 import { MILESTONE_STATUS_COLORS, BID_STATUS_COLORS, PROJECT_STATUS_COLORS } from "@/lib/statusColors";
+import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
+import { ProjectChat } from "@/components/site/chat/ProjectChat";
+import { useProjectUnread } from "@/hooks/useProjectUnread";
+
 import { toast } from "sonner";
 import Link from "next/link";
 
-function fmtNaira(n: number) {
-  return `₦${n.toLocaleString()}`;
-}
-
-// ─── Add milestone (client only) ────────────────────────────────────────────
-function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: () => void }) {
+// ─── Add milestone (client or hired professional proposing one) ─────────────
+function AddMilestoneForm({ projectId, onAdded, proposer }: { projectId: string; onAdded: () => void; proposer: "client" | "professional" }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -63,7 +64,7 @@ function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: 
     setSubmitting(true);
     try {
       await api.createMilestone(projectId, { title, amount: Number(amount), due_date: dueDate || undefined });
-      toast.success("Milestone added");
+      toast.success(proposer === "professional" ? "Milestone proposed. The client will fund it to approve" : "Milestone added");
       setTitle("");
       setAmount("");
       setDueDate("");
@@ -79,7 +80,7 @@ function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: 
   if (!open) {
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5 mr-1" /> Add Milestone
+        <Plus className="h-3.5 w-3.5 mr-1" /> {proposer === "professional" ? "Propose Milestone" : "Add Milestone"}
       </Button>
     );
   }
@@ -91,9 +92,14 @@ function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: 
         <Input type="number" placeholder="Amount (₦)" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
       </div>
+      {proposer === "professional" && (
+        <p className="text-xs text-muted-foreground">
+          The client will review your proposal. Funding it is what approves it and releases payment when done.
+        </p>
+      )}
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={submitting}>{submitting ? "Adding..." : "Add"}</Button>
+        <Button size="sm" onClick={submit} disabled={submitting}>{submitting ? "Adding..." : proposer === "professional" ? "Propose" : "Add"}</Button>
       </div>
     </div>
   );
@@ -157,21 +163,75 @@ function PostUpdateForm({ milestoneId, onPosted }: { milestoneId: string; onPost
   );
 }
 
+// Named, action-oriented milestone states shown instead of raw enum values —
+// tells each party what's true and what happens next in one line, the way
+// Freelancer.com names milestone states explicitly rather than making people
+// infer status from a generic badge.
+function milestoneStatusCopy(m: MilestoneOut, isClient: boolean): { label: string; hint?: string } {
+  const daysAgo = (iso: string) => Math.max(Math.floor((Date.now() - new Date(iso).getTime()) / 86400000), 0);
+  switch (m.status) {
+    case "pending":
+      return { label: "Not started", hint: isClient ? "Fund it to approve the plan and let work begin." : "Waiting on the client to fund this milestone." };
+    case "in_progress":
+      return { label: "In progress" };
+    case "submitted": {
+      const d = m.submitted_at ? daysAgo(m.submitted_at) : 0;
+      return {
+        label: "Submitted, awaiting funding",
+        hint: isClient
+          ? `Delivered ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}. Fund it to review and release payment.`
+          : "The client hasn't funded this milestone yet.",
+      };
+    }
+    case "funded": {
+      const d = m.submitted_at ? daysAgo(m.submitted_at) : null;
+      return {
+        label: "Funded, in escrow",
+        hint: m.submitted_at
+          ? isClient
+            ? `Work submitted ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}, review it soon.`
+            : "Submitted — waiting on the client's review."
+          : isClient ? "Approve the work once it's delivered, then release payment." : "Funded — deliver the work, then submit it for review.",
+      };
+    }
+    case "approved":
+      return { label: "Approved, ready to release", hint: isClient ? `Release ₦${m.net_to_professional.toLocaleString()} to the professional whenever you're ready.` : "Approved — the client can release your payout anytime." };
+    case "paid":
+      return { label: "Paid out", hint: `₦${m.net_to_professional.toLocaleString()} sent to the professional's wallet.` };
+    case "refunded":
+      return { label: "Refunded to client" };
+    case "rejected":
+      return {
+        label: "Rejected",
+        hint: isClient
+          ? m.rejection_note ? `You rejected this: "${m.rejection_note}"` : "You rejected this milestone."
+          : m.rejection_note ? `The client rejected this: "${m.rejection_note}"` : "The client rejected this milestone.",
+      };
+    default:
+      return { label: m.status };
+  }
+}
+
 // ─── Single milestone card ───────────────────────────────────────────────────
 function MilestoneCard({
   milestone,
   isClient,
   isProfessional,
+  assignedProfessionalId,
   disputed,
+  walletBalance,
   onChanged,
 }: {
   milestone: MilestoneOut;
   isClient: boolean;
   isProfessional: boolean;
+  assignedProfessionalId?: string | null;
   disputed: boolean;
+  walletBalance?: number;
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const statusCopy = milestoneStatusCopy(milestone, isClient);
 
   const act = async (fn: () => Promise<unknown>, successMsg: string) => {
     setBusy(true);
@@ -195,6 +255,12 @@ function MilestoneCard({
           </div>
           <div className="min-w-0">
             <p className="font-semibold text-sm">{milestone.title}</p>
+            {milestone.created_by && assignedProfessionalId && milestone.created_by === assignedProfessionalId && (
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Proposed by {milestone.created_by_name || "the professional"}{" "}
+                {isClient && <span className="text-amber-600 font-medium">· fund to approve</span>}
+              </p>
+            )}
             {milestone.description && <p className="text-xs text-muted-foreground mt-0.5">{milestone.description}</p>}
             {milestone.due_date && (
               <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
@@ -206,11 +272,15 @@ function MilestoneCard({
         <div className="text-right shrink-0">
           <div className="flex items-center gap-1.5 justify-end flex-wrap">
             {disputed && <Badge className="text-xs rounded-full bg-red-100 text-red-600">Disputed</Badge>}
-            <Badge className={`text-xs rounded-full ${MILESTONE_STATUS_COLORS[milestone.status]}`}>{milestone.status.replace("_", " ")}</Badge>
+            <Badge className={`text-xs rounded-full ${MILESTONE_STATUS_COLORS[milestone.status]}`}>{statusCopy.label}</Badge>
           </div>
           <p className="text-sm font-semibold mt-1">{fmtNaira(milestone.amount)}</p>
         </div>
       </div>
+
+      {statusCopy.hint && !disputed && (
+        <p className="text-xs text-muted-foreground">{statusCopy.hint}</p>
+      )}
 
       {disputed && (
         <p className="text-xs bg-red-50 text-red-700 rounded-md p-2 flex items-center gap-1.5">
@@ -252,25 +322,66 @@ function MilestoneCard({
             variant="outline"
             disabled={busy}
             onClick={() => {
-              if (!confirm(`Fund "${milestone.title}" for ${fmtNaira(milestone.amount)}? This moves the amount into escrow.`)) return;
+              if (
+                !confirm(
+                  `Fund "${milestone.title}" for ${fmtNaira(milestone.amount)}?\n\nThis moves the full amount into escrow now. When you release it, a ${milestone.platform_fee_percent}% platform fee applies — the professional nets ${fmtNaira(milestone.net_to_professional)}.`
+                )
+              )
+                return;
               act(() => api.fundMilestone(milestone.id), "Milestone funded");
             }}
           >
             <Wallet className="h-3.5 w-3.5 mr-1" /> Fund Milestone
           </Button>
         )}
-        {isClient && (milestone.status === "funded" || milestone.status === "submitted") && (
-          <Button size="sm" variant="outline" disabled={busy} onClick={() => act(() => api.approveMilestone(milestone.id), "Milestone approved")}>
-            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+        {isClient && !disputed && (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "submitted") && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            disabled={busy}
+            onClick={() => {
+              const note = prompt(`Why are you rejecting "${milestone.title}"? The professional will see this note.`);
+              if (note === null) return;
+              if (!note.trim()) return toast.error("A note is required to reject a milestone");
+              act(() => api.rejectMilestone(milestone.id, note.trim()), "Milestone rejected");
+            }}
+          >
+            <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
           </Button>
         )}
-        {isClient && !disputed && (milestone.status === "funded" || milestone.status === "approved") && (
+        {isClient &&
+          walletBalance != null &&
+          (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "submitted") &&
+          walletBalance < milestone.amount && (
+            <p className="w-full text-xs text-amber-700 bg-amber-50 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>Wallet balance {fmtNaira(walletBalance)}, need {fmtNaira(milestone.amount)}.</span>
+              <Link href="/client/dashboard/payments" className="ml-auto underline font-medium shrink-0">Top up</Link>
+            </p>
+          )}
+        {isClient && !disputed && (milestone.status === "funded" || milestone.status === "submitted") && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() => act(() => api.approveMilestone(milestone.id), "Milestone approved")}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve Work
+            </Button>
+            <p className="w-full text-xs text-muted-foreground">
+              Approve the work first, then release the payment from escrow — the professional nets {fmtNaira(milestone.net_to_professional)} after the {milestone.platform_fee_percent}% platform fee.
+            </p>
+          </>
+        )}
+        {isClient && !disputed && milestone.status === "approved" && (
           <Button
             size="sm"
             className="bg-primary"
             disabled={busy}
             onClick={() => {
-              if (!confirm(`Release ${fmtNaira(milestone.amount)} to the professional for "${milestone.title}"? This can't be undone.`)) return;
+              if (!confirm(`Release "${milestone.title}"?\n\n${fmtNaira(milestone.amount)} leaves escrow, a ${milestone.platform_fee_percent}% platform fee is deducted, and the professional receives ${fmtNaira(milestone.net_to_professional)}. This can't be undone.`)) return;
               act(() => api.releaseMilestone(milestone.id), "Payout released");
             }}
           >
@@ -334,12 +445,23 @@ function ProposeChangeOrderForm({ projectId, onAdded }: { projectId: string; onA
 
 function ChangeOrdersSection({
   projectId,
+  currentUserId,
   isClient,
   isProfessional,
+  active,
+  onMilestoneCreated,
 }: {
   projectId: string;
+  currentUserId?: string;
   isClient: boolean;
   isProfessional: boolean;
+  /** Whether the project is still in a state where change orders can be
+   * proposed/acted on (i.e. not completed or cancelled). Once closed, this
+   * section becomes a read-only record of what happened. */
+  active: boolean;
+  /** Called after an approval that created a milestone, so the parent can
+   * refresh its milestone list without the user having to reload the page. */
+  onMilestoneCreated?: () => void;
 }) {
   const [orders, setOrders] = useState<ChangeOrderOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -355,9 +477,10 @@ function ChangeOrdersSection({
   const respond = async (id: string, status: "approved" | "rejected") => {
     setBusyId(id);
     try {
-      await api.updateChangeOrder(id, status);
+      const updated = await api.updateChangeOrder(id, status);
       toast.success(`Change order ${status}`);
       load();
+      if (updated.resulting_milestone_id) onMilestoneCreated?.();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not update change order");
     } finally {
@@ -369,8 +492,11 @@ function ChangeOrdersSection({
     <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold flex items-center gap-2"><FileEdit className="h-4 w-4 text-muted-foreground" /> Change Orders</h2>
-        {isProfessional && <ProposeChangeOrderForm projectId={projectId} onAdded={load} />}
+        {(isClient || isProfessional) && active && <ProposeChangeOrderForm projectId={projectId} onAdded={load} />}
       </div>
+      {!active && (
+        <p className="text-xs text-muted-foreground">This project is closed — change orders are read-only now.</p>
+      )}
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {!loading && orders.length === 0 && (
         <div className="rounded-lg border border-dashed py-8 text-center">
@@ -378,18 +504,32 @@ function ChangeOrdersSection({
           <p className="text-sm text-muted-foreground">No change orders on this project.</p>
         </div>
       )}
-      {orders.map((co) => (
+      {orders.map((co) => {
+        const proposedByMe = co.proposed_by === currentUserId;
+        // Whoever didn't propose it approves it — mirrors the backend rule.
+        const canRespond = !proposedByMe && (isClient || isProfessional);
+        return (
         <div key={co.id} className="rounded-lg border bg-background p-3 flex items-start justify-between gap-3">
           <div>
             <p className="text-sm">{co.description}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">{new Date(co.created_at).toLocaleDateString()}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {new Date(co.created_at).toLocaleDateString()} · {proposedByMe ? "Proposed by you" : "Proposed by the other party"}
+            </p>
           </div>
           <div className="text-right shrink-0">
             <p className={`text-sm font-semibold ${co.amount_delta >= 0 ? "text-emerald-600" : "text-red-600"}`}>
               {co.amount_delta >= 0 ? "+" : ""}{fmtNaira(co.amount_delta)}
             </p>
             <Badge className="text-xs rounded-full mt-1 capitalize">{co.status}</Badge>
-            {isClient && co.status === "proposed" && (
+            {co.status === "approved" && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {co.resulting_milestone_id ? "Milestone created — fund it below to get started." : "No cost, no milestone needed."}
+              </p>
+            )}
+            {co.status === "proposed" && proposedByMe && (
+              <p className="text-xs text-muted-foreground mt-1">Waiting on the other party to respond.</p>
+            )}
+            {canRespond && active && co.status === "proposed" && (
               <div className="flex gap-1.5 mt-2">
                 <Button size="sm" variant="outline" disabled={busyId === co.id} onClick={() => respond(co.id, "rejected")}>Reject</Button>
                 <Button size="sm" disabled={busyId === co.id} onClick={() => respond(co.id, "approved")}>Approve</Button>
@@ -397,148 +537,8 @@ function ChangeOrdersSection({
             )}
           </div>
         </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Messaging (REST polling) ────────────────────────────────────────────────
-function MessageThread({
-  projectId,
-  otherUserId,
-  otherUserName,
-  onClose,
-}: {
-  projectId: string;
-  otherUserId: string;
-  otherUserName: string;
-  onClose: () => void;
-}) {
-  const [messages, setMessages] = useState<MessageOut[]>([]);
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
-  const [attaching, setAttaching] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const load = () => {
-    api.projectMessages(projectId, otherUserId).then(setMessages).catch(() => {});
-  };
-
-  useEffect(() => {
-    load();
-    api.markThreadRead(projectId, otherUserId).catch(() => {});
-    // Long-interval fallback in case the WebSocket connection can't be
-    // established (proxy without WS support, token refresh, etc).
-    const interval = setInterval(load, 30000);
-    return () => clearInterval(interval);
-  }, [projectId, otherUserId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useMessageSocket(projectId, (m) => {
-    setMessages((prev) => (prev.some((existing) => existing.id === m.id) ? prev : [...prev, m]));
-    if (m.recipient_id === otherUserId) return; // our own echo, no need to mark read
-    api.markThreadRead(projectId, otherUserId).catch(() => {});
-  });
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
-
-  const send = async () => {
-    if (!body.trim()) return;
-    setSending(true);
-    const text = body;
-    setBody("");
-    try {
-      await api.sendProjectMessage(projectId, { recipient_id: otherUserId, body: text });
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not send message");
-      setBody(text);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const sendAttachment = async (file: File) => {
-    setAttaching(true);
-    try {
-      const uploaded = await api.uploadFile(file);
-      await api.sendProjectMessage(projectId, { recipient_id: otherUserId, body: "", attachment_url: uploaded.url });
-      load();
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not send attachment");
-    } finally {
-      setAttaching(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const isImage = (url: string) => /\.(png|jpe?g|gif|webp)$/i.test(url);
-
-  return (
-    <div className="rounded-xl border bg-background overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 border-b bg-muted/30">
-        <p className="text-sm font-medium">Chat with {otherUserName}</p>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="max-h-72 overflow-y-auto p-3 space-y-2">
-        {messages.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No messages yet, say hello.</p>}
-        {messages.map((m) => {
-          const mine = m.sender_name !== otherUserName;
-          return (
-            <div key={m.id} className={`max-w-[80%] rounded-lg px-3 py-1.5 text-xs space-y-1 ${mine ? "bg-primary text-primary-foreground ml-auto" : "bg-muted mr-auto"}`}>
-              {m.body && <p>{m.body}</p>}
-              {m.attachment_url && (
-                isImage(m.attachment_url) ? (
-                  <a href={m.attachment_url} target="_blank" rel="noopener noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={m.attachment_url} alt="Attachment" className="rounded-md max-h-40 max-w-full object-cover" />
-                  </a>
-                ) : (
-                  <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline ${mine ? "text-primary-foreground" : "text-primary"}`}>
-                    <FileEdit className="h-3 w-3" /> View attachment
-                  </a>
-                )
-              )}
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
-      <div className="flex items-center gap-2 p-2 border-t">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,application/pdf"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) sendAttachment(file);
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={attaching}
-          className="shrink-0 h-9 w-9 rounded-md border flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-50"
-          title="Attach a file"
-        >
-          <Camera className="h-4 w-4" />
-        </button>
-        <Input
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
-          placeholder="Type a message..."
-          className="h-9"
-        />
-        <Button size="sm" onClick={send} disabled={sending || !body.trim()}>
-          <Send className="h-3.5 w-3.5" />
-        </Button>
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -647,19 +647,33 @@ function BidCard({
   bid,
   onShortlist,
   onAccept,
+  onOffer,
   onMessage,
+  unread = 0,
 }: {
   bid: BidOut;
   onShortlist: () => void;
   onAccept: () => void;
+  onOffer: () => void;
   onMessage: () => void;
+  /** Unread messages in this bidder's thread on the project. */
+  unread?: number;
 }) {
   return (
     <div className="rounded-xl border bg-background p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="font-medium text-sm">{bid.professional_name}</p>
+            {bid.professional_profile_id ? (
+              <Link
+                href={`/client/dashboard/find-talent/${bid.professional_profile_id}`}
+                className="font-medium text-sm hover:text-primary hover:underline"
+              >
+                {bid.professional_name}
+              </Link>
+            ) : (
+              <p className="font-medium text-sm">{bid.professional_name}</p>
+            )}
             {bid.professional_verification_status === "verified" && <BadgeCheck className="h-3.5 w-3.5 text-emerald-600" />}
           </div>
           <div className="flex items-center gap-1 mt-0.5">
@@ -676,15 +690,28 @@ function BidCard({
           <Badge className={`text-xs rounded-full mt-1 capitalize ${BID_STATUS_COLORS[bid.status]}`}>{bid.status}</Badge>
         </div>
       </div>
+
+      {bid.status === "offered" && (
+        <p className="text-xs bg-purple-50 text-purple-700 rounded-md p-2">
+          You offered {fmtNaira(bid.offered_amount || 0)} — waiting on their confirmation.
+        </p>
+      )}
+
       <div className="flex flex-wrap gap-2 pt-1 border-t">
         <Button size="sm" variant="outline" className="mt-2" onClick={onMessage}>
           <MessageSquare className="h-3.5 w-3.5 mr-1" /> Message
+          {unread > 0 && (
+            <span className="ml-1 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
         </Button>
         {(bid.status === "pending" || bid.status === "shortlisted") && (
           <>
             {bid.status === "pending" && (
               <Button size="sm" variant="outline" className="mt-2" onClick={onShortlist}>Shortlist</Button>
             )}
+            <Button size="sm" variant="outline" className="mt-2" onClick={onOffer}>Offer Different Amount</Button>
             <Button size="sm" className="mt-2" onClick={onAccept}>Accept</Button>
           </>
         )}
@@ -866,9 +893,242 @@ function RaiseDisputeDialog({
   );
 }
 
+// ─── Edit project (client, open projects only) ───────────────────────────────
+function EditProjectDialog({
+  project,
+  onClose,
+  onSaved,
+}: {
+  project: ProjectOut;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState(project.title);
+  const [description, setDescription] = useState(project.description);
+  const [location, setLocation] = useState(project.location || "");
+  const [categoryId, setCategoryId] = useState(project.category.id);
+  const [budgetMin, setBudgetMin] = useState(String(project.budget_min));
+  const [budgetMax, setBudgetMax] = useState(String(project.budget_max));
+  const [budgetType, setBudgetType] = useState<"fixed" | "hourly">(project.budget_type);
+  const [skills, setSkills] = useState(project.skills.join(", "));
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
+    const min = Number(budgetMin);
+    const max = Number(budgetMax);
+    if (!title.trim() || !description.trim() || !categoryId) {
+      return toast.error("Title, description and category are required");
+    }
+    if (!min || !max || min <= 0 || max <= 0 || min > max) {
+      return toast.error("Enter a valid budget range (min must be greater than zero and no larger than max)");
+    }
+    setSubmitting(true);
+    try {
+      await api.updateProject(project.id, {
+        title: title.trim(),
+        description: description.trim(),
+        location: location.trim() || undefined,
+        category_id: categoryId,
+        budget_min: min,
+        budget_max: max,
+        budget_type: budgetType,
+        skills: skills.split(",").map((s) => s.trim()).filter(Boolean),
+      });
+      toast.success("Project updated");
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update project");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-lg max-h-[90vh] overflow-y-auto bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold flex items-center gap-1.5"><FileEdit className="h-4.5 w-4.5" /> Edit Project</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="h-5 w-5" /></button>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Project Title *</label>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Description *</label>
+          <textarea
+            rows={4}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Category *</label>
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Location</label>
+            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Budget Min (₦) *</label>
+            <Input type="number" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Budget Max (₦) *</label>
+            <Input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Budget Type</label>
+            <select
+              value={budgetType}
+              onChange={(e) => setBudgetType(e.target.value as "fixed" | "hourly")}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="fixed">Fixed</option>
+              <option value="hourly">Hourly</option>
+            </select>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Skills</label>
+          <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Comma separated, e.g. structural analysis, autocad" />
+        </div>
+        <div className="flex gap-3 pt-1">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button className="flex-1" onClick={submit} disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Final-review sign-off (project status: review) ─────────────────────────
+function FinalReviewSection({
+  project,
+  isClient,
+  isProfessional,
+  onChanged,
+}: {
+  project: ProjectOut;
+  isClient: boolean;
+  isProfessional: boolean;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState(project.closing_note || "");
+  const [saved, setSaved] = useState(true);
+
+  const act = async (fn: () => Promise<unknown>, successMsg: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(successMsg);
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmComplete = () => {
+    if (!window.confirm("Confirm this project as complete? This unlocks reviews for both parties and can't be undone.")) return;
+    act(() => api.confirmProject(project.id), "Project confirmed complete");
+  };
+
+  const reopenProject = () => {
+    if (!window.confirm("Reopen this project for more work? You'll be able to add and fund more milestones.")) return;
+    act(() => api.reopenProject(project.id), "Project reopened");
+  };
+
+  const saveNote = async () => {
+    setBusy(true);
+    try {
+      await api.closingNote(project.id, note.trim());
+      setSaved(true);
+      toast.success("Closing note saved");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save note");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (isClient) {
+    return (
+      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2 text-amber-900">
+          <CheckCircle2 className="h-4 w-4" /> Final review
+        </h2>
+        <p className="text-sm text-amber-900/80">
+          All milestones are closed out. Do a final check, then confirm completion to unlock reviews.
+        </p>
+        {project.closing_note ? (
+          <div className="rounded-lg bg-background border p-3 text-sm">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">Closing note from the professional</p>
+            <p className="whitespace-pre-wrap">{project.closing_note}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">No closing note from the professional yet.</p>
+        )}
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button size="sm" className="bg-primary" disabled={busy} onClick={confirmComplete}>
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Confirm Completion
+          </Button>
+          <Button size="sm" variant="outline" disabled={busy} onClick={reopenProject}>
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Reopen Project
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2 text-amber-900">
+        <Clock className="h-4 w-4" /> Under final review
+      </h2>
+      <p className="text-sm text-amber-900/80">
+        The client has moved this project to final review. Leave a closing note (or flag any remaining issues) before they sign off.
+      </p>
+      <textarea
+        rows={3}
+        value={note}
+        onChange={(e) => {
+          setNote(e.target.value);
+          setSaved(false);
+        }}
+        placeholder="Summary of what was delivered, or any remaining issues the client should know about..."
+        className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+      />
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" disabled={busy || saved} onClick={saveNote}>
+          {busy ? "Saving..." : saved ? "Note saved" : "Save closing note"}
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy || !project.closing_note} onClick={() => { setNote(""); setSaved(false); }}>
+          Clear
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Full project workspace (milestones + bids) ──────────────────────────────
 export function ProjectWorkspace({
-  project,
+  project: initialProject,
   onClose,
   backHref = "/",
 }: {
@@ -877,13 +1137,33 @@ export function ProjectWorkspace({
   backHref?: string;
 }) {
   const { user } = useAuth();
+  // Mirror the fetched project into local state so status-affecting actions
+  // (accept proposal, move to review, confirm, reopen, closing note) can
+  // refresh it in place instead of leaving the UI stuck on a stale status.
+  const [project, setProject] = useState(initialProject);
+  useEffect(() => { setProject(initialProject); }, [initialProject]);
   const [milestones, setMilestones] = useState<MilestoneOut[]>([]);
   const [bids, setBids] = useState<BidOut[]>([]);
+  const [invites, setInvites] = useState<InviteOut[]>([]);
   const [disputes, setDisputes] = useState<DisputeOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [bidsTab, setBidsTab] = useState<"all" | "shortlisted">("all");
+  const [editOpen, setEditOpen] = useState(false);
   const [activeThread, setActiveThread] = useState<{ id: string; name: string } | null>(null);
+  // Live unread counts for this project's threads (from the shared hook that
+  // polls /messages/threads, same source as the Messages app).
+  const { threads, loadUnread } = useProjectUnread();
+  const projectThreads = threads.filter((t) => t.project_id === project.id);
+  // other_user_id -> unread, for per-bidder badges on open projects.
+  const threadUnread: Record<string, number> = {};
+  for (const t of projectThreads) {
+    if (t.unread_count > 0) {
+      threadUnread[t.other_user_id] = (threadUnread[t.other_user_id] || 0) + t.unread_count;
+    }
+  }
+  const projectUnread = Object.values(threadUnread).reduce((a, b) => a + b, 0);
 
   const isClient = user?.id === project.client_id;
   const isProfessional = user?.id === project.assigned_professional_id;
@@ -903,11 +1183,40 @@ export function ProjectWorkspace({
     ];
     if (isClient && project.status === "open") {
       calls.push(api.projectBids(project.id).then(setBids));
+      calls.push(api.projectInvites(project.id).then(setInvites).catch(() => {}));
     }
     Promise.all(calls).catch(() => toast.error("Could not load project data")).finally(() => setLoading(false));
   };
 
+  const refreshProject = () => {
+    api.project(project.id).then(setProject).catch(() => {});
+  };
+
   useEffect(() => { load(); }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const closeProject = async () => {
+    if (!confirm("Close this project? It will stop accepting proposals and be marked as closed.")) return;
+    try {
+      await api.closeProject(project.id);
+      toast.success("Project closed");
+      load();
+      refreshProject();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not close project");
+    }
+  };
+
+  const completeProject = async () => {
+    if (!confirm("Move this project to final review? The professional will be able to leave a closing note before you confirm completion. Make sure all escrow funds have been released or refunded first.")) return;
+    try {
+      await api.completeProject(project.id);
+      toast.success("Project moved to final review");
+      load();
+      refreshProject();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not move project to review");
+    }
+  };
 
   const shortlistBid = async (bidId: string) => {
     try {
@@ -923,21 +1232,40 @@ export function ProjectWorkspace({
     if (!confirm(`Accept this proposal${professionalName ? ` from ${professionalName}` : ""}? This assigns them to the project and closes it to other bids.`)) return;
     try {
       await api.updateBid(bidId, "accepted");
-      toast.success("Proposal accepted, set up milestones to get started");
+      toast.success("Proposal accepted. Define the milestone plan to start");
       load();
+      refreshProject();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not accept proposal");
     }
   };
 
+  const offerBid = async (bidId: string, currentAmount: number, professionalName?: string) => {
+    const input = prompt(`Send ${professionalName || "the professional"} an offer at a different final amount (₦). They'll need to confirm it before the project locks in.`, String(currentAmount));
+    if (input === null) return;
+    const amount = Number(input);
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount");
+    try {
+      await api.updateBid(bidId, "accepted", { offered_amount: amount });
+      toast.success("Offer sent — waiting on their confirmation");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not send offer");
+    }
+  };
+
   const sortedBids = [...bids].sort((a, b) => b.amount === a.amount ? 0 : a.amount - b.amount);
+  const shortlistedBids = sortedBids.filter((b) => b.status === "shortlisted");
+  const visibleBids = bidsTab === "shortlisted" ? shortlistedBids : sortedBids;
 
   const paidTotal = milestones.filter((m) => m.status === "paid").reduce((s, m) => s + m.amount, 0);
   const inEscrowTotal = milestones.filter((m) => ["funded", "submitted", "approved"].includes(m.status)).reduce((s, m) => s + m.amount, 0);
   const upcomingTotal = milestones.filter((m) => ["pending", "in_progress"].includes(m.status)).reduce((s, m) => s + m.amount, 0);
   const projectTotal = paidTotal + inEscrowTotal + upcomingTotal;
-  const paidCount = milestones.filter((m) => m.status === "paid").length;
-  const progressPct = milestones.length > 0 ? Math.round((paidCount / milestones.length) * 100) : 0;
+  // Terminal states (paid or refunded via dispute) count as closed, so a
+  // completed project can actually reach 100%.
+  const closedCount = milestones.filter((m) => m.status === "paid" || m.status === "refunded").length;
+  const progressPct = milestones.length > 0 ? Math.round((closedCount / milestones.length) * 100) : 0;
 
   const openChatWith = () =>
     setActiveThread(
@@ -984,10 +1312,50 @@ export function ProjectWorkspace({
             )}
             <div className="flex items-center gap-2 mt-4 pt-4 border-t">
               <Wallet className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold text-primary">{fmtNaira(project.budget_min)} – {fmtNaira(project.budget_max)}</span>
-              <span className="text-xs text-muted-foreground">project budget range</span>
+              <span className="text-sm font-semibold text-primary">
+                {formatBudgetRange(project.budget_min, project.budget_max, project.budget_type === "hourly")}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                {project.contract_amount != null
+                  ? "originally posted budget"
+                  : project.budget_min === project.budget_max ? "estimated budget" : "project budget range"}
+              </span>
             </div>
+            {/* Once someone is hired, the accepted bid — not the posted range
+                above — is the number milestones should sum toward. Surfacing
+                it explicitly avoids ambiguity about which figure governs. */}
+            {project.contract_amount != null && (
+              <div className="flex items-center gap-2 mt-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <span className="text-sm font-semibold text-emerald-700">{fmtNaira(project.contract_amount)}</span>
+                <span className="text-xs text-muted-foreground">agreed contract amount — milestones should total toward this</span>
+              </div>
+            )}
+            {/* The system's own answer to "is there money still expected
+                later that hasn't become a milestone yet" — a positive number
+                here isn't missing money, it's the part of the contract not
+                yet broken into a fundable milestone. */}
+            {project.remaining_unallocated != null && Math.abs(project.remaining_unallocated) > 0.01 && (
+              <div className={`flex items-center gap-2 mt-2 rounded-md px-2.5 py-1.5 ${project.remaining_unallocated > 0 ? "bg-amber-50" : "bg-red-50"}`}>
+                <AlertTriangle className={`h-4 w-4 shrink-0 ${project.remaining_unallocated > 0 ? "text-amber-600" : "text-red-600"}`} />
+                <span className={`text-xs ${project.remaining_unallocated > 0 ? "text-amber-700" : "text-red-700"}`}>
+                  {project.remaining_unallocated > 0
+                    ? `${fmtNaira(project.remaining_unallocated)} of the contract hasn't been milestoned yet — expect more milestones later for the remaining work.`
+                    : `Milestones total ${fmtNaira(Math.abs(project.remaining_unallocated))} more than the agreed contract amount.`}
+                </span>
+              </div>
+            )}
           </div>
+
+          {/* Final review: professional closing note + client sign-off */}
+          {project.status === "review" && (isClient || isProfessional) && (
+            <FinalReviewSection
+              project={project}
+              isClient={isClient}
+              isProfessional={isProfessional}
+              onChanged={() => { load(); refreshProject(); }}
+            />
+          )}
 
           {/* Open project: compare bids, invite directly */}
           {isClient && project.status === "open" && (
@@ -998,27 +1366,92 @@ export function ProjectWorkspace({
                   <UserPlus className="h-3.5 w-3.5 mr-1" /> Invite a Professional
                 </Button>
               </div>
+              {bids.length > 0 && (
+                <div className="flex items-center gap-1 border-b">
+                  <button
+                    onClick={() => setBidsTab("all")}
+                    className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${bidsTab === "all" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    All ({sortedBids.length})
+                  </button>
+                  <button
+                    onClick={() => setBidsTab("shortlisted")}
+                    className={`px-3 py-1.5 text-xs font-medium border-b-2 -mb-px transition-colors ${bidsTab === "shortlisted" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Shortlisted ({shortlistedBids.length})
+                  </button>
+                </div>
+              )}
               {bids.length === 0 && (
                 <div className="rounded-lg border border-dashed py-8 text-center">
                   <Inbox className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No proposals yet, or invite someone directly.</p>
                 </div>
               )}
-              {sortedBids.map((b) => (
+              {bids.length > 0 && bidsTab === "shortlisted" && shortlistedBids.length === 0 && (
+                <div className="rounded-lg border border-dashed py-8 text-center">
+                  <p className="text-sm text-muted-foreground">No shortlisted proposals yet — shortlist one to keep it handy for reference.</p>
+                </div>
+              )}
+              {visibleBids.map((b) => (
                 <BidCard
                   key={b.id}
                   bid={b}
                   onShortlist={() => shortlistBid(b.id)}
                   onAccept={() => acceptBid(b.id, b.professional_name || undefined)}
+                  onOffer={() => offerBid(b.id, b.amount, b.professional_name || undefined)}
                   onMessage={() => setActiveThread({ id: b.professional_id, name: b.professional_name || "Professional" })}
+                  unread={threadUnread[b.professional_id] || 0}
                 />
               ))}
+              {invites.length > 0 && (
+                <div className="border-t pt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                    Direct Invites ({invites.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {invites.map((inv) => (
+                      <div key={inv.id} className="rounded-lg border bg-muted/20 p-3 flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium">{inv.professional_name}</p>
+                          {inv.message && <p className="text-xs text-muted-foreground mt-0.5 truncate">{inv.message}</p>}
+                          {inv.proposed_amount != null && (
+                            <p className="text-xs font-semibold mt-1">{fmtNaira(inv.proposed_amount)}</p>
+                          )}
+                        </div>
+                        <Badge
+                          className={`text-xs rounded-full capitalize ${
+                            inv.status === "accepted"
+                              ? "bg-green-100 text-green-700"
+                              : inv.status === "declined"
+                              ? "bg-red-100 text-red-600"
+                              : "bg-amber-100 text-amber-700"
+                          }`}
+                        >
+                          {inv.status === "accepted"
+                            ? "Accepted, review their proposal"
+                            : inv.status === "declined"
+                            ? "Declined"
+                            : "Awaiting response"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {activeThread && (
-                <MessageThread
+                <ProjectChat
                   projectId={project.id}
                   otherUserId={activeThread.id}
                   otherUserName={activeThread.name}
-                  onClose={() => setActiveThread(null)}
+                  subtitle={project.title}
+                  messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
+                  onActivity={loadUnread}
+                  onClose={() => {
+                    setActiveThread(null);
+                    loadUnread();
+                  }}
+                  className="h-[26rem]"
                 />
               )}
             </div>
@@ -1032,6 +1465,11 @@ export function ProjectWorkspace({
                 {!activeThread && (
                   <Button size="sm" variant="outline" onClick={openChatWith}>
                     <MessageSquare className="h-3.5 w-3.5 mr-1" /> Open Chat
+                    {projectUnread > 0 && (
+                      <span className="ml-1.5 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                        {projectUnread > 9 ? "9+" : projectUnread}
+                      </span>
+                    )}
                   </Button>
                 )}
               </div>
@@ -1041,11 +1479,18 @@ export function ProjectWorkspace({
                 </div>
               )}
               {activeThread && (
-                <MessageThread
+                <ProjectChat
                   projectId={project.id}
                   otherUserId={activeThread.id}
                   otherUserName={activeThread.name}
-                  onClose={() => setActiveThread(null)}
+                  subtitle={project.title}
+                  messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
+                  onActivity={loadUnread}
+                  onClose={() => {
+                    setActiveThread(null);
+                    loadUnread();
+                  }}
+                  className="h-[26rem]"
                 />
               )}
             </div>
@@ -1056,14 +1501,16 @@ export function ProjectWorkspace({
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted-foreground" /> Milestones</h2>
-                {isClient && <AddMilestoneForm projectId={project.id} onAdded={load} />}
+                {project.status === "in_progress" && (isClient || isProfessional) && (
+                  <AddMilestoneForm projectId={project.id} onAdded={load} proposer={isProfessional ? "professional" : "client"} />
+                )}
               </div>
               {milestones.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                     <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
                   </div>
-                  <p className="text-xs text-muted-foreground">{paidCount} of {milestones.length} milestone{milestones.length === 1 ? "" : "s"} paid · {progressPct}% complete</p>
+                  <p className="text-xs text-muted-foreground">{closedCount} of {milestones.length} milestone{milestones.length === 1 ? "" : "s"} closed · {progressPct}% complete</p>
                 </div>
               )}
               {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
@@ -1071,7 +1518,9 @@ export function ProjectWorkspace({
                 <div className="rounded-lg border border-dashed py-8 text-center">
                   <ListChecks className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
-                    {isClient ? "No milestones yet, add one to define the payment schedule." : "The client hasn't set up milestones yet."}
+                    {isClient
+                      ? "No milestones yet. Add one to define the payment schedule, or approve your professional's proposal by funding it."
+                      : "No milestones yet. Propose one to set up the payment schedule (the client funds it to approve)."}
                   </p>
                 </div>
               )}
@@ -1081,7 +1530,9 @@ export function ProjectWorkspace({
                   milestone={m}
                   isClient={isClient}
                   isProfessional={isProfessional}
+                  assignedProfessionalId={project.assigned_professional_id}
                   disputed={hasProjectWideDispute || disputedMilestoneIds.has(m.id)}
+                  walletBalance={user?.wallet_balance}
                   onChanged={load}
                 />
               ))}
@@ -1090,7 +1541,14 @@ export function ProjectWorkspace({
 
           {/* Change orders */}
           {project.status !== "open" && (isClient || isProfessional) && (
-            <ChangeOrdersSection projectId={project.id} isClient={isClient} isProfessional={isProfessional} />
+            <ChangeOrdersSection
+              projectId={project.id}
+              currentUserId={user?.id}
+              isClient={isClient}
+              isProfessional={isProfessional}
+              active={project.status !== "completed" && project.status !== "cancelled"}
+              onMilestoneCreated={load}
+            />
           )}
 
           {/* Review prompt on completion */}
@@ -1131,6 +1589,31 @@ export function ProjectWorkspace({
           {(isClient || isProfessional) && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-2.5">
               <h2 className="text-sm font-semibold flex items-center gap-2"><Users className="h-4 w-4 text-muted-foreground" /> Quick Actions</h2>
+              {isClient && project.status === "open" && (
+                <>
+                  <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setEditOpen(true)}>
+                    <FileEdit className="h-3.5 w-3.5 mr-2" /> Edit Project
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                    onClick={closeProject}
+                  >
+                    <X className="h-3.5 w-3.5 mr-2" /> Close Project
+                  </Button>
+                </>
+              )}
+              {isClient && project.status === "in_progress" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start text-emerald-700 hover:text-emerald-800 border-emerald-200 hover:bg-emerald-50"
+                  onClick={completeProject}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-2" /> Start Final Review
+                </Button>
+              )}
               {project.status !== "open" && !activeThread && (
                 <Button variant="outline" size="sm" className="w-full justify-start" onClick={openChatWith}>
                   <MessageSquare className="h-3.5 w-3.5 mr-2" /> Message {isClient ? "professional" : "client"}
@@ -1172,6 +1655,10 @@ export function ProjectWorkspace({
           onClose={() => setDisputeDialogOpen(false)}
           onCreated={() => load()}
         />
+      )}
+
+      {editOpen && (
+        <EditProjectDialog project={project} onClose={() => setEditOpen(false)} onSaved={load} />
       )}
     </div>
   );

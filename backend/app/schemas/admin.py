@@ -20,11 +20,30 @@ class AdminUserOut(BaseModel):
     role: UserRole
     is_active: bool
     is_verified: bool
+    is_verified_business: bool = False
+    kyc_status: str = "unverified"
+    email_verified: bool = False
+    wallet_balance: float = 0.0
     company_name: Optional[str] = None
+    professional_tier: Optional[int] = None
     created_at: datetime
+    suspended_until: Optional[datetime] = None
+    suspension_reason: Optional[str] = None
+    business_verification_status: str = "unverified"
 
     class Config:
         from_attributes = True
+
+
+class SuspendUserRequest(BaseModel):
+    # Exactly one of these describes how long the suspension lasts:
+    # - duration_days set -> auto-lifts that many days from now
+    # - until_further_notice=True -> indefinite, admin must manually unsuspend
+    # - forever=True -> account is deleted/anonymized outright, not merely suspended
+    duration_days: Optional[int] = None
+    until_further_notice: bool = False
+    forever: bool = False
+    reason: Optional[str] = None
 
 
 class AdminUserPatch(BaseModel):
@@ -33,6 +52,19 @@ class AdminUserPatch(BaseModel):
     # professional has no ProfessionalProfile, a client's projects/wallet
     # rows stay tied to the old role) and isn't exposed in the admin UI.
     is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+    is_verified_business: Optional[bool] = None
+
+
+class AdminWalletAdjust(BaseModel):
+    amount: float  # positive = credit, negative = debit
+    note: Optional[str] = None
+
+
+class AdminAnnouncement(BaseModel):
+    title: str
+    body: Optional[str] = None
+    link: Optional[str] = None
 
 
 class AdminProjectOut(BaseModel):
@@ -40,10 +72,15 @@ class AdminProjectOut(BaseModel):
     title: str
     status: ProjectStatus
     client_id: str
+    client_name: Optional[str] = None
     assigned_professional_id: Optional[str] = None
+    assigned_professional_name: Optional[str] = None
+    bid_count: int = 0
+    progress: float = 0.0
     budget_min: float
     budget_max: float
     created_at: datetime
+    has_open_dispute: bool = False
 
     class Config:
         from_attributes = True
@@ -67,8 +104,11 @@ class AnalyticsOverview(BaseModel):
     signups_this_week: int
     signups_this_month: int
     total_users: int
+    professional_count: int
+    client_count: int
     active_projects: int
     total_projects: int
+    completed_projects: int
     open_disputes: int
     pending_verifications: int
     gmv: float
@@ -98,6 +138,13 @@ class AdminUserDetailOut(BaseModel):
     company_description: Optional[str] = None
     company_website: Optional[str] = None
     is_verified_business: bool = False
+    business_verification_status: str = "unverified"
+    cac_number: Optional[str] = None
+    cac_document_url: Optional[str] = None
+    business_verification_note: Optional[str] = None
+    suspended_until: Optional[datetime] = None
+    suspension_reason: Optional[str] = None
+    wallet_balance: float = 0.0
     created_at: datetime
     # Present only for role == professional
     professional_profile: Optional[ProfessionalOut] = None
@@ -107,13 +154,6 @@ class AdminUserDetailOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class AdminProjectDetailOut(BaseModel):
-    project: ProjectOut
-    bids: list[BidOut] = []
-    milestones: list[MilestoneOut] = []
-    disputes: list[DisputeOut] = []
 
 
 class AdminWalletTransactionOut(BaseModel):
@@ -137,6 +177,33 @@ class AdminWalletTransactionOut(BaseModel):
         from_attributes = True
 
 
+class AdminProjectParty(BaseModel):
+    id: str
+    name: str
+    email: str
+    phone: Optional[str] = None
+    is_active: bool = True
+
+
+class AdminProjectFinancials(BaseModel):
+    total_funded: float = 0.0
+    total_released: float = 0.0
+    total_refunded: float = 0.0
+    in_escrow: float = 0.0
+    platform_fees: float = 0.0
+
+
+class AdminProjectDetailOut(BaseModel):
+    project: ProjectOut
+    client: Optional[AdminProjectParty] = None
+    professional: Optional[AdminProjectParty] = None
+    bids: list[BidOut] = []
+    milestones: list[MilestoneOut] = []
+    disputes: list[DisputeOut] = []
+    financials: AdminProjectFinancials = AdminProjectFinancials()
+    wallet_transactions: list[AdminWalletTransactionOut] = []
+
+
 class AdminWalletSummary(BaseModel):
     total_funded: float
     total_released: float
@@ -145,5 +212,11 @@ class AdminWalletSummary(BaseModel):
     total_platform_fees: float
     total_topped_up: float = 0.0
     total_withdrawn: float = 0.0
+    total_held_in_disputes: float = 0.0
     pending_transaction_count: int
     failed_transaction_count: int
+    stuck_pending_count: int = 0
+
+
+class AdminWalletTransactionsCount(BaseModel):
+    total: int

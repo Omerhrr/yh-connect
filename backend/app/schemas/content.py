@@ -1,9 +1,23 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 from app.models.content import HighlightType
+
+
+# ─── Site content blocks (header/footer/homepage CMS) ─────────────────────
+class SiteContentBlockOut(BaseModel):
+    key: str
+    data: dict[str, Any]
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SiteContentBlockUpsert(BaseModel):
+    data: dict[str, Any]
 
 
 # ─── Content pages ────────────────────────────────────────────────────────
@@ -96,6 +110,36 @@ class HighlightPatch(BaseModel):
     title: Optional[str] = None
     body: Optional[str] = None
     image_url: Optional[str] = None
+    sort_order: Optional[int] = None
+    active: Optional[bool] = None
+
+
+# ─── FAQ ────────────────────────────────────────────────────────────────
+class FaqItemOut(BaseModel):
+    id: str
+    question: str
+    answer: str
+    category: str
+    sort_order: int
+    active: bool
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class FaqItemCreate(BaseModel):
+    question: str
+    answer: str
+    category: str = "General"
+    sort_order: int = 0
+    active: bool = True
+
+
+class FaqItemPatch(BaseModel):
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
     sort_order: Optional[int] = None
     active: Optional[bool] = None
 

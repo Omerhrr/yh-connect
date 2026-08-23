@@ -32,6 +32,8 @@ services:
         value: 3.11.9
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: ENV
+        value: production
       - key: DATABASE_URL
         fromDatabase:
           name: yh-connect-db
@@ -77,6 +79,11 @@ services:
         sync: false
 
   # --- Frontend: Next.js -----------------------------------------------------
+  # buildCommand runs `next build` (production, optimized, no Turbopack dev
+  # server) and startCommand runs `next start` against that build output -
+  # this is Next's production mode, not `next dev`. NODE_ENV is forced to
+  # production explicitly so a build-time check (or a future script change)
+  # can't accidentally leave the service running in dev mode.
   - type: web
     name: yh-connect-web
     runtime: node
@@ -84,5 +91,9 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 20.18.1
       - key: NEXT_PUBLIC_API_URL
         value: https://yh-connect-api.onrender.com/api/v1

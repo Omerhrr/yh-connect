@@ -106,6 +106,24 @@ def respond_to_invite(
 
     invite.status = payload.status
 
+    # Tell the client how it went so they're not left waiting on an invite
+    # that was already decided.
+    notify(
+        db,
+        invite.client_id,
+        NotificationType.general,
+        f"{invite.professional.first_name} {invite.professional.last_name} "
+        + ("accepted" if payload.status == InviteStatus.accepted else "declined")
+        + f" your invite on \"{invite.project.title}\"",
+        body=(
+            "A proposal has been created for your review."
+            if payload.status == InviteStatus.accepted
+            else "They won't be joining this project."
+        ),
+        link=f"/client/dashboard/projects/{invite.project.id}",
+        email_also=True,
+    )
+
     if payload.status == InviteStatus.accepted:
         project = invite.project
         if project.status != ProjectStatus.open:

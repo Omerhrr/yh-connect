@@ -9,10 +9,10 @@ from app.models.milestone import Milestone, MilestoneStatus
 from app.models.milestone_update import MilestoneUpdate
 from app.models.change_order import ChangeOrder, ChangeOrderStatus
 from app.models.wallet import WalletTransaction, WalletTransactionType, WalletTransactionStatus
-from app.models.message import Message
+from app.models.message import Message, MessageReaction
 from app.models.review import Review
 from app.models.dispute import Dispute, DisputeStatus
-from app.models.content import ContentPage, BlogPost, HomepageHighlight, HighlightType
+from app.models.content import ContentPage, BlogPost, HomepageHighlight, HighlightType, SiteContentBlock, FaqItem
 from app.models.platform_setting import PlatformSetting
 from app.models.auth_token import PasswordResetToken
 from app.models.notification import Notification, NotificationType
@@ -44,6 +44,7 @@ __all__ = [
     "WalletTransactionType",
     "WalletTransactionStatus",
     "Message",
+    "MessageReaction",
     "Review",
     "Dispute",
     "DisputeStatus",
@@ -51,6 +52,8 @@ __all__ = [
     "BlogPost",
     "HomepageHighlight",
     "HighlightType",
+    "SiteContentBlock",
+    "FaqItem",
     "PlatformSetting",
     "PasswordResetToken",
     "Notification",

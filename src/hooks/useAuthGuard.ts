@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
 import type { UserRole } from "@/lib/api";
 
@@ -39,9 +38,25 @@ export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean
 
   useEffect(() => {
     if (!enabled || !hydrated) return;
-    if (!user || user.role !== role) {
-      toast.error(`Please log in as a ${role === "professional" ? "talent" : role} first.`);
+    if (!user) {
       router.replace(loginPath);
+      return;
+    }
+    if (user.role !== role) {
+      // Logged in, just as the other role, not logged out. This can happen
+      // genuinely (someone bookmarked the wrong dashboard) but also
+      // transiently while RoleSwitcher is mid-navigation: it updates the
+      // session before the route finishes changing, so this still-mounted
+      // guard can briefly see a "wrong role" user. Either way, send them to
+      // their own dashboard instead of a login page they don't need (they're
+      // already authenticated), so a switch settles on the right screen
+      // instead of dead-ending on a login form.
+      if (user.role === "admin") {
+        router.replace("/admin");
+        return;
+      }
+      router.replace(user.role === "professional" ? "/talent/dashboard" : "/client/dashboard");
+      return;
     }
   }, [enabled, hydrated, user, role, loginPath, router]);
 

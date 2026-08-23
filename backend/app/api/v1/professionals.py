@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
+from app.models.category import Category
+from app.models.payout_account import PayoutAccount
 from app.models.profile import ProfessionalProfile
 from app.models.user import User, UserRole
 from app.schemas.portfolio import PortfolioItemOut
@@ -12,6 +14,7 @@ from app.schemas.profile import ProfessionalOut, ProfileUpdate
 from app.schemas.profile_extras import EmploymentHistoryOut, EducationOut, CertificationOut, WorkHistoryItem
 from app.services.nlp_search import extract_keywords, match_categories
 from app.services.professional_stats import compute_stats
+from app.services.tiers import get_tier
 from app.services.work_history import get_work_history
 
 router = APIRouter(prefix="/professionals", tags=["professionals"])
@@ -32,7 +35,13 @@ def _portfolio_out(profile: ProfessionalProfile) -> list[PortfolioItemOut]:
     ]
 
 
-def _to_out(profile: ProfessionalProfile, db: Session | None = None, include_stats: bool = False) -> ProfessionalOut:
+def _to_out(
+    profile: ProfessionalProfile,
+    db: Session | None = None,
+    include_stats: bool = False,
+    expose_tier: bool = False,
+    expose_bank_details: bool = False,
+) -> ProfessionalOut:
     return ProfessionalOut(
         id=profile.id,
         user_id=profile.user_id,
@@ -50,11 +59,20 @@ def _to_out(profile: ProfessionalProfile, db: Session | None = None, include_sta
         license_number=profile.license_number,
         is_verified=profile.is_verified,
         verification_status=profile.verification_status,
+        # Tier is personal to the professional: only their own view sees it.
+        tier=get_tier(profile.user, profile) if expose_tier else None,
+        address_verification_status=profile.address_verification_status,
         rating=profile.rating,
         review_count=profile.review_count,
         portfolio_items=_portfolio_out(profile),
-        has_payout_details=bool(profile.bank_account_number and profile.bank_code),
-        bank_code=profile.bank_code,
+        has_payout_details=(
+            db is not None
+            and db.query(PayoutAccount).filter(PayoutAccount.professional_id == profile.user_id).first() is not None
+        ),
+        # bank_code is banking metadata, only the owner's own view should see
+        # it; get_professional (the public single-profile GET) has no auth
+        # requirement at all, so it must never leak here.
+        bank_code=profile.bank_code if expose_bank_details else None,
         employment_history=[EmploymentHistoryOut.model_validate(e) for e in profile.employment_history],
         education=[EducationOut.model_validate(e) for e in profile.education],
         certifications=[CertificationOut.model_validate(c) for c in profile.certifications],
@@ -86,32 +104,48 @@ def list_professionals(
         query = query.filter(ProfessionalProfile.rating >= min_rating)
 
     if q:
-        # Free-text search runs in Python (skills is a comma-joined string
-        # column, not indexable), so filtering/sorting happens in Python too.
-        # Natural-language queries ("my pipes are leaking, I need a
-        # plumber") are understood via a keyword/synonym match against the
-        # category taxonomy first; if nothing matches, we fall back to
-        # plain keyword substring matching on title/name/skills.
-        matched_categories = match_categories(q)
-        all_profiles = query.all()
-        if matched_categories:
-            cat_rank = {c: i for i, c in enumerate(matched_categories)}
-            profiles = [p for p in all_profiles if p.category_id in cat_rank]
-            if not profiles:
-                profiles = all_profiles
-            else:
-                profiles.sort(key=lambda p: (cat_rank.get(p.category_id, 999), -(p.rating or 0)))
+        # A "@handle" or exact-username query is a precise lookup, not a
+        # free-text search — skip the NLP category matching and go straight
+        # to it so someone searching a known username gets that person, not
+        # whatever category the NLP matcher thinks the string sounds like.
+        username_query = q.strip().lstrip("@").lower()
+        username_hit = (
+            query.join(User, ProfessionalProfile.user_id == User.id)
+            .filter(User.username == username_query)
+            .first()
+            if username_query
+            else None
+        )
+        if username_hit:
+            profiles = [username_hit]
+            sort_by = None  # preserve the single exact match, don't re-sort it away
         else:
-            keywords = extract_keywords(q) or [q.lower()]
-            profiles = [
-                p for p in all_profiles
-                if any(
-                    kw in p.title.lower()
-                    or kw in (p.user.first_name + " " + p.user.last_name).lower()
-                    or kw in (p.skills or "").lower()
-                    for kw in keywords
-                )
-            ]
+            # Free-text search runs in Python (skills is a comma-joined string
+            # column, not indexable), so filtering/sorting happens in Python too.
+            # Natural-language queries ("my pipes are leaking, I need a
+            # plumber") are understood via a keyword/synonym match against the
+            # category taxonomy first; if nothing matches, we fall back to
+            # plain keyword substring matching on title/name/skills.
+            matched_categories = match_categories(q)
+            all_profiles = query.all()
+            if matched_categories:
+                cat_rank = {c: i for i, c in enumerate(matched_categories)}
+                profiles = [p for p in all_profiles if p.category_id in cat_rank]
+                if not profiles:
+                    profiles = all_profiles
+                else:
+                    profiles.sort(key=lambda p: (cat_rank.get(p.category_id, 999), -(p.rating or 0)))
+            else:
+                keywords = extract_keywords(q) or [q.lower()]
+                profiles = [
+                    p for p in all_profiles
+                    if any(
+                        kw in p.title.lower()
+                        or kw in (p.user.first_name + " " + p.user.last_name).lower()
+                        or kw in (p.skills or "").lower()
+                        for kw in keywords
+                    )
+                ]
     else:
         profiles = query.all()
 
@@ -135,7 +169,7 @@ def get_my_profile(current_user: User = Depends(require_role(UserRole.profession
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return _to_out(profile, db, include_stats=True)
+    return _to_out(profile, db, include_stats=True, expose_tier=True, expose_bank_details=True)
 
 
 @router.patch("/me", response_model=ProfessionalOut)
@@ -148,6 +182,9 @@ def update_my_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     data = payload.model_dump(exclude_unset=True)
+    if "category_id" in data and data["category_id"] is not None:
+        if not db.get(Category, data["category_id"]):
+            raise HTTPException(status_code=400, detail="Unknown category")
     if "skills" in data and data["skills"] is not None:
         data["skills"] = ",".join(data["skills"])
     if "service_locations" in data and data["service_locations"] is not None:
@@ -158,7 +195,7 @@ def update_my_profile(
         setattr(profile, field, value)
     db.commit()
     db.refresh(profile)
-    return _to_out(profile, db, include_stats=True)
+    return _to_out(profile, db, include_stats=True, expose_tier=True, expose_bank_details=True)
 
 
 @router.get("/{profile_id}", response_model=ProfessionalOut)

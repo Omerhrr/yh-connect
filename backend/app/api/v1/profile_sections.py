@@ -95,7 +95,10 @@ def add_certification(
     db: Session = Depends(get_db),
 ):
     profile = _my_profile(current_user, db)
-    item = Certification(profile_id=profile.id, **payload.model_dump())
+    # Submitting a certification is a request for review, it renders as a
+    # badge on the public profile only once admin-approved (see
+    # app/api/v1/verification.py: review_certification).
+    item = Certification(profile_id=profile.id, verification_status="pending", **payload.model_dump())
     db.add(item)
     db.commit()
     db.refresh(item)

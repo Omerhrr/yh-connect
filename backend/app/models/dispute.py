@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, DateTime, Enum
+from sqlalchemy import String, Text, ForeignKey, DateTime, Enum, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -40,6 +40,14 @@ class DisputeOutcome(str, enum.Enum):
     no_action = "no_action"
 
 
+class ProposalStatus(str, enum.Enum):
+    none = "none"
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+    expired = "expired"
+
+
 class Dispute(Base):
     __tablename__ = "disputes"
 
@@ -56,6 +64,18 @@ class Dispute(Base):
     resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     resolved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # First-tier direct resolution: either party can propose a settlement
+    # before this ever reaches an admin, the way Fiverr's Resolution Center
+    # and Upwork's initial claim step work. If the other side doesn't
+    # respond within the window, it auto-accepts, putting time pressure on
+    # an unresponsive party without anyone having to escalate.
+    proposal_status: Mapped[ProposalStatus] = mapped_column(Enum(ProposalStatus), default=ProposalStatus.none)
+    proposed_outcome: Mapped[DisputeOutcome | None] = mapped_column(Enum(DisputeOutcome), nullable=True)
+    proposed_split_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    proposed_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    proposal_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    proposal_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -15,6 +15,7 @@ export const PROJECT_STATUS_COLORS: Record<string, string> = {
 export const BID_STATUS_COLORS: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
   shortlisted: "bg-blue-100 text-blue-700",
+  offered: "bg-purple-100 text-purple-700",
   accepted: "bg-green-100 text-green-700",
   rejected: "bg-red-100 text-red-600",
   withdrawn: "bg-gray-100 text-gray-600",
@@ -28,6 +29,7 @@ export const MILESTONE_STATUS_COLORS: Record<string, string> = {
   approved: "bg-emerald-100 text-emerald-700",
   paid: "bg-green-100 text-green-700",
   refunded: "bg-orange-100 text-orange-700",
+  rejected: "bg-red-100 text-red-600",
 };
 
 export const DISPUTE_STATUS_COLORS: Record<string, string> = {
@@ -44,6 +46,7 @@ export const WALLET_TX_TYPE_COLORS: Record<string, string> = {
   release: "bg-green-100 text-green-700",
   refund: "bg-amber-100 text-amber-700",
   withdrawal: "bg-slate-200 text-slate-700",
+  adjustment: "bg-slate-800 text-white",
 };
 
 export const WALLET_TX_STATUS_COLORS: Record<string, string> = {

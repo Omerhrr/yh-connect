@@ -28,5 +28,11 @@ class ChangeOrder(Base):
     amount_delta: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[ChangeOrderStatus] = mapped_column(Enum(ChangeOrderStatus), default=ChangeOrderStatus.proposed)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Construction change-order practice is explicit that scope and cost move
+    # together, never as a separate verbal understanding — approving extra
+    # paid work should create the fundable milestone for it right then, not
+    # just flip a status the client and professional have to remember to act
+    # on separately later.
+    resulting_milestone_id: Mapped[str | None] = mapped_column(String, ForeignKey("milestones.id"), nullable=True)
 
     project: Mapped["Project"] = relationship("Project", back_populates="change_orders")

@@ -34,5 +34,15 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(project_id, user_id, ws)
 
+    def is_online(self, user_id: str) -> bool:
+        """True if this user has any open websocket connection right now, on
+        any project thread. Used to decide whether a new message/update needs
+        an email nudge (see app/services/project_log.py) — if they're already
+        watching a thread live, an email would just be noise."""
+        for (_, uid), sockets in self._connections.items():
+            if uid == user_id and sockets:
+                return True
+        return False
+
 
 manager = ConnectionManager()

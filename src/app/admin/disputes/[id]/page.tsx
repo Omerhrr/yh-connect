@@ -12,9 +12,10 @@ import {
   DISPUTE_CATEGORY_LABELS,
   DISPUTE_OUTCOME_LABELS,
 } from "@/lib/api";
-import { DISPUTE_STATUS_COLORS as STATUS_COLORS } from "@/lib/statusColors";
+import { DISPUTE_STATUS_COLORS as STATUS_COLORS, MILESTONE_STATUS_COLORS } from "@/lib/statusColors";
 import { toast } from "sonner";
 import Link from "next/link";
+import { Landmark } from "lucide-react";
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Open",
@@ -34,6 +35,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState("");
   const [outcome, setOutcome] = useState<DisputeOutcome>("release_professional");
+  const [splitAmount, setSplitAmount] = useState("");
   const [busy, setBusy] = useState(false);
 
   const load = () => {
@@ -59,6 +61,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
 
   const updateStatus = async (status: "under_review" | "escalated" | "resolved") => {
     if (!dispute) return;
+    if (status === "resolved" && outcome === "partial_split" && !splitAmount) {
+      return toast.error("Enter how much of the milestone amount goes to the professional");
+    }
     if (status === "resolved" && !confirm(`Resolve this dispute with outcome "${DISPUTE_OUTCOME_LABELS[outcome]}"? This may trigger a real fund transfer.`)) return;
     setBusy(true);
     try {
@@ -66,6 +71,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         status,
         outcome: status === "resolved" ? outcome : undefined,
         resolution_note: note || undefined,
+        split_professional_amount: status === "resolved" && outcome === "partial_split" ? Number(splitAmount) : undefined,
       });
       setDispute(updated);
       setNote("");
@@ -99,7 +105,15 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               </p>
             )}
             <p className="text-xs text-muted-foreground mt-1">
-              Filed by {dispute.raised_by_name} against {dispute.other_party_name} · {new Date(dispute.created_at).toLocaleDateString()}
+              Filed by{" "}
+              <Link href={`/admin/users/${dispute.raised_by}`} className="text-primary hover:underline">{dispute.raised_by_name || "Unknown"}</Link>
+              {" against "}
+              {dispute.other_party_id ? (
+                <Link href={`/admin/users/${dispute.other_party_id}`} className="text-primary hover:underline">{dispute.other_party_name || "Unknown"}</Link>
+              ) : (
+                dispute.other_party_name || "Unknown"
+              )}
+              {" · "}{new Date(dispute.created_at).toLocaleDateString()}
             </p>
           </div>
           <Badge className={`text-xs rounded-full ${STATUS_COLORS[dispute.status]}`}>{STATUS_LABELS[dispute.status]}</Badge>
@@ -127,6 +141,31 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         )}
       </div>
 
+      {dispute.milestone_id && (
+        <div className="rounded-xl border bg-background p-5 space-y-2">
+          <h2 className="font-semibold text-sm flex items-center gap-1.5"><Landmark className="h-4 w-4 text-muted-foreground" /> Escrow Context</h2>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate">{dispute.milestone_title || "Milestone"}</p>
+              <p className="text-xs text-muted-foreground">
+                {dispute.milestone_amount != null && <>Amount: ₦{dispute.milestone_amount.toLocaleString("en-NG")} · </>}
+                Linked milestone on <Link href={`/admin/projects/${dispute.project_id}`} className="text-primary hover:underline">this project</Link>
+              </p>
+            </div>
+            {dispute.milestone_status && (
+              <Badge className={`text-xs rounded-full ${MILESTONE_STATUS_COLORS[dispute.milestone_status]}`}>
+                {dispute.milestone_status.replace("_", " ")}
+              </Badge>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {dispute.milestone_status === "funded" || dispute.milestone_status === "paid"
+              ? "Funds are (or were) held in escrow for this milestone, so a release/refund outcome can be executed."
+              : "This milestone is not currently holding escrow funds — releasing or refunding will have no money to move until it is funded."}
+          </p>
+        </div>
+      )}
+
       {!isClosed && (
         <div className="rounded-xl border bg-background p-5 space-y-3">
           <h2 className="font-semibold text-sm">Take Action</h2>
@@ -143,10 +182,29 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               onChange={(e) => setOutcome(e.target.value as DisputeOutcome)}
               className="flex h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
-              {OUTCOMES.map((o) => (
-                <option key={o} value={o}>{DISPUTE_OUTCOME_LABELS[o]}</option>
-              ))}
+              {OUTCOMES.map((o) => {
+                // "No action" is unavailable only when the linked milestone
+                // actually has funds sitting in escrow (funded/approved) —
+                // if it was never funded (or already paid/refunded/rejected)
+                // there's nothing to move, so "no action" should be usable.
+                const milestoneHasFundsAtStake = !!dispute.milestone_id && (dispute.milestone_status === "funded" || dispute.milestone_status === "approved");
+                const disabled = (o === "no_action" && milestoneHasFundsAtStake) || (o === "partial_split" && !dispute.milestone_id);
+                return (
+                  <option key={o} value={o} disabled={disabled}>{DISPUTE_OUTCOME_LABELS[o]}{disabled ? " (unavailable)" : ""}</option>
+                );
+              })}
             </select>
+            {outcome === "partial_split" && (
+              <Input
+                type="number"
+                min="0"
+                max={dispute.milestone_amount ?? undefined}
+                value={splitAmount}
+                onChange={(e) => setSplitAmount(e.target.value)}
+                placeholder="₦ to professional"
+                className="h-9 w-40"
+              />
+            )}
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => updateStatus("resolved")}>
               Resolve
             </Button>

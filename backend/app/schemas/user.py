@@ -46,6 +46,7 @@ class UserOut(UserBase):
     company_description: Optional[str] = None
     company_website: Optional[str] = None
     is_verified_business: bool = False
+    business_verification_status: str = "unverified"
     preferred_categories: Optional[list[str]] = None
     is_verified: bool
     email_verified: bool = False
@@ -57,6 +58,8 @@ class UserOut(UserBase):
     # which mode (client/talent) is currently active. Drives whether the
     # role switcher can flip straight to talent mode or needs quick setup.
     has_professional_profile: bool = False
+    name_changed_at: Optional[datetime] = None
+    username: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -118,6 +121,27 @@ class UserSelfUpdate(BaseModel):
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
     email_notifications_enabled: Optional[bool] = None
+    username: Optional[str] = None
+
+
+class UsernameAvailabilityOut(BaseModel):
+    username: str
+    available: bool
+    reason: Optional[str] = None
+
+
+class UsernameSuggestionsOut(BaseModel):
+    suggestions: list[str]
+
+
+class UserSearchResult(BaseModel):
+    id: str
+    username: str
+    first_name: str
+    last_name: str
+    role: UserRole
+    avatar_url: Optional[str] = None
+    professional_profile_id: Optional[str] = None
 
 
 class ClientProfileUpdate(BaseModel):
@@ -125,6 +149,7 @@ class ClientProfileUpdate(BaseModel):
     last_name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    username: Optional[str] = None
     company_name: Optional[str] = None
     industry: Optional[str] = None
     company_logo_url: Optional[str] = None
@@ -136,6 +161,10 @@ class ClientProfileUpdate(BaseModel):
 class KycSubmit(BaseModel):
     nin: str = Field(min_length=11, max_length=11)
     dob: str  # ISO date (YYYY-MM-DD), as submitted by a <input type="date">
+    # Optional scan of the physical ID (NIN slip, national ID, voters card or
+    # passport). When the automated NIN check can't confirm identity, this
+    # document routes the submission to admin review for tier 2 approval.
+    document_url: Optional[str] = None
 
 
 class KycOut(BaseModel):
@@ -155,6 +184,10 @@ class ClientPublicOut(BaseModel):
     industry: Optional[str] = None
     is_verified_business: bool = False
     kyc_verified: bool = False
+    # True once this client has ever successfully funded a milestone —
+    # proof they're a real payer, not just a KYC-verified identity, which
+    # is what professionals actually care about before taking on their work.
+    payment_verified: bool = False
     completed_project_count: int = 0
     open_project_count: int = 0
     hire_rate: Optional[int] = None

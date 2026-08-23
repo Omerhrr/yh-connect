@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   Menu,
   X,
-  ChevronDown,
   Zap,
   LogIn,
   UserPlus,
@@ -13,38 +13,35 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/site/ThemeToggle";
+import { RoleSwitcher } from "@/components/site/dashboard/RoleSwitcher";
+import { SmartLink } from "@/components/site/SmartLink";
+import { useSiteContent } from "@/lib/siteContent";
 import { useNav } from "@/store/nav";
 import { useAuth } from "@/store/auth";
 
 export function Header() {
-  const { navigate, view } = useNav();
+  const { navigate } = useNav();
   const { user } = useAuth();
+  const pathname = usePathname();
   const clientAuthed = user?.role === "client";
   const talentAuthed = user?.role === "professional";
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [clientOpen, setClientOpen] = useState(false);
-  const [talentOpen, setTalentOpen] = useState(false);
-
-  const closeAll = () => {
-    setClientOpen(false);
-    setTalentOpen(false);
-    setMobileOpen(false);
-  };
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { nav_links: navLinks } = useSiteContent("header");
 
   const go = (v: Parameters<typeof navigate>[0]) => {
     navigate(v);
-    closeAll();
+    setMenuOpen(false);
   };
 
-  const isActive = (v: string) => view === v;
+  const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href + "/"));
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container mx-auto flex h-16 items-center justify-between px-4">
+      <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
         {/* Logo */}
         <button
           onClick={() => go("home")}
-          className="flex items-center gap-2 font-bold text-xl"
+          className="flex items-center gap-2 font-bold text-xl shrink-0"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Zap className="h-4 w-4" />
@@ -54,136 +51,120 @@ export function Header() {
           </span>
         </button>
 
-        {/* Desktop Nav */}
-        <nav className="hidden md:flex items-center gap-6">
-          <button
-            onClick={() => go("how-it-works")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${isActive("how-it-works") ? "text-primary" : "text-muted-foreground"}`}
-          >
-            How It Works
-          </button>
-          <button
-            onClick={() => go("find-talent")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${isActive("find-talent") ? "text-primary" : "text-muted-foreground"}`}
-          >
-            Find Professionals
-          </button>
-          <button
-            onClick={() => go("find-work")}
-            className={`text-sm font-medium transition-colors hover:text-primary ${isActive("find-work") ? "text-primary" : "text-muted-foreground"}`}
-          >
-            Find Projects
-          </button>
+        {/* Nav links: always visible in the header on lg and up; the menu
+            carries them below lg. Only the account actions live in the menu. */}
+        <nav className="hidden lg:flex items-center gap-4 xl:gap-5">
+          {navLinks.map((link) => (
+            <SmartLink
+              key={link.label + link.href}
+              href={link.href}
+              className={`text-sm font-medium whitespace-nowrap transition-colors hover:text-primary ${isActive(link.href) ? "text-primary" : "text-muted-foreground"}`}
+            >
+              {link.label}
+            </SmartLink>
+          ))}
         </nav>
 
-        {/* Desktop Auth */}
-        <div className="hidden md:flex items-center gap-2">
-          <ThemeToggle />
+        {/* Right side: theme toggle + menu (the menu holds the client and
+            talent sign-in/sign-up actions at every screen size) */}
+        <div className="flex items-center gap-1 shrink-0">
           {clientAuthed ? (
-            <Button variant="ghost" size="sm" onClick={() => go("client-dashboard")}>
+            <Button variant="ghost" size="sm" className="hidden lg:inline-flex whitespace-nowrap" onClick={() => go("client-dashboard")}>
               <Briefcase className="h-4 w-4 mr-1" /> My Dashboard
             </Button>
-          ) : (
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hover:bg-primary/10 hover:text-primary"
-                onClick={() => { setClientOpen((o) => !o); setTalentOpen(false); }}
-              >
-                <Briefcase className="h-4 w-4 mr-1" />
-                I'm Hiring
-                <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${clientOpen ? "rotate-180" : ""}`} />
-              </Button>
-              {clientOpen && (
-                <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border bg-popover shadow-lg py-1 z-50">
-                  <button
-                    onClick={() => go("client-login")}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 hover:text-primary"
-                  >
-                    <LogIn className="h-3.5 w-3.5" /> Log In
-                  </button>
-                  <button
-                    onClick={() => go("client-register")}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 hover:text-primary"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" /> Sign Up
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
+          ) : null}
           {talentAuthed ? (
-            <Button size="sm" onClick={() => go("talent-dashboard")}>
+            <Button size="sm" className="hidden lg:inline-flex whitespace-nowrap" onClick={() => go("talent-dashboard")}>
               <User className="h-4 w-4 mr-1" /> My Profile
             </Button>
-          ) : (
-            <div className="relative">
-              <Button
-                size="sm"
-                onClick={() => { setTalentOpen((o) => !o); setClientOpen(false); }}
-              >
-                <User className="h-4 w-4 mr-1" />
-                I'm a Professional
-                <ChevronDown className={`ml-1 h-3 w-3 transition-transform ${talentOpen ? "rotate-180" : ""}`} />
-              </Button>
-              {talentOpen && (
-                <div className="absolute right-0 top-full mt-1 w-44 rounded-lg border bg-popover shadow-lg py-1 z-50">
-                  <button
-                    onClick={() => go("talent-login")}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 hover:text-primary"
-                  >
-                    <LogIn className="h-3.5 w-3.5" /> Log In
-                  </button>
-                  <button
-                    onClick={() => go("talent-register")}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-primary/10 hover:text-primary"
-                  >
-                    <UserPlus className="h-3.5 w-3.5" /> Sign Up
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Mobile toggles */}
-        <div className="flex items-center gap-1 md:hidden">
+          ) : null}
           <ThemeToggle />
           <button
             className="p-2"
-            onClick={() => setMobileOpen((o) => !o)}
+            onClick={() => setMenuOpen((o) => !o)}
             aria-label="Toggle menu"
           >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
       </div>
 
-      {/* Mobile menu */}
-      {mobileOpen && (
-        <div className="md:hidden border-t bg-background px-4 py-4 space-y-3">
-          <button onClick={() => go("how-it-works")} className="block w-full text-left py-2 text-sm font-medium">How It Works</button>
-          <button onClick={() => go("find-talent")} className="block w-full text-left py-2 text-sm font-medium">Find Professionals</button>
-          <button onClick={() => go("find-work")} className="block w-full text-left py-2 text-sm font-medium">Find Projects</button>
-          <hr className="border-border" />
-          {clientAuthed ? (
-            <button onClick={() => go("client-dashboard")} className="block w-full text-left py-2 text-sm font-medium text-primary">Client Dashboard</button>
-          ) : (
-            <>
-              <button onClick={() => go("client-login")} className="block w-full text-left py-2 text-sm">Client Login</button>
-              <button onClick={() => go("client-register")} className="block w-full text-left py-2 text-sm">Client Sign Up</button>
-            </>
-          )}
-          {talentAuthed ? (
-            <button onClick={() => go("talent-dashboard")} className="block w-full text-left py-2 text-sm font-medium text-primary">Talent Dashboard</button>
-          ) : (
-            <>
-              <button onClick={() => go("talent-login")} className="block w-full text-left py-2 text-sm">Talent Login</button>
-              <button onClick={() => go("talent-register")} className="block w-full text-left py-2 text-sm">Talent Sign Up</button>
-            </>
-          )}
+      {/* Menu: nav links on mobile, plus the client and talent account
+          actions at every size */}
+      {menuOpen && (
+        <div className="relative">
+          <div className="lg:absolute lg:right-4 lg:top-2 lg:w-80 lg:rounded-xl lg:border lg:bg-background lg:shadow-lg border-t bg-background px-4 py-4 space-y-1">
+            {/* Nav links: mobile only (desktop shows them in the header) */}
+            <div className="lg:hidden space-y-1 pb-2">
+              {navLinks.map((link) => (
+                <SmartLink
+                  key={link.label + link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  className="block w-full text-left py-2 text-sm font-medium"
+                >
+                  {link.label}
+                </SmartLink>
+              ))}
+            </div>
+            <hr className="border-border lg:hidden" />
+
+            {/* Client actions: dashboard when in client mode, a one-click
+                switch when in talent mode, sign-in when logged out */}
+            <div className="py-2 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <Briefcase className="h-3.5 w-3.5" /> I'm Hiring
+              </p>
+              {clientAuthed ? (
+                <button onClick={() => go("client-dashboard")} className="block w-full text-left py-2 text-sm font-medium text-primary">Client Dashboard</button>
+              ) : talentAuthed ? (
+                <RoleSwitcher onSwitched={() => setMenuOpen(false)} />
+              ) : (
+                <>
+                  <button
+                    onClick={() => go("client-login")}
+                    className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-primary/10 hover:text-primary"
+                  >
+                    <LogIn className="h-4 w-4" /> Log In
+                  </button>
+                  <button
+                    onClick={() => go("client-register")}
+                    className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-primary/10 hover:text-primary"
+                  >
+                    <UserPlus className="h-4 w-4" /> Sign Up
+                  </button>
+                </>
+              )}
+            </div>
+
+            {/* Talent actions: dashboard when in talent mode, a one-click
+                switch when in client mode, sign-in when logged out */}
+            <div className="py-2 space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5" /> I'm a Professional
+              </p>
+              {talentAuthed ? (
+                <button onClick={() => go("talent-dashboard")} className="block w-full text-left py-2 text-sm font-medium text-primary">Talent Dashboard</button>
+              ) : clientAuthed ? (
+                <RoleSwitcher onSwitched={() => setMenuOpen(false)} />
+              ) : (
+                <>
+                  <button
+                    onClick={() => go("talent-login")}
+                    className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-primary/10 hover:text-primary"
+                  >
+                    <LogIn className="h-4 w-4" /> Log In
+                  </button>
+                  <button
+                    onClick={() => go("talent-register")}
+                    className="flex w-full items-center gap-2 px-3 py-2 rounded-lg text-sm hover:bg-primary/10 hover:text-primary"
+                  >
+                    <UserPlus className="h-4 w-4" /> Sign Up
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </header>
