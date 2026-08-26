@@ -342,6 +342,31 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.description}</p>
           </div>
 
+          {(project.image_urls?.length > 0 || project.video_url) && (
+            <div>
+              <h2 className="text-sm font-semibold mb-2">Photos &amp; Video</h2>
+              {project.image_urls?.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {project.image_urls.map((url) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block h-24 w-24 rounded-lg overflow-hidden border">
+                      <img src={url} alt="Project" className="h-full w-full object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
+              {project.video_url && (
+                /\.(mp4|mov|webm)$/i.test(project.video_url) ? (
+                  <video src={project.video_url} controls className="w-full max-w-md rounded-lg border" />
+                ) : (
+                  <a href={project.video_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                    View project video ↗
+                  </a>
+                )
+              )}
+            </div>
+          )}
+
           {project.skills.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold mb-1">Skills and Expertise</h2>

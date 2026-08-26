@@ -295,6 +295,8 @@ export type ProjectOut = {
   budget_max: number;
   budget_type: "fixed" | "hourly";
   skills: string[];
+  image_urls: string[];
+  video_url?: string | null;
   status: "open" | "in_progress" | "review" | "completed" | "cancelled";
   progress: number;
   assigned_professional_id?: string | null;
@@ -710,6 +712,14 @@ export type ReceiptSettingsOut = {
 };
 export type ReceiptSettingsIn = Partial<ReceiptSettingsOut>;
 
+export type ProjectMediaSettingsOut = {
+  images_enabled: boolean;
+  image_max_mb: number;
+  video_enabled: boolean;
+  video_max_mb: number;
+};
+export type ProjectMediaSettingsIn = Partial<ProjectMediaSettingsOut>;
+
 export type AnalyticsOverview = {
   signups_this_week: number;
   signups_this_month: number;
@@ -913,6 +923,9 @@ export const api = {
   receiptSettings: () => request<ReceiptSettingsOut>("/admin/receipt-settings"),
   updateReceiptSettings: (payload: ReceiptSettingsIn) =>
     request<ReceiptSettingsOut>("/admin/receipt-settings", { method: "PUT", body: JSON.stringify(payload) }),
+  adminProjectMediaSettings: () => request<ProjectMediaSettingsOut>("/admin/project-media-settings"),
+  updateAdminProjectMediaSettings: (payload: ProjectMediaSettingsIn) =>
+    request<ProjectMediaSettingsOut>("/admin/project-media-settings", { method: "PUT", body: JSON.stringify(payload) }),
   previewReceipt: async (): Promise<void> => {
     const token = getToken();
     const res = await fetch(`${API_BASE}/admin/receipt-settings/preview`, {
@@ -1120,7 +1133,10 @@ export const api = {
     budget_max: number;
     budget_type: "fixed" | "hourly";
     skills: string[];
+    image_urls?: string[];
+    video_url?: string | null;
   }) => request<ProjectOut>("/projects", { method: "POST", body: JSON.stringify(payload) }),
+  projectMediaSettings: () => request<ProjectMediaSettingsOut>("/projects/media-settings"),
   closeProject: (id: string) => request<ProjectOut>(`/projects/${id}/close`, { method: "POST" }),
   completeProject: (id: string) => request<ProjectOut>(`/projects/${id}/complete`, { method: "POST" }),
   confirmProject: (id: string) => request<ProjectOut>(`/projects/${id}/confirm`, { method: "POST" }),
@@ -1136,6 +1152,8 @@ export const api = {
     budget_max?: number;
     budget_type?: "fixed" | "hourly";
     skills?: string[];
+    image_urls?: string[];
+    video_url?: string | null;
   }) => request<ProjectOut>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   // Bids
@@ -1328,11 +1346,12 @@ export const api = {
     request<KycOut>("/clients/me/kyc", { method: "POST", body: JSON.stringify(payload) }),
 
   // File upload, returns a public URL for the uploaded file
-  uploadFile: async (file: File): Promise<{ url: string }> => {
+  uploadFile: async (file: File, purpose?: "project_image" | "project_video"): Promise<{ url: string }> => {
     const token = getToken();
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_BASE}/uploads`, {
+    const qs = purpose ? `?purpose=${purpose}` : "";
+    const res = await fetch(`${API_BASE}/uploads${qs}`, {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       body: form,

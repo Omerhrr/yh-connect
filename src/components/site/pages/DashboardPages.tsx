@@ -88,6 +88,7 @@ import {
   type LanguageEntry,
   type ClientPublicOut,
   type PayoutAccountOut,
+  type ProjectMediaSettingsOut,
   DISPUTE_CATEGORY_LABELS,
   DISPUTE_OUTCOME_LABELS,
 } from "@/lib/api";
@@ -855,6 +856,14 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   // Step 4: review + project posting terms.
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
+  // Optional media, gated by admin settings (images on by default, video off).
+  const [mediaSettings, setMediaSettings] = useState<ProjectMediaSettingsOut | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  // Budget "I don't know yet" — posts budget 0/0, talent sees "Budget Not Set".
+  const [budgetUnknown, setBudgetUnknown] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -899,9 +908,15 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     setCustomSkill("");
     setSubmitting(false);
     setCreatedId(null);
+    setImageUrls([]);
+    setVideoUrl("");
+    setBudgetUnknown(false);
     api.contentPage("client-project-terms")
       .then((p) => setProjectTerms({ title: p.title, body: p.body }))
       .catch(() => setProjectTerms(null));
+    api.projectMediaSettings()
+      .then(setMediaSettings)
+      .catch(() => setMediaSettings(null));
   }, [open]);
 
   // Persist the draft as the client types AND broadcast to other tabs via
@@ -994,7 +1009,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   const goNext = () => {
     if (step === 0 && !needText.trim()) return toast.error("Please tell us what you need help with");
     if (step === 1 && !title.trim()) return toast.error("Please enter a project title");
-    if (step === 2) {
+    if (step === 2 && !budgetUnknown) {
       if (budgetType === "fixed" && (!budgetAmount || Number(budgetAmount) <= 0)) {
         return toast.error("Please enter your estimated budget");
       }
@@ -1038,9 +1053,9 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!termsAgreed) return toast.error("Please accept the project posting terms to post");
-    const budgetMin = budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMin);
-    const budgetMax = budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMax);
-    if (!budgetMin || !budgetMax) return toast.error("Please set your budget");
+    const budgetMin = budgetUnknown ? 0 : budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMin);
+    const budgetMax = budgetUnknown ? 0 : budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMax);
+    if (!budgetUnknown && (!budgetMin || !budgetMax)) return toast.error("Please set your budget");
     setSubmitting(true);
     try {
       const project = await api.createProject({
@@ -1052,6 +1067,8 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
         budget_max: budgetMax,
         budget_type: budgetType,
         skills,
+        image_urls: imageUrls,
+        video_url: videoUrl.trim() || undefined,
       });
       setCreatedId(project.id);
       localStorage.removeItem(POST_DRAFT_KEY);
@@ -1095,11 +1112,43 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   }
 
   const animationClass = direction === "forward" ? "animate-step-in" : "animate-step-in-back";
-  const budgetSummary = formatBudgetRange(
-    budgetType === "fixed" ? Number(budgetAmount) || 0 : Number(hourlyMin) || 0,
-    budgetType === "fixed" ? Number(budgetAmount) || 0 : Number(hourlyMax) || 0,
-    budgetType === "hourly"
-  );
+  const budgetSummary = budgetUnknown
+    ? "Budget Not Set"
+    : formatBudgetRange(
+        budgetType === "fixed" ? Number(budgetAmount) || 0 : Number(hourlyMin) || 0,
+        budgetType === "fixed" ? Number(budgetAmount) || 0 : Number(hourlyMax) || 0,
+        budgetType === "hourly"
+      );
+
+  const handleImageFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const remaining = 8 - imageUrls.length;
+    if (remaining <= 0) return toast.error("You can attach up to 8 images");
+    const picked = Array.from(files).slice(0, remaining);
+    setUploadingImages(true);
+    try {
+      const uploaded = await Promise.all(picked.map((f) => api.uploadFile(f, "project_image")));
+      setImageUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not upload image");
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const handleVideoFile = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const uploaded = await api.uploadFile(file, "project_video");
+      setVideoUrl(uploaded.url);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not upload video");
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
@@ -1189,6 +1238,16 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
             {/* Step 2: Budget */}
             {step === 2 && (
               <div className="space-y-4">
+                <label className="flex items-start gap-2 cursor-pointer rounded-lg border p-3">
+                  <Checkbox checked={budgetUnknown} onCheckedChange={(v) => setBudgetUnknown(!!v)} className="mt-0.5" />
+                  <span className="text-sm">
+                    <span className="font-medium">I don't know the budget yet</span>
+                    <span className="block text-xs text-muted-foreground mt-0.5">
+                      We'll show professionals "Budget Not Set" so they can send you their own quote.
+                    </span>
+                  </span>
+                </label>
+                {!budgetUnknown && (
                 <div className="flex gap-2">
                   {([["fixed", "Fixed price"], ["hourly", "Hourly rate"]] as const).map(([val, label]) => (
                     <button
@@ -1203,7 +1262,8 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                     </button>
                   ))}
                 </div>
-                {budgetType === "fixed" ? (
+                )}
+                {!budgetUnknown && (budgetType === "fixed" ? (
                   <div className="space-y-1.5">
                     <label className="text-sm font-medium" htmlFor="pp-budget">Estimated total (₦) *</label>
                     <div className="relative">
@@ -1225,7 +1285,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                       <Input id="pp-hourly-max" type="number" min="1" value={hourlyMax} onChange={(e) => setHourlyMax(e.target.value)} placeholder="5000" />
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             )}
 
@@ -1271,6 +1331,82 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                     ))}
                   </div>
                 )}
+
+                {(mediaSettings?.images_enabled || mediaSettings?.video_enabled) && (
+                  <div className="pt-2 border-t space-y-4">
+                    <p className="text-xs font-medium text-muted-foreground">Photos or a video (optional) — helps professionals size up the job at a glance.</p>
+
+                    {mediaSettings?.images_enabled && (
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium">Photos</label>
+                        <div className="flex flex-wrap gap-2">
+                          {imageUrls.map((url) => (
+                            <div key={url} className="relative h-16 w-16 rounded-md overflow-hidden border">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt="" className="h-full w-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => setImageUrls((prev) => prev.filter((u) => u !== url))}
+                                className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center"
+                                aria-label="Remove image"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                          {imageUrls.length < 8 && (
+                            <label className="h-16 w-16 rounded-md border border-dashed flex items-center justify-center text-xs text-muted-foreground cursor-pointer hover:border-primary">
+                              {uploadingImages ? "…" : "+ Add"}
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                multiple
+                                className="hidden"
+                                disabled={uploadingImages}
+                                onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Up to 8 images{mediaSettings?.image_max_mb ? `, max ${mediaSettings.image_max_mb}MB each` : ""}.
+                        </p>
+                      </div>
+                    )}
+
+                    {mediaSettings?.video_enabled && (
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-medium" htmlFor="pp-video-link">Video (upload or link)</label>
+                        <Input
+                          id="pp-video-link"
+                          value={videoUrl}
+                          onChange={(e) => setVideoUrl(e.target.value)}
+                          placeholder="Paste a video link, or upload a file below"
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs rounded-md border px-2.5 py-1.5 cursor-pointer hover:border-primary text-muted-foreground">
+                            {uploadingVideo ? "Uploading…" : "Upload a video file"}
+                            <input
+                              type="file"
+                              accept="video/mp4,video/quicktime,video/webm"
+                              className="hidden"
+                              disabled={uploadingVideo}
+                              onChange={(e) => { handleVideoFile(e.target.files); e.target.value = ""; }}
+                            />
+                          </label>
+                          {videoUrl && (
+                            <button type="button" onClick={() => setVideoUrl("")} className="text-xs text-muted-foreground hover:text-foreground">
+                              Clear
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {mediaSettings?.video_max_mb ? `Max ${mediaSettings.video_max_mb}MB for uploads. ` : ""}A link (YouTube, etc.) works too.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -1283,6 +1419,14 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Location</span><span className="font-medium text-right">{location || "-"}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Budget</span><span className="font-medium text-right">{budgetSummary}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Skills</span><span className="font-medium text-right">{skills.length ? skills.join(", ") : "-"}</span></div>
+                  {(imageUrls.length > 0 || videoUrl) && (
+                    <div className="flex justify-between gap-3 p-3">
+                      <span className="text-muted-foreground shrink-0">Media</span>
+                      <span className="font-medium text-right">
+                        {[imageUrls.length > 0 ? `${imageUrls.length} photo${imageUrls.length === 1 ? "" : "s"}` : null, videoUrl ? "1 video" : null].filter(Boolean).join(", ")}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-input bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
                   {projectTerms?.body?.trim() || DEFAULT_PROJECT_TERMS}

@@ -40,7 +40,13 @@ from app.schemas.admin import (
 from app.schemas.dispute import DisputeDetailOut, DisputeOut
 from app.services.disputes import build_dispute_detail_out, build_dispute_out
 from app.schemas.receipt import ReceiptSettingsIn, ReceiptSettingsOut
-from app.services.platform_settings import get_receipt_settings, save_receipt_settings
+from app.schemas.project_media import ProjectMediaSettingsIn, ProjectMediaSettingsOut
+from app.services.platform_settings import (
+    get_receipt_settings,
+    save_receipt_settings,
+    get_project_media_settings,
+    save_project_media_settings,
+)
 from app.schemas.user import Token, UserOut
 from app.api.v1.bids import _to_out as _bid_to_out
 from app.api.v1.professionals import _to_out as _profile_to_out
@@ -626,6 +632,24 @@ def update_receipt_settings_endpoint(
 ):
     updated = save_receipt_settings(db, payload.model_dump(exclude_unset=True))
     return ReceiptSettingsOut(**updated)
+
+
+@router.get("/project-media-settings", response_model=ProjectMediaSettingsOut)
+def get_project_media_settings_endpoint(
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    return ProjectMediaSettingsOut(**get_project_media_settings(db))
+
+
+@router.put("/project-media-settings", response_model=ProjectMediaSettingsOut)
+def update_project_media_settings_endpoint(
+    payload: ProjectMediaSettingsIn,
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    updated = save_project_media_settings(db, payload.model_dump(exclude_unset=True))
+    return ProjectMediaSettingsOut(**updated)
 
 
 @router.get("/receipt-settings/preview")

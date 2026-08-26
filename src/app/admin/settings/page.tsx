@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, FileText, Image as ImageIcon, Loader2, Percent, RotateCcw, Save, ShieldAlert, Sparkles, Tags, Type, Users } from "lucide-react";
+import { AlertTriangle, Check, FileText, Image as ImageIcon, Loader2, Percent, RotateCcw, Save, ShieldAlert, Sparkles, Tags, Type, Users, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import {
   ApiError,
   type CategoryOut,
   type PlatformSettingOut,
+  type ProjectMediaSettingsOut,
   type ReceiptFont,
   type ReceiptSettingsOut,
   type ReceiptTemplate,
@@ -82,6 +83,131 @@ function NumberField({
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{suffix}</span>}
       </div>
       <p className="text-xs text-muted-foreground">{help}</p>
+    </div>
+  );
+}
+
+function ToggleField({ label, help, checked, onChange }: { label: string; help: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-0.5">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{help}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted"}`}
+      >
+        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
+      </button>
+    </div>
+  );
+}
+
+function ProjectMediaSection() {
+  const [settings, setSettings] = useState<ProjectMediaSettingsOut | null>(null);
+  const [draft, setDraft] = useState<ProjectMediaSettingsOut | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.adminProjectMediaSettings()
+      .then((s) => { setSettings(s); setDraft(s); })
+      .catch(() => toast.error("Could not load project media settings"))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  if (loading || !draft) {
+    return (
+      <div className="space-y-4">
+        {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
+      </div>
+    );
+  }
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+  const setField = <K extends keyof ProjectMediaSettingsOut>(key: K, value: ProjectMediaSettingsOut[K]) =>
+    setDraft((d) => (d ? { ...d, [key]: value } : d));
+
+  const save = async () => {
+    if (draft.image_max_mb <= 0 || draft.video_max_mb <= 0) {
+      toast.error("Size limits must be greater than 0");
+      return;
+    }
+    setSaving(true);
+    try {
+      const updated = await api.updateAdminProjectMediaSettings(draft);
+      setSettings(updated);
+      setDraft(updated);
+      toast.success("Project media settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save project media settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discard = () => setDraft(settings);
+
+  return (
+    <div className="space-y-5 pb-24">
+      <SectionCard icon={ImageIcon} title="Project Images" description="Let clients attach photos when posting a project so professionals get more context at a glance.">
+        <ToggleField
+          label="Allow image uploads"
+          help="Enabled by default. When on, clients see an optional photo uploader in the post-a-project flow."
+          checked={draft.images_enabled}
+          onChange={(v) => setField("images_enabled", v)}
+        />
+        <NumberField
+          label="Max Image Size"
+          help="Applies per image. Clients can attach up to 8 images per project."
+          value={String(draft.image_max_mb)}
+          onChange={(v) => setField("image_max_mb", Number(v) || 0)}
+          min={1}
+          suffix="MB"
+          dirty={draft.image_max_mb !== settings?.image_max_mb}
+        />
+      </SectionCard>
+
+      <SectionCard icon={Video} title="Project Video" description="Let clients attach a video (upload or link) when posting a project. Off by default.">
+        <ToggleField
+          label="Allow video"
+          help="Disabled by default. When on, clients see a video upload/link field, and it also appears on their posted project for professionals to view."
+          checked={draft.video_enabled}
+          onChange={(v) => setField("video_enabled", v)}
+        />
+        <NumberField
+          label="Max Video Size"
+          help="Applies to uploaded video files (links aren't size-limited)."
+          value={String(draft.video_max_mb)}
+          onChange={(v) => setField("video_max_mb", Number(v) || 0)}
+          min={1}
+          suffix="MB"
+          dirty={draft.video_max_mb !== settings?.video_max_mb}
+        />
+      </SectionCard>
+
+      {dirty && (
+        <div className="sticky bottom-4 z-20 border bg-background shadow-lg rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">Unsaved changes</p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={discard} disabled={saving}>
+                <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Discard
+              </Button>
+              <Button size="sm" onClick={save} disabled={saving}>
+                <Save className="h-3.5 w-3.5 mr-1.5" /> {saving ? "Saving..." : "Save Changes"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -304,7 +430,7 @@ function ReceiptBrandingSection() {
 }
 
 export default function AdminSettingsPage() {
-  const [tab, setTab] = useState<"platform" | "receipts">("platform");
+  const [tab, setTab] = useState<"platform" | "receipts" | "project-media">("platform");
   const [settings, setSettings] = useState<PlatformSettingOut[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<CategoryOut[]>([]);
@@ -402,9 +528,16 @@ export default function AdminSettingsPage() {
         >
           Receipt Branding
         </button>
+        <button
+          onClick={() => setTab("project-media")}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === "project-media" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          Project Media
+        </button>
       </div>
 
       {tab === "receipts" && <ReceiptBrandingSection />}
+      {tab === "project-media" && <ProjectMediaSection />}
 
       {tab === "platform" && (
       <>

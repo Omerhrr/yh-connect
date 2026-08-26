@@ -4,6 +4,7 @@ backend/venv/
 backend/__pycache__/
 **/__pycache__/
 *.pyc
+docs
 
 # Env files (real secrets — never commit these)
 .env

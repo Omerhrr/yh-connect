@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Float, Text, ForeignKey, DateTime, Enum, Integer
+from sqlalchemy import String, Float, Text, ForeignKey, DateTime, Enum, Integer, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -46,6 +46,14 @@ class Project(Base):
     # professional can leave a closing note for the client before they
     # confirm completion.
     closing_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Optional at-a-glance visuals a client can attach when posting, so a
+    # professional gets more context before bidding. Off by default only for
+    # video (admin-gated, see PlatformSetting "project_media_settings");
+    # images are on by default. video_url covers both an uploaded file's URL
+    # and a plain external link (YouTube etc.) — either way it's just a URL.
+    image_urls: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    video_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

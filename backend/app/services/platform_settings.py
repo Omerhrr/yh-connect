@@ -98,3 +98,38 @@ def save_receipt_settings(db: Session, updates: dict) -> dict:
         db.add(PlatformSetting(key=RECEIPT_SETTINGS_KEY, value=value, value_type="json"))
     db.commit()
     return current
+
+
+PROJECT_MEDIA_SETTINGS_KEY = "project_media_settings"
+
+
+def get_project_media_settings(db: Session) -> dict:
+    """Admin control over the optional image/video attachments a client can
+    add when posting a project — same single-JSON-blob shape as receipt
+    settings, since the fields are always read/edited together."""
+    from app.schemas.project_media import ProjectMediaSettingsOut
+
+    row = db.get(PlatformSetting, PROJECT_MEDIA_SETTINGS_KEY)
+    defaults = ProjectMediaSettingsOut().model_dump()
+    if not row or not row.value:
+        return defaults
+    try:
+        data = json.loads(row.value)
+    except ValueError:
+        return defaults
+    defaults.update({k: v for k, v in data.items() if v is not None})
+    return defaults
+
+
+def save_project_media_settings(db: Session, updates: dict) -> dict:
+    current = get_project_media_settings(db)
+    current.update({k: v for k, v in updates.items() if v is not None})
+    row = db.get(PlatformSetting, PROJECT_MEDIA_SETTINGS_KEY)
+    value = json.dumps(current)
+    if row:
+        row.value = value
+        row.value_type = "json"
+    else:
+        db.add(PlatformSetting(key=PROJECT_MEDIA_SETTINGS_KEY, value=value, value_type="json"))
+    db.commit()
+    return current

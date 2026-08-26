@@ -17,11 +17,39 @@ from app.models.wallet import WalletTransaction, WalletTransactionStatus, Wallet
 from app.models.project_report import ProjectReport
 from app.models.notification import NotificationType
 from app.schemas.project import ClosingNoteIn, ProjectCreate, ProjectOut, ProjectUpdate, ProjectReportCreate, ProjectReportOut
+from app.schemas.project_media import ProjectMediaSettingsOut
 from app.services.disputes import has_any_blocking_dispute, has_blocking_dispute
 from app.services.nlp_search import extract_keywords, match_categories
 from app.services.notify import notify
+from app.services.platform_settings import get_project_media_settings
 
 router = APIRouter(prefix="/projects", tags=["projects"])
+
+
+@router.get("/media-settings", response_model=ProjectMediaSettingsOut)
+def project_media_settings(db: Session = Depends(get_db)):
+    """Public (no auth) so the 'post a project' form knows whether to show
+    image/video upload fields and what size caps to enforce client-side,
+    before the client is necessarily logged in as... well, they always are
+    to post, but this stays cheap to call from anywhere without a token."""
+    return ProjectMediaSettingsOut(**get_project_media_settings(db))
+
+
+MAX_PROJECT_IMAGES = 8
+
+
+def _gate_media(db: Session, image_urls: list[str] | None, video_url: str | None) -> tuple[list[str], str | None]:
+    """Silently drops media the admin has disabled/exceeds limits, rather
+    than erroring — a client's post shouldn't fail outright just because
+    e.g. video got turned off between when they opened the form and when
+    they submitted."""
+    media = get_project_media_settings(db)
+    images = list(image_urls or [])
+    if not media["images_enabled"]:
+        images = []
+    images = images[:MAX_PROJECT_IMAGES]
+    video = video_url if media["video_enabled"] else None
+    return images, video
 
 
 def _to_out(project: Project, db: Session) -> ProjectOut:
@@ -102,6 +130,8 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         budget_max=project.budget_max,
         budget_type=project.budget_type,
         skills=project.skills_list,
+        image_urls=project.image_urls or [],
+        video_url=project.video_url,
         status=project.status,
         progress=project.computed_progress,
         assigned_professional_id=project.assigned_professional_id,
@@ -205,6 +235,11 @@ def create_project(
 ):
     if not db.get(Category, payload.category_id):
         raise HTTPException(status_code=400, detail="Unknown category")
+    if payload.budget_min < 0 or payload.budget_max < 0:
+        raise HTTPException(status_code=400, detail="Budget can't be negative")
+    if payload.budget_min > 0 and payload.budget_max > 0 and payload.budget_min > payload.budget_max:
+        raise HTTPException(status_code=400, detail="Minimum budget can't exceed the maximum")
+    image_urls, video_url = _gate_media(db, payload.image_urls, payload.video_url)
     project = Project(
         client_id=current_user.id,
         category_id=payload.category_id,
@@ -215,6 +250,8 @@ def create_project(
         budget_max=payload.budget_max,
         budget_type=payload.budget_type,
         skills=",".join(payload.skills) if payload.skills else None,
+        image_urls=image_urls or None,
+        video_url=video_url,
     )
     db.add(project)
     db.commit()
@@ -242,10 +279,13 @@ def _notify_matching_professionals(db: Session, project: Project) -> None:
         if with_overlap:
             matching = with_overlap
 
-    budget_note = (
-        f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}" if project.budget_type == BudgetType.fixed
-        else f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}/hr"
-    )
+    if project.budget_min == 0 and project.budget_max == 0:
+        budget_note = "Budget Not Set — send your quote"
+    else:
+        budget_note = (
+            f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}" if project.budget_type == BudgetType.fixed
+            else f"₦{project.budget_min:,.0f}–₦{project.budget_max:,.0f}/hr"
+        )
     for p in matching:
         notify(
             db, p.user_id, NotificationType.general,
@@ -326,6 +366,16 @@ def update_project(
             raise HTTPException(status_code=400, detail="Unknown category")
     if "skills" in data and data["skills"] is not None:
         data["skills"] = ",".join(data["skills"])
+    if "image_urls" in data or "video_url" in data:
+        gated_images, gated_video = _gate_media(
+            db,
+            data.get("image_urls", project.image_urls),
+            data.get("video_url", project.video_url),
+        )
+        if "image_urls" in data:
+            data["image_urls"] = gated_images or None
+        if "video_url" in data:
+            data["video_url"] = gated_video
     for field, value in data.items():
         setattr(project, field, value)
     db.commit()

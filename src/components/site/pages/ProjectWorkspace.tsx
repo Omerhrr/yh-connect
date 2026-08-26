@@ -1305,6 +1305,29 @@ export function ProjectWorkspace({
           {/* Overview card */}
           <div className="rounded-xl border bg-background p-4 md:p-5">
             <p className="text-sm text-muted-foreground leading-relaxed">{project.description}</p>
+            {(project.image_urls?.length > 0 || project.video_url) && (
+              <div className="mt-3">
+                {project.image_urls?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {project.image_urls.map((url) => (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block h-20 w-20 rounded-lg overflow-hidden border">
+                        <img src={url} alt="Project" className="h-full w-full object-cover" />
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {project.video_url && (
+                  /\.(mp4|mov|webm)$/i.test(project.video_url) ? (
+                    <video src={project.video_url} controls className="w-full max-w-md rounded-lg border" />
+                  ) : (
+                    <a href={project.video_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                      View project video ↗
+                    </a>
+                  )
+                )}
+              </div>
+            )}
             {project.skills.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {project.skills.map((s) => <Badge key={s} variant="secondary" className="text-xs rounded-full">{s}</Badge>)}
