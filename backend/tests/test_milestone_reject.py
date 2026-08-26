@@ -15,13 +15,23 @@ def _hire(client, client_user, professional_user, amount=200000):
     return project
 
 
+def test_professional_cannot_create_milestones(client, client_user, professional_user):
+    project = _hire(client, client_user, professional_user)
+    resp = client.post(
+        f"/api/v1/projects/{project['id']}/milestones",
+        json={"title": "Extra scope", "description": "", "amount": 80000},
+        headers=auth_headers(professional_user["access_token"]),
+    )
+    assert resp.status_code == 403, resp.text
+
+
 def test_client_can_reject_unfunded_milestone_with_note(client, client_user, professional_user):
     project = _hire(client, client_user, professional_user)
 
     resp = client.post(
         f"/api/v1/projects/{project['id']}/milestones",
         json={"title": "Extra scope", "description": "", "amount": 80000},
-        headers=auth_headers(professional_user["access_token"]),
+        headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 201, resp.text
     milestone = resp.json()
@@ -46,7 +56,10 @@ def test_client_can_reject_unfunded_milestone_with_note(client, client_user, pro
     assert body["rejected_at"] is not None
 
 
-def test_cannot_reject_a_funded_milestone(client, client_user, professional_user):
+def test_rejecting_a_funded_milestone_refunds_the_client(client, client_user, professional_user):
+    """Fund-before-work means most rejections now happen on an already-funded
+    milestone — that must refund the escrowed amount back to the client
+    rather than being blocked outright."""
     project = _hire(client, client_user, professional_user)
 
     resp = client.post(
@@ -62,9 +75,26 @@ def test_cannot_reject_a_funded_milestone(client, client_user, professional_user
     resp = client.post(f"/api/v1/milestones/{milestone['id']}/fund", json={}, headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
 
+    balance_after_funding = client.get("/api/v1/auth/me", headers=auth_headers(client_user["access_token"])).json()["wallet_balance"]
+
     resp = client.post(
         f"/api/v1/milestones/{milestone['id']}/reject",
         json={"note": "changed my mind"},
+        headers=auth_headers(client_user["access_token"]),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["status"] == "refunded"
+    assert body["rejection_note"] == "changed my mind"
+    assert body["rejected_at"] is not None
+
+    balance_after_refund = client.get("/api/v1/auth/me", headers=auth_headers(client_user["access_token"])).json()["wallet_balance"]
+    assert balance_after_refund == balance_after_funding + 50000
+
+    # Already refunded/closed, can't be rejected again.
+    resp = client.post(
+        f"/api/v1/milestones/{milestone['id']}/reject",
+        json={"note": "again"},
         headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 400, resp.text
@@ -76,7 +106,7 @@ def test_only_client_can_reject(client, client_user, professional_user):
     resp = client.post(
         f"/api/v1/projects/{project['id']}/milestones",
         json={"title": "Extra scope", "description": "", "amount": 80000},
-        headers=auth_headers(professional_user["access_token"]),
+        headers=auth_headers(client_user["access_token"]),
     )
     milestone = resp.json()
 

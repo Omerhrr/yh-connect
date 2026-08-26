@@ -5,7 +5,7 @@ import { FindWorkPage } from "@/components/site/pages/HomePage";
 
 export const metadata: Metadata = {
   title: "Find Construction Projects | YH Connect",
-  description: "Browse open construction projects in Nigeria and submit proposals as a verified professional on YH Connect.",
+  description: "Browse open construction projects in Nigeria and submit bids as a verified professional on YH Connect.",
 };
 
 export default function Page() {

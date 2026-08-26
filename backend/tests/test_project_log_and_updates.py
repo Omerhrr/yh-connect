@@ -26,7 +26,7 @@ def test_milestone_creation_logs_a_system_message(client, client_user, professio
     resp = client.post(
         f"/api/v1/projects/{project['id']}/milestones",
         json={"title": "Foundation work", "description": "", "amount": 50000},
-        headers=auth_headers(professional_user["access_token"]),
+        headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 201, resp.text
 
@@ -49,9 +49,6 @@ def test_milestone_lifecycle_logs_system_messages(client, client_user, professio
     assert resp.status_code == 200, resp.text
 
     resp = client.post(f"/api/v1/milestones/{milestone['id']}/approve", headers=auth_headers(client_user["access_token"]))
-    assert resp.status_code == 200, resp.text
-
-    resp = client.post(f"/api/v1/milestones/{milestone['id']}/release", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
 
     messages = _thread(client, auth_headers(client_user["access_token"]), project["id"], professional_user["user"]["id"])

@@ -1092,7 +1092,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
           <CheckCircle2 className="h-12 w-12 text-emerald-500 mx-auto mb-3" />
           <h2 className="text-xl font-bold">Project posted!</h2>
           <p className="text-sm text-muted-foreground mt-1 mb-6">
-            Your project is live. Professionals can now send proposals, and you'll get a notification the moment one lands.
+            Your project is live. Professionals can now send bids, and you'll get a notification the moment one lands.
           </p>
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={onClose}>Done</Button>
@@ -1485,11 +1485,11 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
   const activeCount = projects.filter((p) => p.status === "in_progress" || p.status === "review").length;
   const reviewCount = projects.filter((p) => p.status === "review").length;
   const openProjects = projects.filter((p) => p.status === "open");
-  const proposalsWaiting = openProjects.reduce((sum, p) => sum + p.bid_count, 0);
+  const bidsWaiting = openProjects.reduce((sum, p) => sum + p.bid_count, 0);
   // Nothing is actually committed until funds hit escrow; this is the
   // combined budget range the client has advertised across their projects.
   const totalBudget = projects.reduce((sum, p) => sum + p.budget_max, 0);
-  const totalProposals = projects.reduce((sum, p) => sum + p.bid_count, 0);
+  const totalBids = projects.reduce((sum, p) => sum + p.bid_count, 0);
 
   // ─── Account readiness / "hire with confidence" checklist ───────────────────
   const checklist = [
@@ -1512,9 +1512,9 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
         : (user?.wallet_balance || 0) <= 0
           ? { text: "Fund your wallet so you can pay for work through escrow", label: "Fund Wallet", href: "/client/dashboard/payments" }
           : projects.length === 0
-            ? { text: "Post your first project and start receiving proposals", label: "Post Project", href: null }
-            : proposalsWaiting > 0
-              ? { text: `You have ${proposalsWaiting} proposal${proposalsWaiting === 1 ? "" : "s"} waiting for review`, label: "Review Proposals", href: "/client/dashboard/projects" }
+            ? { text: "Post your first project and start receiving bids", label: "Post Project", href: null }
+            : bidsWaiting > 0
+              ? { text: `You have ${bidsWaiting} bid${bidsWaiting === 1 ? "" : "s"} waiting for review`, label: "Review Bids", href: "/client/dashboard/projects" }
               : { text: "Your projects are all set. Post another or browse professionals.", label: "Post Project", href: null };
 
   return (
@@ -1549,10 +1549,10 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
         </div>
       </div>
 
-      {/* Meaningful numbers: work in motion, incoming proposals, and money */}
+      {/* Meaningful numbers: work in motion, incoming bids, and money */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Active Projects" value={String(activeCount)} icon={Briefcase} color="emerald" />
-        <StatCard label="Proposals Received" value={String(totalProposals)} icon={FileText} color="blue" />
+        <StatCard label="Bids Received" value={String(totalBids)} icon={FileText} color="blue" />
         <StatCard label="In Review" value={String(reviewCount)} icon={Clock} color="amber" />
         <StatCard label="Total Budget" value={fmtNaira(totalBudget)} icon={DollarSign} />
       </div>
@@ -1588,8 +1588,8 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
               <p className="text-sm text-muted-foreground">Open Projects</p>
               <p className="text-xl font-bold">{openProjects.length}</p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {proposalsWaiting > 0
-                  ? `${proposalsWaiting} proposal${proposalsWaiting === 1 ? "" : "s"} waiting for review`
+                {bidsWaiting > 0
+                  ? `${bidsWaiting} bid${bidsWaiting === 1 ? "" : "s"} waiting for review`
                   : "Browse professionals or post a new project"}
               </p>
             </div>
@@ -1616,7 +1616,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
                 <EmptyState
                   icon={Briefcase}
                   title="No projects yet"
-                  message="Post your first project to start getting proposals from professionals."
+                  message="Post your first project to start getting bids from professionals."
                   action={<Button size="sm" onClick={onPostProject}><Plus className="h-3.5 w-3.5 mr-1" /> Post Project</Button>}
                 />
               </div>
@@ -1636,7 +1636,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
                     <UnreadBadge count={unreadByProject[proj.id] || 0} />
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {proj.category.label} · {proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}
+                    {proj.category.label} · {proj.bid_count} bid{proj.bid_count === 1 ? "" : "s"}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
@@ -1823,7 +1823,7 @@ export function ClientProjects({ onPostProject, refreshKey }: { onPostProject: (
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm flex items-center gap-1.5">{proj.title}<UnreadBadge count={unreadByProject[proj.id] || 0} /></p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {proj.category.label} · {proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}
+                {proj.category.label} · {proj.bid_count} bid{proj.bid_count === 1 ? "" : "s"}
               </p>
               {proj.progress > 0 && (
                 <div className="mt-2 flex items-center gap-2">
@@ -2951,7 +2951,7 @@ function ClientPreferencesTab() {
         <div className="h-px bg-border" />
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">Proposal updates</p>
+            <p className="text-sm font-medium">Bid updates</p>
             <p className="text-xs text-muted-foreground">Get notified when a professional responds to your project.</p>
           </div>
           <div className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5">Always on</div>
@@ -3175,7 +3175,7 @@ export function ClientProfile() {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">{proj.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {proj.category.label} · {proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}
+                    {proj.category.label} · {proj.bid_count} bid{proj.bid_count === 1 ? "" : "s"}
                   </p>
                   {proj.progress > 0 && (
                     <div className="mt-2 flex items-center gap-2">
@@ -3249,7 +3249,7 @@ export function TalentOverview() {
 
   // One clear next action, driven by the highest-leverage gap.
   const heroAction = needsVerification
-    ? { text: "Verify your identity and address to unlock more proposals", label: "Verify Now", href: "/talent/dashboard/settings?tab=verification" }
+    ? { text: "Verify your identity and address to unlock more bids", label: "Verify Now", href: "/talent/dashboard/settings?tab=verification" }
     : profile && !profile.has_payout_details
       ? { text: "Add your bank details so payouts can reach you", label: "Add Bank Details", href: "/talent/dashboard/settings?tab=payout" }
       : profile && !profileContentDone
@@ -3261,9 +3261,9 @@ export function TalentOverview() {
   const tier = profile?.tier || 1;
   const tierHint =
     tier === 1
-      ? "1 proposal/day · 1 active job, verify your NIN to unlock more"
+      ? "1 bid/day · 1 active job, verify your NIN to unlock more"
       : tier === 2
-        ? "10 proposals/day · 5 active jobs, add proof of address to go uncapped"
+        ? "10 bids/day · 5 active jobs, add proof of address to go uncapped"
         : "No caps, you're fully verified";
 
   return (
@@ -3333,7 +3333,7 @@ export function TalentOverview() {
       {/* Meaningful numbers: work in progress, pipeline, and proven track record */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Active Jobs" value={String(activeJobs.length)} icon={Briefcase} color="emerald" />
-        <StatCard label="Proposals Sent" value={String(bids.length)} icon={FileText} color="blue" />
+        <StatCard label="Bids Sent" value={String(bids.length)} icon={FileText} color="blue" />
         <StatCard label="Completed Jobs" value={String(profile?.stats?.completed_projects ?? 0)} icon={CheckCircle2} color="amber" />
         <StatCard
           label="Job Success"
@@ -3361,7 +3361,7 @@ export function TalentOverview() {
                 <EmptyState
                   icon={Briefcase}
                   title="No active jobs yet"
-                  message="Browse Find Work to submit proposals and land your next job."
+                  message="Browse Find Work to submit bids and land your next job."
                   action={
                     <Link href="/talent/dashboard/find-work">
                       <Button size="sm"><Search className="h-3.5 w-3.5 mr-1" /> Find Work</Button>
@@ -3410,7 +3410,7 @@ export function TalentOverview() {
             <h2 className="font-semibold flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-primary" /> Get hired faster
             </h2>
-            <p className="text-xs text-muted-foreground mt-1">Complete these to unlock more proposals and win more jobs.</p>
+            <p className="text-xs text-muted-foreground mt-1">Complete these to unlock more bids and win more jobs.</p>
           </div>
           <div className="divide-y">
             {!profile && <ListSkeleton />}
@@ -3441,12 +3441,12 @@ export function TalentOverview() {
         </div>
       </div>
 
-      {/* Recent proposals */}
+      {/* Recent bids */}
       <div className="rounded-xl border bg-background">
         <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="font-semibold">Recent Proposals</h2>
+          <h2 className="font-semibold">Recent Bids</h2>
           {bids.length > 0 && (
-            <Link href="/talent/dashboard/proposals" className="text-xs text-primary hover:underline flex items-center gap-0.5">
+            <Link href="/talent/dashboard/bids" className="text-xs text-primary hover:underline flex items-center gap-0.5">
               View all <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           )}
@@ -3457,8 +3457,8 @@ export function TalentOverview() {
             <div className="p-2">
               <EmptyState
                 icon={FileText}
-                title="No proposals yet"
-                message="Apply to open projects on Find Work to send your first proposal."
+                title="No bids yet"
+                message="Apply to open projects on Find Work to send your first bid."
               />
             </div>
           )}
@@ -3501,11 +3501,11 @@ export function ApplyDialog({ project, onClose, onApplied }: { project: ProjectO
         cover_letter: coverLetter || undefined,
         estimated_days: estimatedDays ? Number(estimatedDays) : undefined,
       });
-      toast.success("Proposal submitted!");
+      toast.success("Bid submitted!");
       onApplied();
       onClose();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not submit proposal");
+      toast.error(err instanceof ApiError ? err.message : "Could not submit bid");
     } finally {
       setSubmitting(false);
     }
@@ -3514,7 +3514,7 @@ export function ApplyDialog({ project, onClose, onApplied }: { project: ProjectO
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="w-full sm:max-w-md max-h-[90vh] overflow-y-auto bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg p-6">
-        <h2 className="text-lg font-bold mb-1">Submit Proposal</h2>
+        <h2 className="text-lg font-bold mb-1">Submit Bid</h2>
         <p className="text-sm text-muted-foreground mb-1">{project.title}</p>
         <p className="text-xs text-emerald-600 mb-4 font-medium">Budget: {formatBudgetRange(project.budget_min, project.budget_max, project.budget_type === "hourly")}</p>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -3545,7 +3545,7 @@ export function ApplyDialog({ project, onClose, onApplied }: { project: ProjectO
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="outline" className="flex-1" onClick={onClose}>Cancel</Button>
             <Button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={submitting}>
-              {submitting ? "Submitting..." : "Submit Proposal"}
+              {submitting ? "Submitting..." : "Submit Bid"}
             </Button>
           </div>
         </form>
@@ -3698,7 +3698,7 @@ export function TalentFindWork() {
           <option value="">Sort: Newest</option>
           <option value="budget_asc">Budget: Low to High</option>
           <option value="budget_desc">Budget: High to Low</option>
-          <option value="most_bids">Most Proposals</option>
+          <option value="most_bids">Most Bids</option>
         </select>
         <Button onClick={() => applyFilters({})} size="sm">Apply Filters</Button>
       </div>
@@ -4770,7 +4770,7 @@ function VerificationForm() {
         </div>
         {identityVerified ? (
           <p className="text-sm text-muted-foreground">
-            Your identity is verified. You're on Tier 2, which lifts your daily proposal and active-project caps.
+            Your identity is verified. You're on Tier 2, which lifts your daily bid and active-project caps.
           </p>
         ) : docPending ? (
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm">
@@ -4822,7 +4822,7 @@ function VerificationForm() {
         {!identityVerified ? (
           <p className="text-sm text-muted-foreground">Verify your identity first, that's Tier 2 before Tier 3.</p>
         ) : addressStatus === "verified" ? (
-          <p className="text-sm text-muted-foreground">Your address is verified. You're on Tier 3, no proposal or project caps.</p>
+          <p className="text-sm text-muted-foreground">Your address is verified. You're on Tier 3, no bid or project caps.</p>
         ) : (
           <>
             {addressStatus === "rejected" && (
@@ -5032,7 +5032,7 @@ function TalentProfessionalTab() {
   return (
     <div className="rounded-xl border bg-background p-6 space-y-4">
       <h2 className="font-semibold">Professional Details</h2>
-      <p className="text-xs text-muted-foreground">Shown to clients when they view your profile or proposals.</p>
+      <p className="text-xs text-muted-foreground">Shown to clients when they view your profile or bids.</p>
       <div className="space-y-1.5"><label className="text-sm">Title</label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Structural Engineer" /></div>
       <div className="space-y-1.5">
         <label className="text-sm">Category</label>
@@ -5227,7 +5227,7 @@ const PROPOSAL_STATUS_TABS: { value: BidStatus | "all"; label: string }[] = [
   { value: "rejected", label: "Rejected" },
 ];
 
-export function TalentProposals() {
+export function TalentBids() {
   const [bids, setBids] = useState<BidOut[]>([]);
   const [invites, setInvites] = useState<InviteOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5241,21 +5241,21 @@ export function TalentProposals() {
         setBids(b);
         setInvites(i.filter((x) => x.status === "pending"));
       })
-      .catch(() => toast.error("Could not load proposals"))
+      .catch(() => toast.error("Could not load bids"))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, []);
 
   const withdraw = async (b: BidOut) => {
-    if (!confirm(`Withdraw your proposal on "${b.project_title}"? You can re-apply anytime while the project is still open.`)) return;
+    if (!confirm(`Withdraw your bid on "${b.project_title}"? You can re-apply anytime while the project is still open.`)) return;
     setWithdrawingId(b.id);
     try {
       await api.withdrawBid(b.id);
-      toast.success("Proposal withdrawn");
+      toast.success("Bid withdrawn");
       load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not withdraw proposal");
+      toast.error(err instanceof ApiError ? err.message : "Could not withdraw bid");
     } finally {
       setWithdrawingId(null);
     }
@@ -5264,7 +5264,7 @@ export function TalentProposals() {
   const respond = async (id: string, status: "accepted" | "declined") => {
     try {
       await api.respondToInvite(id, status);
-      toast.success(status === "accepted" ? "Invite accepted, a proposal was created" : "Invite declined");
+      toast.success(status === "accepted" ? "Invite accepted, a bid was created" : "Invite declined");
       load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not respond to invite");
@@ -5306,8 +5306,8 @@ export function TalentProposals() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">My Proposals</h1>
-        <p className="text-muted-foreground text-sm mt-1">Track every proposal you&apos;ve submitted and its status.</p>
+        <h1 className="text-2xl font-bold">My Bids</h1>
+        <p className="text-muted-foreground text-sm mt-1">Track every bid you&apos;ve submitted and its status.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -5364,8 +5364,8 @@ export function TalentProposals() {
           <div className="p-2">
             <EmptyState
               icon={Send}
-              title={bids.length === 0 ? "No proposals submitted yet" : "No proposals in this status"}
-              message="Browse open projects and submit a proposal to get started."
+              title={bids.length === 0 ? "No bids submitted yet" : "No bids in this status"}
+              message="Browse open projects and submit a bid to get started."
               action={
                 <Link href="/talent/dashboard/find-work">
                   <Button size="sm"><Search className="h-3.5 w-3.5 mr-1" /> Find Work</Button>

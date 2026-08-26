@@ -616,15 +616,15 @@ export default function AdminSettingsPage() {
             </div>
           </SectionCard>
 
-          <SectionCard icon={Users} title="Professional Tiers" description="Daily proposal and concurrent-project caps by verification tier. Tier 3 (fully verified) has no cap and isn't configurable.">
+          <SectionCard icon={Users} title="Professional Tiers" description="Daily bid and concurrent-project caps by verification tier. Tier 3 (fully verified) has no cap and isn't configurable.">
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
               <div className="sm:col-span-2 flex items-center gap-2">
                 <Badge variant="outline" className="text-xs rounded-full">Tier 1</Badge>
                 <span className="text-xs text-muted-foreground">Unverified professionals</span>
               </div>
               <NumberField
-                label="Daily Proposal Limit"
-                help="Max proposals a Tier 1 professional can send per day."
+                label="Daily Bid Limit"
+                help="Max bids a Tier 1 professional can send per day."
                 value={valueFor("tier1_daily_proposal_limit")}
                 onChange={(v) => setField("tier1_daily_proposal_limit", v)}
                 dirty={isDirty("tier1_daily_proposal_limit")}
@@ -642,8 +642,8 @@ export default function AdminSettingsPage() {
                 <span className="text-xs text-muted-foreground">NIN-verified professionals</span>
               </div>
               <NumberField
-                label="Daily Proposal Limit"
-                help="Max proposals a Tier 2 professional can send per day."
+                label="Daily Bid Limit"
+                help="Max bids a Tier 2 professional can send per day."
                 value={valueFor("tier2_daily_proposal_limit")}
                 onChange={(v) => setField("tier2_daily_proposal_limit", v)}
                 dirty={isDirty("tier2_daily_proposal_limit")}

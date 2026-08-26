@@ -98,7 +98,7 @@ def test_dispute_blocks_release_until_resolved(client, client_user, professional
 
     # Release is blocked while the dispute is open.
     resp = client.post(
-        f"/api/v1/milestones/{milestone_id}/release", headers=auth_headers(client_user["access_token"])
+        f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"])
     )
     assert resp.status_code == 400
     assert "dispute" in resp.json()["detail"].lower()
@@ -174,7 +174,7 @@ def test_raiser_can_withdraw_dispute(client, client_user, professional_user):
     # actually withdraw to their bank, so this succeeds even though the
     # professional never set up payout details in this test.
     resp = client.post(
-        f"/api/v1/milestones/{milestone_id}/release", headers=auth_headers(client_user["access_token"])
+        f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"])
     )
     assert resp.status_code == 200, resp.text
 
@@ -283,7 +283,7 @@ def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, pr
 
     # The milestone is fully settled now, releasing/refunding it again
     # through the normal endpoints should no longer be possible.
-    resp = client.post(f"/api/v1/milestones/{milestone_id}/release", headers=auth_headers(client_user["access_token"]))
+    resp = client.post(f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 400
 
 
@@ -335,7 +335,7 @@ def test_project_completion_blocked_by_milestone_scoped_dispute(client, client_u
     # multi-milestone plan) — the client still has to explicitly move to
     # final review. Open a milestone-scoped dispute about the now-paid work
     # before they do.
-    resp = client.post(f"/api/v1/milestones/{milestone_id}/release", headers=auth_headers(client_user["access_token"]))
+    resp = client.post(f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
 
     resp = client.get(f"/api/v1/projects/{project['id']}", headers=auth_headers(client_user["access_token"]))

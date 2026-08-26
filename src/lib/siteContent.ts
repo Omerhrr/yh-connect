@@ -115,7 +115,7 @@ export const SITE_CONTENT_DEFAULTS = {
 
   "homepage.hero": {
     heading: "Hire Verified Construction Professionals. Build with Confidence.",
-    subheading: "YH Connect bridges ambitious clients with verified Nigerian architects, engineers, contractors and construction trades. Post projects, review proposals, track site progress, and pay securely via escrow, all in one place.",
+    subheading: "YH Connect bridges ambitious clients with verified Nigerian architects, engineers, contractors and construction trades. Post projects, review bids, track site progress, and pay securely via escrow, all in one place.",
     search_placeholder: "What do you need built or designed?",
     cta_label: "Get Started",
     popular_searches: ["Structural Engineer", "Architect", "General Contractor", "Quantity Surveyor"],
@@ -128,7 +128,7 @@ export const SITE_CONTENT_DEFAULTS = {
     subtitle: "Get your project done in three simple steps: post, review, and pay.",
     steps: [
       { title: "Post Your Project", description: "Describe what you need, set a budget, and post it free, in minutes." },
-      { title: "Review Proposals", description: "Compare bids from verified professionals and pick the right fit for your project." },
+      { title: "Review Bids", description: "Compare bids from verified professionals and pick the right fit for your project." },
       { title: "Pay Securely via Escrow", description: "Funds are held safely and released as milestones are approved, so both sides are protected." },
     ],
     primary_cta_label: "Post a Project Free",
@@ -143,7 +143,7 @@ export const SITE_CONTENT_DEFAULTS = {
       { title: "Verified Professionals", description: "Every professional is identity-checked, so you know who you're hiring." },
       { title: "Escrow Protection", description: "Payments are held securely and released only when work is approved." },
       { title: "Local Expertise", description: "Built specifically for the Nigerian construction market and its trades." },
-      { title: "Transparent Pricing", description: "See budgets and proposals up front, no hidden fees or surprises." },
+      { title: "Transparent Pricing", description: "See budgets and bids up front, no hidden fees or surprises." },
     ],
   } satisfies WhyChooseContent,
 

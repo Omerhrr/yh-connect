@@ -302,16 +302,16 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
     }
   };
 
-  const withdrawProposal = async () => {
+  const withdrawBid = async () => {
     if (!bidStatus) return;
-    if (!confirm(`Withdraw your proposal on "${project?.title}"? You can re-apply anytime while the project is still open.`)) return;
+    if (!confirm(`Withdraw your bid on "${project?.title}"? You can re-apply anytime while the project is still open.`)) return;
     setWithdrawing(true);
     try {
       await api.withdrawBid(myBidId);
       setBidStatus("withdrawn");
-      toast.success("Proposal withdrawn");
+      toast.success("Bid withdrawn");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not withdraw proposal");
+      toast.error(err instanceof ApiError ? err.message : "Could not withdraw bid");
     } finally {
       setWithdrawing(false);
     }
@@ -364,7 +364,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
               <p className="font-medium capitalize flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" /> {project.budget_type === "hourly" ? "Ongoing project" : "One-off project"}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Proposals</p>
+              <p className="text-xs text-muted-foreground">Bids</p>
               <p className="font-medium">{project.bid_count}</p>
             </div>
           </div>
@@ -424,10 +424,10 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
                   variant="outline"
                   size="sm"
                   className="w-full text-muted-foreground hover:text-destructive"
-                  onClick={withdrawProposal}
+                  onClick={withdrawBid}
                   disabled={withdrawing}
                 >
-                  {withdrawing ? "Withdrawing..." : "Withdraw proposal"}
+                  {withdrawing ? "Withdrawing..." : "Withdraw bid"}
                 </Button>
               )}
             </>
@@ -438,7 +438,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
             </Button>
           )}
           {project.status !== "open" && (
-            <p className="text-xs text-muted-foreground">This project is no longer accepting proposals.</p>
+            <p className="text-xs text-muted-foreground">This project is no longer accepting bids.</p>
           )}
 
           {user?.role === "professional" && (

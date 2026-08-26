@@ -64,9 +64,9 @@ export const HOW_IT_WORKS_STEPS = [
   },
   {
     step: "02",
-    title: "Review Proposals",
+    title: "Review Bids",
     description:
-      "Verified architects, engineers, and contractors send tailored proposals. Browse profiles, licenses, and past work.",
+      "Verified architects, engineers, and contractors send tailored bids. Browse profiles, licenses, and past work.",
     icon: "Users",
   },
   {

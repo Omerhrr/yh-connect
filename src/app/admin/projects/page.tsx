@@ -150,7 +150,7 @@ export default function AdminProjectsPage() {
                 {p.assigned_professional_name ? ` · Pro: ${p.assigned_professional_name}` : ""}
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {formatBudgetRange(p.budget_min, p.budget_max)} · {p.bid_count} proposal{p.bid_count === 1 ? "" : "s"} · {p.progress}% · {new Date(p.created_at).toLocaleDateString()}
+                {formatBudgetRange(p.budget_min, p.budget_max)} · {p.bid_count} bid{p.bid_count === 1 ? "" : "s"} · {p.progress}% · {new Date(p.created_at).toLocaleDateString()}
               </p>
             </Link>
             <div className="flex items-center gap-2 shrink-0">

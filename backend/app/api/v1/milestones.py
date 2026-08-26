@@ -12,7 +12,10 @@ from app.models.project import Project, ProjectStatus
 from app.models.user import User, UserRole
 from app.services.platform_settings import get_platform_fee_percent
 from app.services.auto_release import check_project_auto_release
+from app.services.disputes import has_blocking_dispute
+from app.services.escrow import disburse_milestone, refund_milestone, EscrowActionError
 from app.services.project_log import post_system_message
+from app.models.wallet import WalletTransaction, WalletTransactionType, WalletTransactionStatus
 from app.schemas.milestone import (
     ChangeOrderCreate,
     ChangeOrderOut,
@@ -93,19 +96,18 @@ def create_milestone(
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    # The client owns the plan, but the hired professional can propose
-    # milestones too (badged with created_by). The client's funding decision
-    # is the approval gate, so money never moves without the client.
+    # Only the client defines and funds milestones now — money (and the
+    # order work happens in) is entirely the client's call. A professional
+    # proposing their own payment terms was removed: fund-before-work is the
+    # whole point of escrow, and letting the doer of the work also set the
+    # price undermines that guarantee.
     if project.client_id == current_user.id:
         if project.status in (ProjectStatus.completed, ProjectStatus.cancelled):
             raise HTTPException(status_code=400, detail="This project is closed, milestones can't be added")
-    elif project.assigned_professional_id == current_user.id:
-        if project.status != ProjectStatus.in_progress:
-            raise HTTPException(status_code=403, detail="You can propose milestones once the project is active")
     elif current_user.role == UserRole.admin:
         pass
     else:
-        raise HTTPException(status_code=403, detail="Not authorized to add milestones to this project")
+        raise HTTPException(status_code=403, detail="Only the client can add milestones to this project")
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Milestone amount must be greater than zero")
     sort_order = len(project.milestones)
@@ -122,8 +124,7 @@ def create_milestone(
     db.flush()
     post_system_message(
         db, project, current_user.id,
-        f"🧾 New milestone \"{payload.title}\" — ₦{payload.amount:,.2f}."
-        + (" Fund it to approve and get started." if current_user.id == project.assigned_professional_id else ""),
+        f"🧾 New milestone \"{payload.title}\" — ₦{payload.amount:,.2f}. Fund it so the professional can start work on it.",
     )
     db.commit()
     db.refresh(milestone)
@@ -141,6 +142,10 @@ def post_milestone_update(
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
     _require_project_party(milestone.project, current_user)
+    # Work — and posting progress on it — only starts once money is actually
+    # in escrow, so the professional is never doing unfunded work on faith.
+    if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.submitted):
+        raise HTTPException(status_code=400, detail="This milestone must be funded before work can begin")
     update = MilestoneUpdate(
         milestone_id=milestone_id,
         created_by=current_user.id,
@@ -148,8 +153,6 @@ def post_milestone_update(
         photo_urls=",".join(payload.photo_urls) if payload.photo_urls else None,
     )
     db.add(update)
-    if milestone.status == MilestoneStatus.pending:
-        milestone.status = MilestoneStatus.in_progress
     # Mirror into the project's message thread too — Messages is meant to be
     # the running log of everything, not just milestone updates tied to money.
     project = milestone.project
@@ -174,13 +177,14 @@ def submit_milestone(milestone_id: str, current_user: User = Depends(get_current
     # same work. Only allow it while the milestone is still genuinely active.
     if milestone.status in (MilestoneStatus.approved, MilestoneStatus.paid, MilestoneStatus.refunded):
         raise HTTPException(status_code=400, detail="This milestone is already closed out and can't be resubmitted")
-    # If the client already funded it (e.g. paid upfront before the
-    # professional finished), that's a strictly more-advanced state for
-    # approval purposes, don't regress it back down to "submitted" just
-    # because the professional also clicked submit, that would erase the
-    # funded signal approve_milestone / release rely on.
-    if milestone.status != MilestoneStatus.funded:
-        milestone.status = MilestoneStatus.submitted
+    # Work can't be submitted before it was ever funded — the client funds
+    # first, work happens second, submission is "I finished the funded work".
+    if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.submitted):
+        raise HTTPException(status_code=400, detail="This milestone must be funded before it can be submitted")
+    # Deliberately stay "funded" rather than moving to "submitted" — that's
+    # the one signal approve_milestone relies on to release payment, and
+    # resubmitting shouldn't regress it.
+    milestone.status = MilestoneStatus.funded
     # Always refresh this regardless of the status branch above — it's the
     # one signal ("work was actually delivered on this date") that the
     # auto-release timer and the client-facing "submitted N days ago" badge
@@ -199,21 +203,42 @@ def submit_milestone(milestone_id: str, current_user: User = Depends(get_current
 
 @router.post("/milestones/{milestone_id}/approve", response_model=MilestoneOut)
 def approve_milestone(milestone_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Client approves the delivered work on a funded milestone. Approval and
+    payout are now the same action — funds move to the professional's wallet
+    instantly, there's no separate 'release payment' step anymore."""
     milestone = db.get(Milestone, milestone_id)
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    if milestone.project.client_id != current_user.id:
+    project = milestone.project
+    if project.client_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the client can approve this milestone")
-    # Must actually be funded first. Approving a merely-"submitted" (never
-    # funded) milestone used to be allowed here, and release_milestone_payout
-    # (app/api/v1/wallet.py) accepts "approved" as release-eligible, so that
-    # gap let a milestone be paid out to the professional without the client's
-    # wallet ever having been debited, effectively fabricating a payout. Real
-    # money bug, keep this strict.
+    # Must actually be funded first — real money bug otherwise (a milestone
+    # could be paid out without the client's wallet ever having been debited).
     if milestone.status != MilestoneStatus.funded:
         raise HTTPException(status_code=400, detail="Milestone must be funded before it can be approved")
-    milestone.status = MilestoneStatus.approved
-    post_system_message(db, milestone.project, current_user.id, f"✅ Milestone \"{milestone.title}\" approved — ready to release payment.")
+    if not project.assigned_professional_id:
+        raise HTTPException(status_code=400, detail="No professional assigned to this project")
+    if has_blocking_dispute(db, project.id, milestone.id):
+        raise HTTPException(status_code=400, detail="This milestone is under dispute and its funds are on hold until it's resolved")
+    # Belt-and-braces: require a real, successful escrow funding transaction
+    # to exist for this exact milestone before any money moves out.
+    funded_tx = (
+        db.query(WalletTransaction)
+        .filter(
+            WalletTransaction.milestone_id == milestone.id,
+            WalletTransaction.type == WalletTransactionType.funding,
+            WalletTransaction.status == WalletTransactionStatus.successful,
+        )
+        .first()
+    )
+    if not funded_tx:
+        raise HTTPException(status_code=400, detail="No escrow funding found for this milestone, it can't be approved")
+
+    try:
+        tx = disburse_milestone(db, milestone, project, current_user.id, note=f"Payout for milestone '{milestone.title}'")
+    except EscrowActionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    post_system_message(db, project, current_user.id, f"✅ Milestone \"{milestone.title}\" approved — ₦{tx.amount:,.2f} released instantly.")
     db.commit()
     db.refresh(milestone)
     return _milestone_out(milestone, db)
@@ -226,28 +251,47 @@ def reject_milestone(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Client declines a milestone before any money has moved on it — e.g. a
-    milestone the professional proposed (directly, or via an approved change
-    order) that the client doesn't agree with. Once a milestone is funded,
-    real money is on the line, and refunds/disputes are the correct path
-    instead (this deliberately does not touch funded/approved/paid/refunded
-    milestones)."""
+    """Client declines a milestone's delivered work, always with a reason the
+    professional gets to see. If nothing was ever funded on it, this is just
+    a status flip; if it was funded (the normal case now that work only
+    starts once escrow holds the money), the escrowed amount is refunded
+    back to the client's wallet instead of being paid out. Already-closed
+    milestones (approved/paid/refunded) are untouched — use a dispute for
+    those, real payouts already happened."""
     milestone = db.get(Milestone, milestone_id)
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    if milestone.project.client_id != current_user.id:
+    project = milestone.project
+    if project.client_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the client can reject this milestone")
-    if milestone.status not in (MilestoneStatus.pending, MilestoneStatus.in_progress, MilestoneStatus.submitted):
+    if milestone.status not in (MilestoneStatus.pending, MilestoneStatus.in_progress, MilestoneStatus.submitted, MilestoneStatus.funded):
         raise HTTPException(
             status_code=400,
-            detail="This milestone has already been funded or closed out — it can no longer be rejected outright. Use a dispute or refund instead.",
+            detail="This milestone has already been approved or closed out — it can no longer be rejected outright. Use a dispute instead.",
         )
     if not payload.note or not payload.note.strip():
         raise HTTPException(status_code=400, detail="A note explaining the rejection is required")
-    milestone.status = MilestoneStatus.rejected
-    milestone.rejection_note = payload.note.strip()
+    note = payload.note.strip()
+
+    was_funded = milestone.status == MilestoneStatus.funded
+    if was_funded:
+        if has_blocking_dispute(db, project.id, milestone.id):
+            raise HTTPException(status_code=400, detail="This milestone is under dispute and its funds are on hold until it's resolved")
+        try:
+            refund_milestone(db, milestone, project, current_user.id, note=f"Rejected: {note}")
+        except EscrowActionError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        # refund_milestone already sets status to "refunded" — record the
+        # reason on top of that so the professional sees exactly why.
+    else:
+        milestone.status = MilestoneStatus.rejected
+
+    milestone.rejection_note = note
     milestone.rejected_at = datetime.utcnow()
-    post_system_message(db, milestone.project, current_user.id, f"❌ Milestone \"{milestone.title}\" rejected: {payload.note.strip()}")
+    post_system_message(
+        db, project, current_user.id,
+        f"❌ Milestone \"{milestone.title}\" rejected: {note}" + (" Escrowed funds were refunded to the client." if was_funded else ""),
+    )
     db.commit()
     db.refresh(milestone)
     return _milestone_out(milestone, db)

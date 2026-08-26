@@ -6,7 +6,7 @@ import { HomePage } from "@/components/site/pages/HomePage";
 export const metadata: Metadata = {
   title: "YH Connect | Hire Verified Construction Professionals in Nigeria",
   description:
-    "Post construction projects and hire verified Nigerian architects, engineers, contractors, and trades. Compare proposals, track milestones, and pay securely via escrow.",
+    "Post construction projects and hire verified Nigerian architects, engineers, contractors, and trades. Compare bids, track milestones, and pay securely via escrow.",
 };
 
 export default function Home() {

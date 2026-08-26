@@ -1243,7 +1243,6 @@ export const api = {
       "/wallet/withdraw",
       { method: "POST", body: JSON.stringify({ amount }) }
     ),
-  releaseMilestone: (milestoneId: string) => request<WalletTransactionOut>(`/milestones/${milestoneId}/release`, { method: "POST" }),
   walletTransactions: () => request<WalletTransactionOut[]>("/wallet/transactions"),
   payoutAccounts: () => request<PayoutAccountOut[]>("/professionals/me/payout-accounts"),
   addPayoutAccount: (payload: { bank_code: string; bank_name?: string; account_number: string }) =>

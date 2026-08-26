@@ -53,8 +53,8 @@ import { useProjectUnread } from "@/hooks/useProjectUnread";
 import { toast } from "sonner";
 import Link from "next/link";
 
-// ─── Add milestone (client or hired professional proposing one) ─────────────
-function AddMilestoneForm({ projectId, onAdded, proposer }: { projectId: string; onAdded: () => void; proposer: "client" | "professional" }) {
+// ─── Add milestone (client only — funds it before the professional starts work) ─
+function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
@@ -66,7 +66,7 @@ function AddMilestoneForm({ projectId, onAdded, proposer }: { projectId: string;
     setSubmitting(true);
     try {
       await api.createMilestone(projectId, { title, amount: Number(amount), due_date: dueDate || undefined });
-      toast.success(proposer === "professional" ? "Milestone proposed. The client will fund it to approve" : "Milestone added");
+      toast.success("Milestone added — fund it so the professional can start work");
       setTitle("");
       setAmount("");
       setDueDate("");
@@ -82,7 +82,7 @@ function AddMilestoneForm({ projectId, onAdded, proposer }: { projectId: string;
   if (!open) {
     return (
       <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-        <Plus className="h-3.5 w-3.5 mr-1" /> {proposer === "professional" ? "Propose Milestone" : "Add Milestone"}
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add Milestone
       </Button>
     );
   }
@@ -94,14 +94,12 @@ function AddMilestoneForm({ projectId, onAdded, proposer }: { projectId: string;
         <Input type="number" placeholder="Amount (₦)" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
       </div>
-      {proposer === "professional" && (
-        <p className="text-xs text-muted-foreground">
-          The client will review your proposal. Funding it is what approves it and releases payment when done.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Fund this milestone before the professional starts work on it — that's what puts the money in escrow.
+      </p>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        <Button size="sm" onClick={submit} disabled={submitting}>{submitting ? "Adding..." : proposer === "professional" ? "Propose" : "Add"}</Button>
+        <Button size="sm" onClick={submit} disabled={submitting}>{submitting ? "Adding..." : "Add"}</Button>
       </div>
     </div>
   );
@@ -173,35 +171,34 @@ function milestoneStatusCopy(m: MilestoneOut, isClient: boolean): { label: strin
   const daysAgo = (iso: string) => Math.max(Math.floor((Date.now() - new Date(iso).getTime()) / 86400000), 0);
   switch (m.status) {
     case "pending":
-      return { label: "Not started", hint: isClient ? "Fund it to approve the plan and let work begin." : "Waiting on the client to fund this milestone." };
     case "in_progress":
-      return { label: "In progress" };
-    case "submitted": {
-      const d = m.submitted_at ? daysAgo(m.submitted_at) : 0;
-      return {
-        label: "Submitted, awaiting funding",
-        hint: isClient
-          ? `Delivered ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}. Fund it to review and release payment.`
-          : "The client hasn't funded this milestone yet.",
-      };
-    }
+      return { label: "Not started", hint: isClient ? "Fund it so the professional can start work on it." : "Waiting on the client to fund this milestone before you can start work." };
+    case "submitted":
+      // Legacy state from before fund-before-work — the current flow keeps
+      // funded milestones at "funded" through submission (see below).
+      return { label: "Submitted, awaiting funding", hint: isClient ? "Fund it to review and approve." : "The client hasn't funded this milestone yet." };
     case "funded": {
       const d = m.submitted_at ? daysAgo(m.submitted_at) : null;
       return {
-        label: "Funded, in escrow",
+        label: m.submitted_at ? "Submitted, awaiting review" : "Funded, in escrow",
         hint: m.submitted_at
           ? isClient
-            ? `Work submitted ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}, review it soon.`
+            ? `Delivered ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}. Approve to release payment instantly, or reject with a reason.`
             : "Submitted — waiting on the client's review."
-          : isClient ? "Approve the work once it's delivered, then release payment." : "Funded — deliver the work, then submit it for review.",
+          : isClient ? "Funded — the professional can start work now." : "Funded — start work, then submit it for review when it's done.",
       };
     }
     case "approved":
-      return { label: "Approved, ready to release", hint: isClient ? `Release ₦${m.net_to_professional.toLocaleString()} to the professional whenever you're ready.` : "Approved — the client can release your payout anytime." };
+      return { label: "Approved", hint: `₦${m.net_to_professional.toLocaleString()} released to the professional.` };
     case "paid":
       return { label: "Paid out", hint: `₦${m.net_to_professional.toLocaleString()} sent to the professional's wallet.` };
     case "refunded":
-      return { label: "Refunded to client" };
+      return {
+        label: "Refunded to client",
+        hint: isClient
+          ? m.rejection_note ? `You rejected this: "${m.rejection_note}"` : "Escrowed funds were refunded to your wallet."
+          : m.rejection_note ? `The client rejected this: "${m.rejection_note}"` : "The client rejected this milestone and was refunded.",
+      };
     case "rejected":
       return {
         label: "Rejected",
@@ -310,15 +307,15 @@ function MilestoneCard({
       )}
 
       <div className="flex flex-wrap gap-2 pt-1">
-        {isProfessional && milestone.status !== "paid" && milestone.status !== "approved" && (
+        {isProfessional && milestone.status === "funded" && (
           <PostUpdateForm milestoneId={milestone.id} onPosted={onChanged} />
         )}
-        {isProfessional && (milestone.status === "pending" || milestone.status === "in_progress") && (
+        {isProfessional && milestone.status === "funded" && (
           <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => act(() => api.submitMilestone(milestone.id), "Submitted for approval")}>
-            <Send className="h-3.5 w-3.5 mr-1" /> Submit for Approval
+            <Send className="h-3.5 w-3.5 mr-1" /> {milestone.submitted_at ? "Resubmit" : "Submit for Approval"}
           </Button>
         )}
-        {isClient && !disputed && (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "submitted") && (
+        {isClient && !disputed && (milestone.status === "pending" || milestone.status === "in_progress") && (
           <Button
             size="sm"
             variant="outline"
@@ -326,27 +323,32 @@ function MilestoneCard({
             onClick={() => {
               if (
                 !confirm(
-                  `Fund "${milestone.title}" for ${fmtNaira(milestone.amount)}?\n\nThis moves the full amount into escrow now. When you release it, a ${milestone.platform_fee_percent}% platform fee applies — the professional nets ${fmtNaira(milestone.net_to_professional)}.`
+                  `Fund "${milestone.title}" for ${fmtNaira(milestone.amount)}?\n\nThis moves the full amount into escrow now, and the professional can start work on it. Approving the finished work later releases ${fmtNaira(milestone.net_to_professional)} to them (after the ${milestone.platform_fee_percent}% platform fee).`
                 )
               )
                 return;
-              act(() => api.fundMilestone(milestone.id), "Milestone funded");
+              act(() => api.fundMilestone(milestone.id), "Milestone funded — the professional can start work");
             }}
           >
             <Wallet className="h-3.5 w-3.5 mr-1" /> Fund Milestone
           </Button>
         )}
-        {isClient && !disputed && (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "submitted") && (
+        {isClient && !disputed && (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "funded") && (
           <Button
             size="sm"
             variant="outline"
             className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
             disabled={busy}
             onClick={() => {
-              const note = prompt(`Why are you rejecting "${milestone.title}"? The professional will see this note.`);
+              const funded = milestone.status === "funded";
+              const note = prompt(
+                funded
+                  ? `Why are you rejecting "${milestone.title}"? ${fmtNaira(milestone.amount)} will be refunded to your wallet, and the professional will see this note.`
+                  : `Why are you rejecting "${milestone.title}"? The professional will see this note.`
+              );
               if (note === null) return;
               if (!note.trim()) return toast.error("A note is required to reject a milestone");
-              act(() => api.rejectMilestone(milestone.id, note.trim()), "Milestone rejected");
+              act(() => api.rejectMilestone(milestone.id, note.trim()), funded ? "Milestone rejected — funds refunded to your wallet" : "Milestone rejected");
             }}
           >
             <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
@@ -354,7 +356,7 @@ function MilestoneCard({
         )}
         {isClient &&
           walletBalance != null &&
-          (milestone.status === "pending" || milestone.status === "in_progress" || milestone.status === "submitted") &&
+          (milestone.status === "pending" || milestone.status === "in_progress") &&
           walletBalance < milestone.amount && (
             <p className="w-full text-xs text-amber-700 bg-amber-50 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -362,32 +364,17 @@ function MilestoneCard({
               <Link href="/client/dashboard/payments" className="ml-auto underline font-medium shrink-0">Top up</Link>
             </p>
           )}
-        {isClient && !disputed && (milestone.status === "funded" || milestone.status === "submitted") && (
-          <>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => act(() => api.approveMilestone(milestone.id), "Milestone approved")}
-            >
-              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve Work
-            </Button>
-            <p className="w-full text-xs text-muted-foreground">
-              Approve the work first, then release the payment from escrow — the professional nets {fmtNaira(milestone.net_to_professional)} after the {milestone.platform_fee_percent}% platform fee.
-            </p>
-          </>
-        )}
-        {isClient && !disputed && milestone.status === "approved" && (
+        {isClient && !disputed && milestone.status === "funded" && (
           <Button
             size="sm"
-            className="bg-primary"
+            className="bg-emerald-600 hover:bg-emerald-700"
             disabled={busy}
             onClick={() => {
-              if (!confirm(`Release "${milestone.title}"?\n\n${fmtNaira(milestone.amount)} leaves escrow, a ${milestone.platform_fee_percent}% platform fee is deducted, and the professional receives ${fmtNaira(milestone.net_to_professional)}. This can't be undone.`)) return;
-              act(() => api.releaseMilestone(milestone.id), "Payout released");
+              if (!confirm(`Approve "${milestone.title}"?\n\n${fmtNaira(milestone.net_to_professional)} is released to the professional instantly (after the ${milestone.platform_fee_percent}% platform fee). This can't be undone.`)) return;
+              act(() => api.approveMilestone(milestone.id), "Approved — payment released");
             }}
           >
-            <Wallet className="h-3.5 w-3.5 mr-1" /> Release Payment
+            <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve &amp; Release Payment
           </Button>
         )}
       </div>
@@ -1188,7 +1175,7 @@ export function ProjectWorkspace({
 }) {
   const { user } = useAuth();
   // Mirror the fetched project into local state so status-affecting actions
-  // (accept proposal, move to review, confirm, reopen, closing note) can
+  // (accept bid, move to review, confirm, reopen, closing note) can
   // refresh it in place instead of leaving the UI stuck on a stale status.
   const [project, setProject] = useState(initialProject);
   useEffect(() => { setProject(initialProject); }, [initialProject]);
@@ -1271,7 +1258,7 @@ export function ProjectWorkspace({
   useEffect(() => { load(); }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeProject = async () => {
-    if (!confirm("Close this project? It will stop accepting proposals and be marked as closed.")) return;
+    if (!confirm("Close this project? It will stop accepting bids and be marked as closed.")) return;
     try {
       await api.closeProject(project.id);
       toast.success("Project closed");
@@ -1300,19 +1287,19 @@ export function ProjectWorkspace({
       toast.success("Shortlisted");
       load();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not shortlist proposal");
+      toast.error(err instanceof ApiError ? err.message : "Could not shortlist bid");
     }
   };
 
   const acceptBid = async (bidId: string, professionalName?: string) => {
-    if (!confirm(`Accept this proposal${professionalName ? ` from ${professionalName}` : ""}? This assigns them to the project and closes it to other bids.`)) return;
+    if (!confirm(`Accept this bid${professionalName ? ` from ${professionalName}` : ""}? This assigns them to the project and closes it to other bids.`)) return;
     try {
       await api.updateBid(bidId, "accepted");
-      toast.success("Proposal accepted. Define the milestone plan to start");
+      toast.success("Bid accepted. Define the milestone plan to start");
       load();
       refreshProject();
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not accept proposal");
+      toast.error(err instanceof ApiError ? err.message : "Could not accept bid");
     }
   };
 
@@ -1524,7 +1511,7 @@ export function ProjectWorkspace({
           {isClient && project.status === "open" && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold flex items-center gap-2"><Inbox className="h-4 w-4 text-muted-foreground" /> Proposals ({bids.length})</h2>
+                <h2 className="font-semibold flex items-center gap-2"><Inbox className="h-4 w-4 text-muted-foreground" /> Bids ({bids.length})</h2>
                 <Button size="sm" variant="outline" onClick={() => setInviteOpen(true)}>
                   <UserPlus className="h-3.5 w-3.5 mr-1" /> Invite a Professional
                 </Button>
@@ -1548,12 +1535,12 @@ export function ProjectWorkspace({
               {bids.length === 0 && (
                 <div className="rounded-lg border border-dashed py-8 text-center">
                   <Inbox className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">No proposals yet, or invite someone directly.</p>
+                  <p className="text-sm text-muted-foreground">No bids yet, or invite someone directly.</p>
                 </div>
               )}
               {bids.length > 0 && bidsTab === "shortlisted" && shortlistedBids.length === 0 && (
                 <div className="rounded-lg border border-dashed py-8 text-center">
-                  <p className="text-sm text-muted-foreground">No shortlisted proposals yet — shortlist one to keep it handy for reference.</p>
+                  <p className="text-sm text-muted-foreground">No shortlisted bids yet — shortlist one to keep it handy for reference.</p>
                 </div>
               )}
               {visibleBids.map((b) => (
@@ -1592,7 +1579,7 @@ export function ProjectWorkspace({
                           }`}
                         >
                           {inv.status === "accepted"
-                            ? "Accepted, review their proposal"
+                            ? "Accepted, review their bid"
                             : inv.status === "declined"
                             ? "Declined"
                             : "Awaiting response"}
@@ -1668,8 +1655,8 @@ export function ProjectWorkspace({
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted-foreground" /> Milestones</h2>
-                {project.status === "in_progress" && (isClient || isProfessional) && (
-                  <AddMilestoneForm projectId={project.id} onAdded={load} proposer={isProfessional ? "professional" : "client"} />
+                {project.status === "in_progress" && isClient && (
+                  <AddMilestoneForm projectId={project.id} onAdded={load} />
                 )}
               </div>
               {milestones.length > 0 && (
@@ -1686,7 +1673,7 @@ export function ProjectWorkspace({
                   <ListChecks className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">
                     {isClient
-                      ? "No milestones yet. Add one to define the payment schedule, or approve your professional's proposal by funding it."
+                      ? "No milestones yet. Add one to define the payment schedule, or approve your professional's bid by funding it."
                       : "No milestones yet. Propose one to set up the payment schedule (the client funds it to approve)."}
                   </p>
                 </div>

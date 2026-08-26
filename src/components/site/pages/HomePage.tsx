@@ -505,7 +505,7 @@ function RecentProjects() {
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-muted-foreground">{proj.bid_count} proposal{proj.bid_count === 1 ? "" : "s"}</p>
+                  <p className="text-xs text-muted-foreground">{proj.bid_count} bid{proj.bid_count === 1 ? "" : "s"}</p>
                   <span className="text-xs text-primary font-medium flex items-center gap-0.5">
                     View details <ArrowRight className="h-3 w-3" />
                   </span>
@@ -700,7 +700,7 @@ function AudienceLanding({ variant }: { variant: "client" | "talent" }) {
         }
         subtitle={
           isClient
-            ? "Post a project in minutes, compare proposals from verified architects, engineers and contractors, and pay only when you approve the work, milestone by milestone."
+            ? "Post a project in minutes, compare bids from verified architects, engineers and contractors, and pay only when you approve the work, milestone by milestone."
             : "Create a free profile, showcase your portfolio and licenses, and get matched with clients who need your exact skills, with escrow-backed payments on every job."
         }
         primaryCta={isClient ? "Post a Project Free" : "Create Free Profile"}
@@ -943,7 +943,7 @@ export function FindWorkPage() {
     <div className="container mx-auto px-4 py-12">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Find Projects</h1>
-        <p className="text-muted-foreground">Browse open construction projects and submit your proposal.</p>
+        <p className="text-muted-foreground">Browse open construction projects and submit your bid.</p>
       </div>
       <div className="flex gap-4 mb-8">
         <div className="relative flex-1">

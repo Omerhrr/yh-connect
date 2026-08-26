@@ -375,7 +375,7 @@ export function ClientRegisterPage() {
       }
 
       // Land them on the new project so the first thing they see is where
-      // proposals will arrive, rather than a generic overview.
+      // bids will arrive, rather than a generic overview.
       if (next) {
         router.push(next);
       } else if (createdProjectId) {
@@ -821,11 +821,11 @@ export function TalentRegisterPage() {
       }
 
       if (verifiedNow) {
-        toast.success("Profile created!", { description: "Your identity was verified, you're now Tier 2 with higher proposal limits." });
+        toast.success("Profile created!", { description: "Your identity was verified, you're now Tier 2 with higher bid limits." });
       } else if (nin.trim()) {
         toast.success("Profile created!", { description: "Your identity details were submitted. We'll notify you once your tier 2 upgrade is approved." });
       } else {
-        toast.success("Profile created!", { description: "Verify your identity from Settings to unlock more proposals." });
+        toast.success("Profile created!", { description: "Verify your identity from Settings to unlock more bids." });
       }
       navigate("talent-dashboard");
     } catch (err) {
@@ -999,7 +999,7 @@ export function TalentRegisterPage() {
               <div className="rounded-lg bg-emerald-50 text-emerald-800 p-3 text-xs flex items-start gap-2">
                 <BadgeCheck className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>
-                  Optional, but worth it: verified professionals can send up to 10 proposals a day and take on more
+                  Optional, but worth it: verified professionals can send up to 10 bids a day and take on more
                   active projects. Your NIN is checked instantly; if it can't be confirmed, your uploaded document goes
                   to our team for review.
                 </span>

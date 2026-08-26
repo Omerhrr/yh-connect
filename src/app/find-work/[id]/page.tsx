@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const title = `${project.title} | YH Connect`;
   const description = project.description
     ? project.description.slice(0, 155)
-    : `${project.title} is an open construction project on YH Connect${project.location ? `, based in ${project.location}` : ""}. View details and submit a proposal.`;
+    : `${project.title} is an open construction project on YH Connect${project.location ? `, based in ${project.location}` : ""}. View details and submit a bid.`;
   return {
     title,
     description,

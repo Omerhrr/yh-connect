@@ -25,7 +25,6 @@ from app.schemas.wallet import (
     WalletWithdrawResponse,
 )
 from app.services.disputes import has_blocking_dispute
-from app.services.escrow import disburse_milestone, EscrowActionError
 from app.services.monnify import monnify_client
 from app.services.notify import notify
 from app.services.payout import names_match
@@ -291,49 +290,11 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
     return {"status": "ok"}
 
 
-@router.post("/milestones/{milestone_id}/release", response_model=WalletTransactionOut)
-def release_milestone_payout(
-    milestone_id: str,
-    current_user: User = Depends(require_role(UserRole.client)),
-    db: Session = Depends(get_db),
-):
-    """Client approves a funded milestone -> disburse to the professional."""
-    milestone = db.get(Milestone, milestone_id)
-    if not milestone:
-        raise HTTPException(status_code=404, detail="Milestone not found")
-    project = milestone.project
-    if project.client_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.approved):
-        raise HTTPException(status_code=400, detail="Milestone must be funded before it can be released")
-    if not project.assigned_professional_id:
-        raise HTTPException(status_code=400, detail="No professional assigned to this project")
-    if has_blocking_dispute(db, project.id, milestone.id):
-        raise HTTPException(status_code=400, detail="This milestone is under dispute and its funds are on hold until it's resolved")
-    # Belt-and-braces on top of the status check: the status field alone has
-    # been wrong before (see approve_milestone), so also require a real,
-    # successful escrow funding transaction to exist for this exact milestone
-    # before any money moves out to the professional.
-    funded_tx = (
-        db.query(WalletTransaction)
-        .filter(
-            WalletTransaction.milestone_id == milestone.id,
-            WalletTransaction.type == WalletTransactionType.funding,
-            WalletTransaction.status == WalletTransactionStatus.successful,
-        )
-        .first()
-    )
-    if not funded_tx:
-        raise HTTPException(status_code=400, detail="No escrow funding found for this milestone, it can't be released")
-
-    try:
-        tx = disburse_milestone(db, milestone, project, current_user.id, note=f"Payout for milestone '{milestone.title}'")
-    except EscrowActionError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    post_system_message(db, project, current_user.id, f"🎉 Milestone \"{milestone.title}\" released — ₦{tx.amount:,.2f} paid out.")
-    db.commit()
-    db.refresh(tx)
-    return _tx_out(tx)
+# Note: milestone payout release used to be a separate manual step here
+# (POST /milestones/{id}/release). It's now folded into approving the
+# milestone itself — see approve_milestone in api/v1/milestones.py, which
+# disburses funds the instant the client approves, using the same
+# disburse_milestone() escrow helper this endpoint used to call.
 
 
 @router.get("/wallet/transactions", response_model=list[WalletTransactionOut])
