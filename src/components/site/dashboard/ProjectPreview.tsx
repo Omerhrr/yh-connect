@@ -20,7 +20,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApplyDialog } from "@/components/site/pages/DashboardPages";
-import { api, ApiError, type ProjectOut, type BidStatus } from "@/lib/api";
+import { ProjectChat } from "@/components/site/chat/ProjectChat";
+import { api, ApiError, type ProjectOut, type BidStatus, type AccessRequestOut, type AccessRequestType } from "@/lib/api";
 import { BID_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import { toast } from "sonner";
@@ -246,6 +247,17 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
   const [myBidId, setMyBidId] = useState("");
   const [saved, setSaved] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
+  const [myRequests, setMyRequests] = useState<AccessRequestOut[]>([]);
+  const [inspectionOpen, setInspectionOpen] = useState(false);
+  const [requesting, setRequesting] = useState<AccessRequestType | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
+
+  const loadMyRequests = () => {
+    if (!user || user.role !== "professional") return;
+    api.myAccessRequests()
+      .then((reqs) => setMyRequests(reqs.filter((r) => r.project_id === projectId)))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     api
@@ -268,7 +280,27 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
       .favorites()
       .then((favs) => setSaved(favs.some((f) => f.target_type === "project" && f.target_id === projectId)))
       .catch(() => {});
+    loadMyRequests();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, user]);
+
+  const inspectionRequest = myRequests.find((r) => r.request_type === "inspection");
+  const chatRequest = myRequests.find((r) => r.request_type === "chat");
+  const anyApproved = myRequests.find((r) => r.status === "approved");
+
+  const sendAccessRequest = async (type: AccessRequestType, note?: string) => {
+    setRequesting(type);
+    try {
+      await api.createAccessRequest(projectId, { request_type: type, note });
+      toast.success(type === "inspection" ? "Inspection request sent" : "Chat request sent");
+      setInspectionOpen(false);
+      loadMyRequests();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not send request");
+    } finally {
+      setRequesting(null);
+    }
+  };
 
   const withdrawProposal = async () => {
     if (!bidStatus) return;
@@ -409,6 +441,46 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
             <p className="text-xs text-muted-foreground">This project is no longer accepting proposals.</p>
           )}
 
+          {user?.role === "professional" && (
+            <div className="space-y-2 pt-1 border-t">
+              {anyApproved ? (
+                <Button variant="outline" className="w-full" onClick={() => setChatOpen(true)}>
+                  Open Chat
+                </Button>
+              ) : (
+                <>
+                  {inspectionRequest ? (
+                    <Badge variant="outline" className="w-full justify-center py-1.5 text-xs rounded-full capitalize">
+                      Inspection request: {inspectionRequest.status}
+                    </Badge>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => requireProfessional(() => setInspectionOpen(true))}
+                    >
+                      Request Inspection
+                    </Button>
+                  )}
+                  {chatRequest ? (
+                    <Badge variant="outline" className="w-full justify-center py-1.5 text-xs rounded-full capitalize">
+                      Chat request: {chatRequest.status}
+                    </Badge>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      disabled={requesting === "chat"}
+                      onClick={() => requireProfessional(() => sendAccessRequest("chat"))}
+                    >
+                      {requesting === "chat" ? "Sending..." : "Start Chat"}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <SaveJobButton projectId={project.id} saved={saved} onToggle={setSaved} guard={requireProfessional} />
 
           <CopyLinkButton projectId={project.id} />
@@ -429,6 +501,59 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
         />
       )}
       {flagOpen && <FlagProjectDialog projectId={project.id} onClose={() => setFlagOpen(false)} />}
+
+      {inspectionOpen && (
+        <RequestInspectionDialog
+          submitting={requesting === "inspection"}
+          onClose={() => setInspectionOpen(false)}
+          onSubmit={(note) => sendAccessRequest("inspection", note)}
+        />
+      )}
+
+      {chatOpen && anyApproved && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+          <div className="w-full sm:max-w-lg h-[85vh] sm:h-[70vh] bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg overflow-hidden">
+            <ProjectChat
+              projectId={project.id}
+              otherUserId={project.client_id}
+              otherUserName={anyApproved.client_name || project.client_company_name || "Client"}
+              subtitle={project.title}
+              onClose={() => setChatOpen(false)}
+              mapAddress={inspectionRequest?.status === "approved" ? inspectionRequest.address : null}
+              mapDetails={inspectionRequest?.status === "approved" ? { phone: inspectionRequest.phone, details: inspectionRequest.details } : undefined}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RequestInspectionDialog({ onClose, onSubmit, submitting }: { onClose: () => void; onSubmit: (note?: string) => void; submitting: boolean }) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold">Request a Site Inspection</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Ask to visit the site before bidding. If the client approves, they'll share the address and contact details, and a chat will open between you.
+          </p>
+        </div>
+        <textarea
+          rows={3}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Optional note to the client (e.g. availability, what you'd like to check)"
+          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+        />
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button className="flex-1" onClick={() => onSubmit(note.trim() || undefined)} disabled={submitting}>
+            {submitting ? "Sending..." : "Send Request"}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -14,6 +14,7 @@ from app.models.bid import Bid
 from app.models.message import Message, MessageReaction
 from app.models.project import Project
 from app.models.project_invite import ProjectInvite
+from app.models.project_access_request import AccessRequestStatus, ProjectAccessRequest
 from app.models.user import KycStatus, User, UserRole
 from app.models.notification import NotificationType
 from app.schemas.message import (
@@ -117,6 +118,16 @@ def _is_project_messaging_party(db: Session, project: Project, user: User) -> bo
         .first()
     ):
         return True
+    if (
+        db.query(ProjectAccessRequest)
+        .filter(
+            ProjectAccessRequest.project_id == project.id,
+            ProjectAccessRequest.professional_id == user.id,
+            ProjectAccessRequest.status == AccessRequestStatus.approved,
+        )
+        .first()
+    ):
+        return True
     return False
 
 
@@ -138,6 +149,16 @@ def _user_is_project_participant(db: Session, project: Project, user_id: str) ->
     if (
         db.query(ProjectInvite)
         .filter(ProjectInvite.project_id == project.id, ProjectInvite.professional_id == user_id)
+        .first()
+    ):
+        return True
+    if (
+        db.query(ProjectAccessRequest)
+        .filter(
+            ProjectAccessRequest.project_id == project.id,
+            ProjectAccessRequest.professional_id == user_id,
+            ProjectAccessRequest.status == AccessRequestStatus.approved,
+        )
         .first()
     ):
         return True

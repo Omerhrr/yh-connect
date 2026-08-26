@@ -204,12 +204,18 @@ export function ProjectChat({
   projectHref,
   messagesHref,
   onBack,
+  mapAddress,
+  mapDetails,
 }: {
   projectId: string;
   otherUserId: string;
   otherUserName: string;
   onClose?: () => void;
   subtitle?: string | null;
+  /** When set (an approved site-inspection request), shows a live map
+      preview banner at the top of the chat for the shared visit address. */
+  mapAddress?: string | null;
+  mapDetails?: { phone?: string | null; details?: string | null };
   /** When set (Messages app), renders a back button in the header so a
       mobile user can return to the conversation list. */
   onBack?: () => void;
@@ -540,6 +546,24 @@ export function ProjectChat({
           )}
         </div>
       </div>
+
+      {/* Site-inspection map preview, shown once the client approves and
+          shares an address. */}
+      {mapAddress && (
+        <div className="border-b shrink-0">
+          <iframe
+            title="Inspection site map"
+            src={`https://www.google.com/maps?q=${encodeURIComponent(mapAddress)}&output=embed`}
+            className="w-full h-40 border-0"
+            loading="lazy"
+          />
+          <div className="px-3 py-2 bg-muted/20 text-xs text-muted-foreground space-y-0.5">
+            <p><span className="font-medium text-foreground">Site address:</span> {mapAddress}</p>
+            {mapDetails?.phone && <p><span className="font-medium text-foreground">Phone:</span> {mapDetails.phone}</p>}
+            {mapDetails?.details && <p><span className="font-medium text-foreground">Notes:</span> {mapDetails.details}</p>}
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="relative flex-1 min-h-0">

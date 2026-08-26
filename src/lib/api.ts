@@ -357,6 +357,27 @@ export type InviteOut = {
   client_name?: string | null;
 };
 
+export type AccessRequestType = "inspection" | "chat";
+export type AccessRequestStatus = "pending" | "approved" | "rejected";
+
+export type AccessRequestOut = {
+  id: string;
+  project_id: string;
+  professional_id: string;
+  client_id: string;
+  request_type: AccessRequestType;
+  status: AccessRequestStatus;
+  note?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  details?: string | null;
+  created_at: string;
+  responded_at?: string | null;
+  project_title?: string | null;
+  professional_name?: string | null;
+  client_name?: string | null;
+};
+
 export type MilestoneStatus = "pending" | "in_progress" | "submitted" | "approved" | "funded" | "paid" | "refunded" | "rejected";
 
 export type MilestoneUpdateOut = {
@@ -1176,6 +1197,17 @@ export const api = {
   myInvites: () => request<InviteOut[]>("/invites/mine"),
   respondToInvite: (inviteId: string, status: "accepted" | "declined") =>
     request<InviteOut>(`/invites/${inviteId}`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  // Access requests: professional asks to inspect the site or start a chat,
+  // client must approve before the pair can message on the project.
+  createAccessRequest: (projectId: string, payload: { request_type: AccessRequestType; note?: string }) =>
+    request<AccessRequestOut>(`/projects/${projectId}/access-requests`, { method: "POST", body: JSON.stringify(payload) }),
+  projectAccessRequests: (projectId: string) => request<AccessRequestOut[]>(`/projects/${projectId}/access-requests`),
+  myAccessRequests: () => request<AccessRequestOut[]>("/access-requests/mine"),
+  respondToAccessRequest: (
+    requestId: string,
+    payload: { status: "approved" | "rejected"; address?: string; phone?: string; details?: string }
+  ) => request<AccessRequestOut>(`/access-requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   // Milestones
   milestones: (projectId: string) => request<MilestoneOut[]>(`/projects/${projectId}/milestones`),

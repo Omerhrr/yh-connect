@@ -17,6 +17,7 @@ from app.api.v1 import (
     portfolio,
     professionals,
     profile_sections,
+    project_access_requests,
     projects,
     reviews,
     uploads,
@@ -36,6 +37,7 @@ api_router.include_router(verification.router)
 api_router.include_router(projects.router)
 api_router.include_router(bids.router)
 api_router.include_router(invites.router)
+api_router.include_router(project_access_requests.router)
 api_router.include_router(milestones.router)
 api_router.include_router(wallet.router)
 api_router.include_router(disputes.router)

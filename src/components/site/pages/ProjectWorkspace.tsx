@@ -24,6 +24,7 @@ import {
   Clock,
   Milestone as MilestoneIcon,
   XCircle,
+  MapPin,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,7 @@ import {
   type DisputeOut,
   type DisputeCategory,
   type InviteOut,
+  type AccessRequestOut,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
 import { CATEGORIES } from "@/data/content";
@@ -1126,6 +1128,54 @@ function FinalReviewSection({
   );
 }
 
+function ApproveInspectionDialog({
+  request, onClose, onApprove, submitting,
+}: { request: AccessRequestOut; onClose: () => void; onApprove: (address: string, phone?: string, details?: string) => void; submitting: boolean }) {
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+  const [details, setDetails] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
+      <div className="w-full sm:max-w-md bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold">Approve Inspection Visit</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            Share where {request.professional_name} can find the site. This opens a chat with them, and the address will show as a map preview there.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Site Address *</label>
+          <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. 12 Admiralty Way, Lekki Phase 1, Lagos" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Phone (optional)</label>
+          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="A number they can reach you on for the visit" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Other details (optional)</label>
+          <textarea
+            rows={2}
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            placeholder="Best time to visit, gate code, landmark, etc."
+            className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
+          />
+        </div>
+        <div className="flex gap-3">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+            disabled={submitting || !address.trim()}
+            onClick={() => onApprove(address.trim(), phone.trim() || undefined, details.trim() || undefined)}
+          >
+            {submitting ? "Approving..." : "Approve & Open Chat"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Full project workspace (milestones + bids) ──────────────────────────────
 export function ProjectWorkspace({
   project: initialProject,
@@ -1145,6 +1195,9 @@ export function ProjectWorkspace({
   const [milestones, setMilestones] = useState<MilestoneOut[]>([]);
   const [bids, setBids] = useState<BidOut[]>([]);
   const [invites, setInvites] = useState<InviteOut[]>([]);
+  const [accessRequests, setAccessRequests] = useState<AccessRequestOut[]>([]);
+  const [respondingRequestId, setRespondingRequestId] = useState<string | null>(null);
+  const [inspectionApproveFor, setInspectionApproveFor] = useState<AccessRequestOut | null>(null);
   const [disputes, setDisputes] = useState<DisputeOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
@@ -1164,6 +1217,12 @@ export function ProjectWorkspace({
     }
   }
   const projectUnread = Object.values(threadUnread).reduce((a, b) => a + b, 0);
+
+  // If the active thread's counterpart has an approved inspection request
+  // with an address on file, surface it as a map preview inside the chat.
+  const activeInspection = activeThread
+    ? accessRequests.find((r) => r.professional_id === activeThread.id && r.request_type === "inspection" && r.status === "approved" && r.address)
+    : undefined;
 
   const isClient = user?.id === project.client_id;
   const isProfessional = user?.id === project.assigned_professional_id;
@@ -1185,7 +1244,24 @@ export function ProjectWorkspace({
       calls.push(api.projectBids(project.id).then(setBids));
       calls.push(api.projectInvites(project.id).then(setInvites).catch(() => {}));
     }
+    if (isClient) {
+      calls.push(api.projectAccessRequests(project.id).then(setAccessRequests).catch(() => {}));
+    }
     Promise.all(calls).catch(() => toast.error("Could not load project data")).finally(() => setLoading(false));
+  };
+
+  const respondToRequest = async (id: string, status: "approved" | "rejected", extra?: { address?: string; phone?: string; details?: string }) => {
+    setRespondingRequestId(id);
+    try {
+      await api.respondToAccessRequest(id, { status, ...extra });
+      toast.success(status === "approved" ? "Request approved" : "Request declined");
+      setInspectionApproveFor(null);
+      api.projectAccessRequests(project.id).then(setAccessRequests).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not respond to request");
+    } finally {
+      setRespondingRequestId(null);
+    }
   };
 
   const refreshProject = () => {
@@ -1370,6 +1446,70 @@ export function ProjectWorkspace({
             )}
           </div>
 
+          {/* Site inspection / start-chat requests from interested professionals,
+              awaiting the client's approval or rejection. */}
+          {isClient && accessRequests.length > 0 && (
+            <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">
+              <h2 className="font-semibold flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /> Requests ({accessRequests.length})</h2>
+              <div className="space-y-2">
+                {accessRequests.map((req) => (
+                  <div key={req.id} className="rounded-lg border bg-muted/20 p-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">
+                        {req.professional_name} — {req.request_type === "inspection" ? "Site inspection" : "Start chat"}
+                      </p>
+                      {req.note && <p className="text-xs text-muted-foreground mt-0.5">{req.note}</p>}
+                      {req.status === "approved" && req.request_type === "inspection" && req.address && (
+                        <p className="text-xs text-emerald-700 mt-1">Shared: {req.address}{req.phone ? ` · ${req.phone}` : ""}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {req.status === "pending" ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={respondingRequestId === req.id}
+                            onClick={() => respondToRequest(req.id, "rejected")}
+                          >
+                            Reject
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                            disabled={respondingRequestId === req.id}
+                            onClick={() =>
+                              req.request_type === "inspection"
+                                ? setInspectionApproveFor(req)
+                                : respondToRequest(req.id, "approved")
+                            }
+                          >
+                            Approve
+                          </Button>
+                        </>
+                      ) : req.status === "approved" ? (
+                        <Button size="sm" variant="outline" onClick={() => setActiveThread({ id: req.professional_id, name: req.professional_name || "Professional" })}>
+                          <MessageSquare className="h-3.5 w-3.5 mr-1" /> Message
+                        </Button>
+                      ) : (
+                        <Badge className="text-xs rounded-full bg-red-100 text-red-600">Declined</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {inspectionApproveFor && (
+            <ApproveInspectionDialog
+              request={inspectionApproveFor}
+              submitting={respondingRequestId === inspectionApproveFor.id}
+              onClose={() => setInspectionApproveFor(null)}
+              onApprove={(address, phone, details) => respondToRequest(inspectionApproveFor.id, "approved", { address, phone, details })}
+            />
+          )}
+
           {/* Final review: professional closing note + client sign-off */}
           {project.status === "review" && (isClient || isProfessional) && (
             <FinalReviewSection
@@ -1469,6 +1609,8 @@ export function ProjectWorkspace({
                   otherUserName={activeThread.name}
                   subtitle={project.title}
                   messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
+                  mapAddress={activeInspection?.address}
+                  mapDetails={activeInspection ? { phone: activeInspection.phone, details: activeInspection.details } : undefined}
                   onActivity={loadUnread}
                   onClose={() => {
                     setActiveThread(null);
@@ -1508,6 +1650,8 @@ export function ProjectWorkspace({
                   otherUserName={activeThread.name}
                   subtitle={project.title}
                   messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
+                  mapAddress={activeInspection?.address}
+                  mapDetails={activeInspection ? { phone: activeInspection.phone, details: activeInspection.details } : undefined}
                   onActivity={loadUnread}
                   onClose={() => {
                     setActiveThread(null);
