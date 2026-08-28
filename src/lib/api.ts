@@ -51,34 +51,59 @@ export class ApiError extends Error {
   }
 }
 
+// Different components on the same page frequently request the same GET
+// endpoint independently on mount (e.g. the dashboard shell and the page
+// body both asking for the current user's project list). Each of those is a
+// full round trip to the backend, which is the single biggest contributor to
+// pages "feeling slow" to open — de-dupe concurrent identical in-flight GETs
+// so simultaneous callers share one network request instead of each paying
+// for their own. This never serves stale data: once a request settles the
+// entry is removed, so the next call always goes to the network fresh.
+const inFlightGets = new Map<string, Promise<unknown>>();
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || "GET").toUpperCase();
   const token = getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> | undefined),
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const dedupeKey = method === "GET" ? `${token || ""}:${path}` : null;
 
-  // Next.js patches the global `fetch` and, depending on version/config,
-  // can silently cache GET responses (App Router's default fetch caching
-  // behavior bleeding into client-side calls). Every request here reflects
-  // live backend state (wallet balances, milestone status, bid status,
-  // dispute status, ...), so caching is never correct, explicitly opt out.
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: "no-store" });
-
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const data = await res.json();
-      message = data.detail || message;
-    } catch {
-      // ignore
-    }
-    throw new ApiError(res.status, message);
+  if (dedupeKey && inFlightGets.has(dedupeKey)) {
+    return inFlightGets.get(dedupeKey) as Promise<T>;
   }
 
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  const run = async (): Promise<T> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string> | undefined),
+    };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+
+    // Next.js patches the global `fetch` and, depending on version/config,
+    // can silently cache GET responses (App Router's default fetch caching
+    // behavior bleeding into client-side calls). Every request here reflects
+    // live backend state (wallet balances, milestone status, bid status,
+    // dispute status, ...), so caching is never correct, explicitly opt out.
+    const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: "no-store" });
+
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const data = await res.json();
+        message = data.detail || message;
+      } catch {
+        // ignore
+      }
+      throw new ApiError(res.status, message);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  };
+
+  if (!dedupeKey) return run();
+
+  const promise = run().finally(() => inFlightGets.delete(dedupeKey));
+  inFlightGets.set(dedupeKey, promise);
+  return promise;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────

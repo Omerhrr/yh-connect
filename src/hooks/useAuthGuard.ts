@@ -17,10 +17,17 @@ import type { UserRole } from "@/lib/api";
 export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean = true) {
   const router = useRouter();
   const user = useAuth((s) => s.user);
+  const token = useAuth((s) => s.token);
+  const refreshMe = useAuth((s) => s.refreshMe);
   // `persist` can be momentarily unavailable during the very first
   // client-side module evaluation (e.g. Turbopack dev HMR races), guard
   // every access instead of assuming it's always there.
   const [hydrated, setHydrated] = useState(() => useAuth.persist?.hasHydrated?.() ?? true);
+  // A persisted `token` with no `user` object shouldn't happen, but if it
+  // ever does (a partial write, an older session shape, ...) we re-fetch the
+  // user before giving up — otherwise that edge case reads as "logged out"
+  // on refresh even though the session is actually still valid.
+  const [recovering, setRecovering] = useState(false);
 
   useEffect(() => {
     if (hydrated) return;
@@ -38,6 +45,11 @@ export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean
 
   useEffect(() => {
     if (!enabled || !hydrated) return;
+    if (!user && token) {
+      setRecovering(true);
+      refreshMe().finally(() => setRecovering(false));
+      return;
+    }
     if (!user) {
       router.replace(loginPath);
       return;
@@ -58,8 +70,8 @@ export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean
       router.replace(user.role === "professional" ? "/talent/dashboard" : "/client/dashboard");
       return;
     }
-  }, [enabled, hydrated, user, role, loginPath, router]);
+  }, [enabled, hydrated, user, token, role, loginPath, router, refreshMe]);
 
-  const ready = hydrated && !!user && user.role === role;
+  const ready = hydrated && !recovering && !!user && user.role === role;
   return { ready, user };
 }
