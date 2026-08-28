@@ -3256,10 +3256,10 @@ export function TalentOverview() {
 
   // ─── Profile strength / "get hired faster" checklist ───────────────────────
   const checklist = [
-    { key: "photo", label: "Add a profile photo", done: !!user?.avatar_url, href: "/talent/dashboard/profile" },
-    { key: "titleBio", label: "Add a title and bio", done: !!(profile?.title && profile?.bio), href: "/talent/dashboard/profile" },
-    { key: "skills", label: "Add your skills", done: (profile?.skills?.length || 0) > 0, href: "/talent/dashboard/profile" },
-    { key: "portfolio", label: "Add portfolio items", done: (profile?.portfolio_items?.length || 0) > 0, href: "/talent/dashboard/profile" },
+    { key: "photo", label: "Add a profile photo", done: !!user?.avatar_url, href: "/talent/dashboard/settings?tab=profile#photo" },
+    { key: "titleBio", label: "Add a title and bio", done: !!(profile?.title && profile?.bio), href: "/talent/dashboard/settings?tab=professional#bio" },
+    { key: "skills", label: "Add your skills", done: (profile?.skills?.length || 0) > 0, href: "/talent/dashboard/settings?tab=professional#skills" },
+    { key: "portfolio", label: "Add portfolio items", done: (profile?.portfolio_items?.length || 0) > 0, href: "/talent/dashboard/profile#portfolio" },
     { key: "identity", label: "Verify your identity", done: (profile?.tier || 1) >= 2, href: "/talent/dashboard/settings?tab=verification" },
     { key: "address", label: "Verify your address", done: profile?.address_verification_status === "verified", href: "/talent/dashboard/settings?tab=verification" },
     { key: "payout", label: "Add your bank details", done: !!profile?.has_payout_details, href: "/talent/dashboard/settings?tab=payout" },
@@ -3276,7 +3276,7 @@ export function TalentOverview() {
     : profile && !profile.has_payout_details
       ? { text: "Add your bank details so payouts can reach you", label: "Add Bank Details", href: "/talent/dashboard/settings?tab=payout" }
       : profile && !profileContentDone
-        ? { text: "Complete your profile so clients can find you", label: "Complete Profile", href: "/talent/dashboard/profile" }
+        ? { text: "Complete your profile so clients can find you", label: "Complete Profile", href: "/talent/dashboard/settings?tab=profile" }
         : profile
           ? { text: "You're all set. Time to find your next job.", label: "Find Work", href: "/talent/dashboard/find-work" }
           : null;
@@ -4346,6 +4346,17 @@ export function TalentProfile() {
   };
   useEffect(load, []);
 
+  // Jump to e.g. #portfolio when arriving from the "get hired faster" checklist.
+  useEffect(() => {
+    if (loading) return;
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [loading]);
+
   if (loading) return <ListSkeleton />;
   if (!profile) return <p className="text-sm text-muted-foreground">No profile found.</p>;
 
@@ -4402,7 +4413,7 @@ export function TalentProfile() {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-background p-6 space-y-4">
+      <div id="portfolio" className="rounded-xl border bg-background p-6 space-y-4 scroll-mt-24">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">Portfolio</h2>
           <AddPortfolioItemForm onAdded={load} />
@@ -5006,7 +5017,7 @@ function TalentProfileTab() {
   return (
     <div className="rounded-xl border bg-background p-6 space-y-4">
       <h2 className="font-semibold">Profile Information</h2>
-      <div className="space-y-1.5">
+      <div id="photo" className="space-y-1.5 scroll-mt-24">
         <label className="text-sm">Profile Photo</label>
         <div className="flex items-center gap-3">
           <UserAvatar avatarUrl={avatarUrl} name={`${firstName} ${lastName}`.trim() || "?"} className="h-14 w-14" fallbackClassName="bg-emerald-100 text-emerald-700" />
@@ -5091,7 +5102,7 @@ function TalentProfessionalTab() {
     <div className="rounded-xl border bg-background p-6 space-y-4">
       <h2 className="font-semibold">Professional Details</h2>
       <p className="text-xs text-muted-foreground">Shown to clients when they view your profile or bids.</p>
-      <div className="space-y-1.5"><label className="text-sm">Title</label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Structural Engineer" /></div>
+      <div id="bio" className="space-y-1.5 scroll-mt-24"><label className="text-sm">Title</label><Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Structural Engineer" /></div>
       <div className="space-y-1.5">
         <label className="text-sm">Category</label>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
@@ -5107,7 +5118,7 @@ function TalentProfessionalTab() {
         <div className="space-y-1.5"><label className="text-sm">Daily Rate (₦)</label><Input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} /></div>
       </div>
       <div className="space-y-1.5"><label className="text-sm">Years of Experience</label><Input value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)} placeholder="e.g. 8" /></div>
-      <div className="space-y-2">
+      <div id="skills" className="space-y-2 scroll-mt-24">
         <label className="text-sm">Skills</label>
         <div className="flex flex-wrap gap-1.5 max-h-44 overflow-y-auto pr-1">
           {SKILLS.map((sk) => {
@@ -5159,6 +5170,17 @@ export function TalentSettings() {
     const t = searchParams.get("tab");
     return t === "profile" || t === "professional" || t === "verification" || t === "payout" || t === "security" ? t : "profile";
   });
+
+  // Jump to a specific field within the active tab once its content has
+  // rendered (e.g. #photo, #bio, #skills from the "get hired faster" checklist).
+  useEffect(() => {
+    const hash = window.location.hash.replace("#", "");
+    if (!hash) return;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 200);
+    return () => window.clearTimeout(t);
+  }, [tab]);
 
   return (
     <div className="space-y-5 max-w-lg">

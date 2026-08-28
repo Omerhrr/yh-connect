@@ -166,3 +166,20 @@ html {
 .animate-step-in-back {
   animation: step-in-back 0.28s ease-out;
 }
+
+/* ── Slow auto-scrolling project image marquee ── */
+@keyframes project-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-project-marquee {
+  animation: project-marquee linear infinite;
+  animation-duration: var(--marquee-duration, 24s);
+}
+.animate-project-marquee:hover {
+  animation-play-state: paused;
+}

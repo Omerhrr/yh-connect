@@ -34,3 +34,4 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 tsconfig.tsbuildinfo
+backend/*.db-journal

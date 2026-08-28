@@ -187,13 +187,16 @@ function ProjectImageMarquee({ images }: { images: string[] }) {
     );
   }
 
+  // Fixed pixel width per slide so the doubled track's translateX(-50%)
+  // lines up exactly on the loop seam, regardless of viewport size.
+  const slideWidth = 560;
   const loop = [...images, ...images];
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border group">
+    <div className="relative w-full overflow-hidden rounded-xl border bg-muted">
       <div
-        className="flex gap-3 animate-project-marquee group-hover:[animation-play-state:paused]"
-        style={{ width: "max-content" }}
+        className="flex gap-3 animate-project-marquee"
+        style={{ width: `${loop.length * (slideWidth + 12)}px`, ["--marquee-duration" as string]: `${images.length * 8}s` }}
       >
         {loop.map((url, i) => (
           <a
@@ -201,22 +204,14 @@ function ProjectImageMarquee({ images }: { images: string[] }) {
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="block h-[420px] w-[95vw] max-w-2xl shrink-0 overflow-hidden bg-muted"
+            className="block h-[420px] shrink-0 overflow-hidden rounded-xl"
+            style={{ width: `${slideWidth}px` }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt="Project" className="h-full w-full object-cover" />
           </a>
         ))}
       </div>
-      <style jsx>{`
-        @keyframes project-marquee {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
-        }
-        .animate-project-marquee {
-          animation: project-marquee ${images.length * 8}s linear infinite;
-        }
-      `}</style>
     </div>
   );
 }
