@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
+from app.core.config import settings
 from app.db.session import get_db
 from app.models.bid import Bid, BidStatus
 from app.models.category import Category
@@ -244,6 +245,11 @@ def create_project(
     current_user: User = Depends(require_role(UserRole.client)),
     db: Session = Depends(get_db),
 ):
+    # Only enforceable once outbound email actually works — with no provider
+    # configured, verification links can never be delivered, so the existing
+    # (no gate) behavior is kept rather than locking every client out.
+    if settings.email_configured and current_user.email_verified_at is None:
+        raise HTTPException(status_code=403, detail="Please verify your email address before posting a project.")
     if not db.get(Category, payload.category_id):
         raise HTTPException(status_code=400, detail="Unknown category")
     if payload.budget_min < 0 or payload.budget_max < 0:

@@ -12,6 +12,14 @@ _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp_db.name}"
 os.environ["KYC_ENFORCEMENT_ENABLED"] = "false"
 os.environ["SECRET_KEY"] = "test-secret-key"
+# Tests must be hermetic regardless of whatever real email provider the
+# developer's local .env happens to have configured (e.g. SMTP creds for
+# manual testing) — force email "not configured" so tests exercise the same
+# behavior a fresh checkout would (email-gated features off), and always log
+# rather than attempt a real network send if some path forgets to check.
+os.environ["RESEND_API_KEY"] = ""
+os.environ["SMTP_HOST"] = ""
+os.environ["SMTP_USER"] = ""
 
 from fastapi.testclient import TestClient  # noqa: E402
 
