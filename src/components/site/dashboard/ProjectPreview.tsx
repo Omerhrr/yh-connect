@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/store/auth";
 import {
   BadgeCheck,
@@ -83,7 +84,7 @@ function SaveJobButton({ projectId, saved, onToggle, guard }: { projectId: strin
   return (
     <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={() => guard(toggle)} disabled={busy}>
       <Heart className={`h-3.5 w-3.5 ${saved ? "fill-rose-500 text-rose-500" : ""}`} />
-      {saved ? "Saved" : "Save job"}
+      {saved ? "Bookmarked" : "Bookmark Job"}
     </Button>
   );
 }
@@ -174,6 +175,52 @@ function FlagProjectDialog({ projectId, onClose }: { projectId: string; onClose:
   );
 }
 
+// ─── Big project images: single hero image, or a slow auto-scrolling marquee
+// when there's more than one so talent can see them all clearly. ────────────
+function ProjectImageMarquee({ images }: { images: string[] }) {
+  if (images.length === 1) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <a href={images[0]} target="_blank" rel="noopener noreferrer" className="block w-full rounded-xl overflow-hidden border bg-muted">
+        <img src={images[0]} alt="Project" className="w-full max-h-[520px] object-cover" />
+      </a>
+    );
+  }
+
+  const loop = [...images, ...images];
+
+  return (
+    <div className="relative w-full overflow-hidden rounded-xl border group">
+      <div
+        className="flex gap-3 animate-project-marquee group-hover:[animation-play-state:paused]"
+        style={{ width: "max-content" }}
+      >
+        {loop.map((url, i) => (
+          <a
+            key={`${url}-${i}`}
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block h-[420px] w-[95vw] max-w-2xl shrink-0 overflow-hidden bg-muted"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt="Project" className="h-full w-full object-cover" />
+          </a>
+        ))}
+      </div>
+      <style jsx>{`
+        @keyframes project-marquee {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+        .animate-project-marquee {
+          animation: project-marquee ${images.length * 8}s linear infinite;
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ─── About the client trust panel ─────────────────────────────────────────
 function AboutClientPanel({ project }: { project: ProjectOut }) {
   return (
@@ -226,6 +273,12 @@ function AboutClientPanel({ project }: { project: ProjectOut }) {
           {project.client_completed_project_count} completed project{project.client_completed_project_count === 1 ? "" : "s"} on YH Connect
         </p>
       )}
+      <Link
+        href={`/talent/dashboard/clients/${project.client_id}`}
+        className="block text-center text-xs font-medium text-primary hover:underline border-t pt-3"
+      >
+        View Client Profile
+      </Link>
     </div>
   );
 }
@@ -375,35 +428,26 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
             )}
           </div>
 
+          {project.image_urls?.length > 0 && (
+            <ProjectImageMarquee images={project.image_urls} />
+          )}
+
+          {project.video_url && (
+            <div>
+              {/\.(mp4|mov|webm)$/i.test(project.video_url) ? (
+                <video src={project.video_url} controls className="w-full rounded-lg border" />
+              ) : (
+                <a href={project.video_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+                  View project video ↗
+                </a>
+              )}
+            </div>
+          )}
+
           <div>
             <h2 className="text-sm font-semibold mb-1">Description</h2>
             <p className="text-sm text-muted-foreground whitespace-pre-wrap">{project.description}</p>
           </div>
-
-          {(project.image_urls?.length > 0 || project.video_url) && (
-            <div>
-              <h2 className="text-sm font-semibold mb-2">Photos &amp; Video</h2>
-              {project.image_urls?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {project.image_urls.map((url) => (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block h-24 w-24 rounded-lg overflow-hidden border">
-                      <img src={url} alt="Project" className="h-full w-full object-cover" />
-                    </a>
-                  ))}
-                </div>
-              )}
-              {project.video_url && (
-                /\.(mp4|mov|webm)$/i.test(project.video_url) ? (
-                  <video src={project.video_url} controls className="w-full max-w-md rounded-lg border" />
-                ) : (
-                  <a href={project.video_url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-                    View project video ↗
-                  </a>
-                )
-              )}
-            </div>
-          )}
 
           {project.skills.length > 0 && (
             <div>

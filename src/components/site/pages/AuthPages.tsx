@@ -946,7 +946,7 @@ export function TalentRegisterPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="hourlyRate">Hourly Rate (₦)</Label>
+                <Label htmlFor="hourlyRate">Daily Rate (₦)</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
                   <Input id="hourlyRate" type="number" min="500" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} placeholder="15000" className="pl-7" />

@@ -18,7 +18,7 @@ export function formatNaira(n: number): string {
 export function formatBudgetRange(min: number, max: number, hourly = false): string {
   // 0/0 means the client didn't set a budget — they want talent to send a quote.
   if (min === 0 && max === 0) return "Budget Not Set";
-  const suffix = hourly ? "/hr" : "";
+  const suffix = hourly ? "/day" : "";
   if (min === max) return `${formatNaira(min)}${suffix}`;
   return `${formatNaira(min)} – ${formatNaira(max)}${suffix}`;
 }

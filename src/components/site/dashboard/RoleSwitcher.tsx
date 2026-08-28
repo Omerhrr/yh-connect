@@ -69,7 +69,7 @@ function BecomeTalentDialog({ onClose, onDone }: { onClose: () => void; onDone: 
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Hourly Rate (₦)</label>
+            <label className="text-sm font-medium">Daily Rate (₦)</label>
             <Input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} placeholder="15000" />
           </div>
           <div className="space-y-1.5">

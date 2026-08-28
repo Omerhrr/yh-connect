@@ -170,7 +170,7 @@ export default function AdminUserDetailPage() {
           <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
             <span>Category: {prof.category.label}</span>
             {prof.location && <span>Location: {prof.location}</span>}
-            {prof.hourly_rate && <span>Rate: ₦{prof.hourly_rate}/hr</span>}
+            {prof.hourly_rate && <span>Rate: ₦{prof.hourly_rate}/day</span>}
             <span>Rating: {prof.rating || "New"} ({prof.review_count})</span>
           </div>
 

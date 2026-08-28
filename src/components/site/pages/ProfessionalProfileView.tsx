@@ -140,7 +140,7 @@ export function ProfessionalProfileView({
             </div>
             <CertificationBadges certifications={pro.certifications} className="mt-2" />
           </div>
-          {pro.hourly_rate && <span className="text-lg font-semibold text-primary shrink-0">₦{pro.hourly_rate}/hr</span>}
+          {pro.hourly_rate && <span className="text-lg font-semibold text-primary shrink-0">₦{pro.hourly_rate}/day</span>}
         </div>
 
         <StatsBar pro={pro} />

@@ -415,7 +415,7 @@ function FeaturedTalent() {
                 </div>
                 {talent.location && <p className="text-xs text-muted-foreground mt-1">{talent.location}</p>}
                 {talent.hourly_rate && (
-                  <p className="text-sm font-semibold text-primary mt-2">₦{talent.hourly_rate}/hr</p>
+                  <p className="text-sm font-semibold text-primary mt-2">₦{talent.hourly_rate}/day</p>
                 )}
                 {talent.skills.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1 justify-center">
@@ -863,7 +863,7 @@ export function FindTalentPage() {
             </div>
 
             <div className="flex items-center gap-3 mt-3 text-sm">
-              {talent.hourly_rate != null && <span className="font-semibold">₦{talent.hourly_rate}/hr</span>}
+              {talent.hourly_rate != null && <span className="font-semibold">₦{talent.hourly_rate}/day</span>}
               <span className="flex items-center gap-1">
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                 <span className="font-medium">{talent.rating || "New"}</span>

@@ -29,6 +29,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/store/auth";
 import {
   api,
@@ -42,6 +43,7 @@ import {
   type DisputeCategory,
   type InviteOut,
   type AccessRequestOut,
+  type ProjectMediaSettingsOut,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
 import { CATEGORIES } from "@/data/content";
@@ -911,20 +913,62 @@ function EditProjectDialog({
   const [description, setDescription] = useState(project.description);
   const [location, setLocation] = useState(project.location || "");
   const [categoryId, setCategoryId] = useState(project.category.id);
-  const [budgetMin, setBudgetMin] = useState(String(project.budget_min));
-  const [budgetMax, setBudgetMax] = useState(String(project.budget_max));
+  const budgetUnset = project.budget_min === 0 && project.budget_max === 0;
+  const [budgetUnknown, setBudgetUnknown] = useState(budgetUnset);
   const [budgetType, setBudgetType] = useState<"fixed" | "hourly">(project.budget_type);
+  const [budgetAmount, setBudgetAmount] = useState(!budgetUnset && project.budget_type === "fixed" ? String(project.budget_min) : "");
+  const [hourlyMin, setHourlyMin] = useState(!budgetUnset && project.budget_type === "hourly" ? String(project.budget_min) : "");
+  const [hourlyMax, setHourlyMax] = useState(!budgetUnset && project.budget_type === "hourly" ? String(project.budget_max) : "");
   const [skills, setSkills] = useState(project.skills.join(", "));
   const [timeline, setTimeline] = useState(project.timeline || "");
+  const [mediaSettings, setMediaSettings] = useState<ProjectMediaSettingsOut | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>(project.image_urls || []);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(project.video_url || "");
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    api.projectMediaSettings().then(setMediaSettings).catch(() => setMediaSettings(null));
+  }, []);
+
+  const handleImageFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const remaining = 8 - imageUrls.length;
+    if (remaining <= 0) return toast.error("You can attach up to 8 images");
+    const picked = Array.from(files).slice(0, remaining);
+    setUploadingImages(true);
+    try {
+      const uploaded = await Promise.all(picked.map((f) => api.uploadFile(f, "project_image")));
+      setImageUrls((prev) => [...prev, ...uploaded.map((u) => u.url)]);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not upload image");
+    } finally {
+      setUploadingImages(false);
+    }
+  };
+
+  const handleVideoFile = async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+    setUploadingVideo(true);
+    try {
+      const uploaded = await api.uploadFile(file, "project_video");
+      setVideoUrl(uploaded.url);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not upload video");
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
   const submit = async () => {
-    const min = Number(budgetMin);
-    const max = Number(budgetMax);
+    const min = budgetUnknown ? 0 : budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMin);
+    const max = budgetUnknown ? 0 : budgetType === "fixed" ? Number(budgetAmount) : Number(hourlyMax);
     if (!title.trim() || !description.trim() || !categoryId) {
       return toast.error("Title, description and category are required");
     }
-    if (!min || !max || min <= 0 || max <= 0 || min > max) {
+    if (!budgetUnknown && (!min || !max || min <= 0 || max <= 0 || min > max)) {
       return toast.error("Enter a valid budget range (min must be greater than zero and no larger than max)");
     }
     setSubmitting(true);
@@ -939,6 +983,8 @@ function EditProjectDialog({
         budget_type: budgetType,
         skills: skills.split(",").map((s) => s.trim()).filter(Boolean),
         timeline: timeline.trim() || undefined,
+        image_urls: imageUrls,
+        video_url: videoUrl.trim() || undefined,
       });
       toast.success("Project updated");
       onSaved();
@@ -986,27 +1032,46 @@ function EditProjectDialog({
             <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" />
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Budget Min (₦) *</label>
-            <Input type="number" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Budget Max (₦) *</label>
-            <Input type="number" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Budget Type</label>
-            <select
-              value={budgetType}
-              onChange={(e) => setBudgetType(e.target.value as "fixed" | "hourly")}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              <option value="fixed">Fixed</option>
-              <option value="hourly">Hourly</option>
-            </select>
-          </div>
+
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox checked={budgetUnknown} onCheckedChange={(v) => setBudgetUnknown(!!v)} />
+            <span className="text-sm">I don&apos;t know the budget yet — let professionals send their quote</span>
+          </label>
+          {!budgetUnknown && (
+            <div className="grid grid-cols-3 gap-3">
+              {budgetType === "fixed" ? (
+                <div className="col-span-2 space-y-1.5">
+                  <label className="text-sm font-medium">Budget (₦) *</label>
+                  <Input type="number" value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Daily Rate Min (₦) *</label>
+                    <Input type="number" value={hourlyMin} onChange={(e) => setHourlyMin(e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Daily Rate Max (₦) *</label>
+                    <Input type="number" value={hourlyMax} onChange={(e) => setHourlyMax(e.target.value)} />
+                  </div>
+                </>
+              )}
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Budget Type</label>
+                <select
+                  value={budgetType}
+                  onChange={(e) => setBudgetType(e.target.value as "fixed" | "hourly")}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="fixed">Fixed</option>
+                  <option value="hourly">Daily</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
+
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Skills</label>
           <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Comma separated, e.g. structural analysis, autocad" />
@@ -1015,6 +1080,78 @@ function EditProjectDialog({
           <label className="text-sm font-medium">Timeline</label>
           <Input value={timeline} onChange={(e) => setTimeline(e.target.value)} placeholder="e.g. 2-3 weeks, or by end of March" />
         </div>
+
+        {(mediaSettings?.images_enabled || mediaSettings?.video_enabled) && (
+          <div className="space-y-4">
+            {mediaSettings?.images_enabled && (
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap gap-2">
+                  {imageUrls.map((url) => (
+                    <div key={url} className="relative h-16 w-16 rounded-md overflow-hidden border">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt="" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setImageUrls((prev) => prev.filter((u) => u !== url))}
+                        className="absolute top-0.5 right-0.5 h-4 w-4 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center"
+                        aria-label="Remove image"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {imageUrls.length < 8 && (
+                    <label className="h-16 w-16 rounded-md border border-dashed flex items-center justify-center text-xs text-muted-foreground cursor-pointer hover:border-primary">
+                      {uploadingImages ? "…" : "+ Add"}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        multiple
+                        className="hidden"
+                        disabled={uploadingImages}
+                        onChange={(e) => { handleImageFiles(e.target.files); e.target.value = ""; }}
+                      />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Up to 8 images{mediaSettings?.image_max_mb ? `, max ${mediaSettings.image_max_mb}MB each` : ""}.
+                </p>
+              </div>
+            )}
+
+            {mediaSettings?.video_enabled && (
+              <div className="space-y-1.5">
+                <Input
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Paste a video link, or upload a file below"
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs rounded-md border px-2.5 py-1.5 cursor-pointer hover:border-primary text-muted-foreground">
+                    {uploadingVideo ? "Uploading…" : "Upload a video file"}
+                    <input
+                      type="file"
+                      accept="video/mp4,video/quicktime,video/webm"
+                      className="hidden"
+                      disabled={uploadingVideo}
+                      onChange={(e) => { handleVideoFile(e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                  {videoUrl && (
+                    <button type="button" onClick={() => setVideoUrl("")} className="text-xs text-muted-foreground hover:text-foreground">
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {mediaSettings?.video_max_mb ? `Max ${mediaSettings.video_max_mb}MB for uploads. ` : ""}A link (YouTube, etc.) works too.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 pt-1">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
           <Button className="flex-1" onClick={submit} disabled={submitting}>{submitting ? "Saving..." : "Save Changes"}</Button>

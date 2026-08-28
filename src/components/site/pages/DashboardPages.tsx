@@ -1023,7 +1023,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
         return toast.error("Please enter your estimated budget");
       }
       if (budgetType === "hourly" && (!hourlyMin || !hourlyMax || Number(hourlyMin) <= 0 || Number(hourlyMax) <= 0)) {
-        return toast.error("Please enter your hourly rate range");
+        return toast.error("Please enter your daily rate range");
       }
       if (budgetType === "hourly" && Number(hourlyMin) > Number(hourlyMax)) {
         return toast.error("Minimum rate can't be higher than the maximum");
@@ -1260,7 +1260,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                 </label>
                 {!budgetUnknown && (
                 <div className="flex gap-2">
-                  {([["fixed", "Fixed price"], ["hourly", "Hourly rate"]] as const).map(([val, label]) => (
+                  {([["fixed", "Fixed price"], ["hourly", "Daily rate"]] as const).map(([val, label]) => (
                     <button
                       type="button"
                       key={val}
@@ -1288,11 +1288,11 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                 ) : (
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium" htmlFor="pp-hourly-min">Min rate (₦/hr) *</label>
+                      <label className="text-sm font-medium" htmlFor="pp-hourly-min">Min rate (₦/day) *</label>
                       <Input id="pp-hourly-min" type="number" min="1" value={hourlyMin} onChange={(e) => setHourlyMin(e.target.value)} placeholder="2000" />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-sm font-medium" htmlFor="pp-hourly-max">Max rate (₦/hr) *</label>
+                      <label className="text-sm font-medium" htmlFor="pp-hourly-max">Max rate (₦/day) *</label>
                       <Input id="pp-hourly-max" type="number" min="1" value={hourlyMax} onChange={(e) => setHourlyMax(e.target.value)} placeholder="5000" />
                     </div>
                   </div>
@@ -1738,7 +1738,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
                 <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
                 <span className="text-xs">{t.rating || "New"}</span>
               </div>
-              {t.hourly_rate && <p className="text-xs font-semibold text-primary mt-1">₦{t.hourly_rate}/hr</p>}
+              {t.hourly_rate && <p className="text-xs font-semibold text-primary mt-1">₦{t.hourly_rate}/day</p>}
             </Link>
           ))}
         </div>
@@ -2124,7 +2124,7 @@ export function ClientFindProfessionals() {
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                 <span className="text-xs">{t.rating || "New"} ({t.review_count})</span>
               </div>
-              {t.hourly_rate && <p className="text-sm font-bold text-primary mt-1">₦{t.hourly_rate}/hr</p>}
+              {t.hourly_rate && <p className="text-sm font-bold text-primary mt-1">₦{t.hourly_rate}/day</p>}
               <div className="mt-3 flex flex-wrap justify-center gap-1">
                 {t.skills.slice(0, 2).map((sk) => <Badge key={sk} variant="secondary" className="text-xs rounded-full">{sk}</Badge>)}
               </div>
@@ -2202,7 +2202,7 @@ export function ClientSavedProfessionals() {
                 <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                 <span className="text-xs">{t.rating || "New"} ({t.review_count})</span>
               </div>
-              {t.hourly_rate && <p className="text-sm font-bold text-primary mt-1">₦{t.hourly_rate}/hr</p>}
+              {t.hourly_rate && <p className="text-sm font-bold text-primary mt-1">₦{t.hourly_rate}/day</p>}
             </Link>
           </div>
         ))}
@@ -3729,15 +3729,21 @@ export function TalentFindWork() {
       {!loading && projects.length === 0 && <p className="text-sm text-muted-foreground">No open projects match your search.</p>}
       <div className="grid md:grid-cols-3 gap-4">
         {projects.map((proj) => (
-          <div key={proj.id} className="relative rounded-xl border bg-background p-5 hover:shadow-md transition-shadow">
+          <div key={proj.id} className="relative rounded-xl border bg-background overflow-hidden hover:shadow-md transition-shadow">
             <FavoriteButton
               targetType="project"
               targetId={proj.id}
               saved={savedIds.has(proj.id)}
               onToggle={(next) => toggleSaved(proj.id, next)}
-              className="absolute top-3 right-3"
+              className="absolute top-3 right-3 z-10"
             />
-            <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block">
+            {proj.image_urls?.length > 0 && (
+              <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block h-36 w-full overflow-hidden bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={proj.image_urls[0]} alt={proj.title} className="h-full w-full object-cover" />
+              </Link>
+            )}
+            <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block p-5">
               <Badge variant="outline" className="text-xs rounded-full mb-2 mr-8">{proj.category.label}</Badge>
               <h3 className="font-semibold text-sm">{proj.title}</h3>
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{proj.description}</p>
@@ -3757,7 +3763,7 @@ export function TalentFindWork() {
                 {proj.skills.slice(0, 3).map((sk) => <Badge key={sk} variant="secondary" className="text-xs rounded-full">{sk}</Badge>)}
               </div>
             </Link>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="px-5 pb-5 mt-4 flex items-center justify-between">
               <span className="text-sm font-semibold text-emerald-600">
                 {formatBudgetRange(proj.budget_min, proj.budget_max, proj.budget_type === "hourly")}
               </span>
@@ -3827,9 +3833,15 @@ export function TalentSavedProjects() {
       )}
       <div className="grid md:grid-cols-3 gap-4">
         {projects.map((proj) => (
-          <div key={proj.id} className="relative rounded-xl border bg-background p-5 hover:shadow-md transition-shadow">
-            <FavoriteButton targetType="project" targetId={proj.id} saved onToggle={() => unsave(proj.id)} className="absolute top-3 right-3" />
-            <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block">
+          <div key={proj.id} className="relative rounded-xl border bg-background overflow-hidden hover:shadow-md transition-shadow">
+            <FavoriteButton targetType="project" targetId={proj.id} saved onToggle={() => unsave(proj.id)} className="absolute top-3 right-3 z-10" />
+            {proj.image_urls?.length > 0 && (
+              <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block h-36 w-full overflow-hidden bg-muted">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={proj.image_urls[0]} alt={proj.title} className="h-full w-full object-cover" />
+              </Link>
+            )}
+            <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block p-5">
               <Badge variant="outline" className="text-xs rounded-full mb-2 mr-8">{proj.category.label}</Badge>
               <h3 className="font-semibold text-sm">{proj.title}</h3>
               <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{proj.description}</p>
@@ -3837,7 +3849,7 @@ export function TalentSavedProjects() {
                 {proj.skills.slice(0, 3).map((sk) => <Badge key={sk} variant="secondary" className="text-xs rounded-full">{sk}</Badge>)}
               </div>
             </Link>
-            <div className="mt-4 flex items-center justify-between">
+            <div className="px-5 pb-5 mt-4 flex items-center justify-between">
               <span className="text-sm font-semibold text-emerald-600">
                 {formatBudgetRange(proj.budget_min, proj.budget_max, proj.budget_type === "hourly")}
               </span>
@@ -4368,8 +4380,8 @@ export function TalentProfile() {
         <div className="space-y-3">
           {profile.hourly_rate && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Hourly Rate</p>
-              <p className="font-semibold">₦{profile.hourly_rate} / hour</p>
+              <p className="text-xs text-muted-foreground mb-1">Daily Rate</p>
+              <p className="font-semibold">₦{profile.hourly_rate} / day</p>
             </div>
           )}
           {profile.bio && (
@@ -5092,7 +5104,7 @@ function TalentProfessionalTab() {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5"><label className="text-sm">Location</label><Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" /></div>
-        <div className="space-y-1.5"><label className="text-sm">Hourly Rate (₦)</label><Input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} /></div>
+        <div className="space-y-1.5"><label className="text-sm">Daily Rate (₦)</label><Input type="number" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} /></div>
       </div>
       <div className="space-y-1.5"><label className="text-sm">Years of Experience</label><Input value={yearsExperience} onChange={(e) => setYearsExperience(e.target.value)} placeholder="e.g. 8" /></div>
       <div className="space-y-2">
