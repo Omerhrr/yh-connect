@@ -1172,7 +1172,7 @@ export const api = {
   deleteCertification: (id: string) => request<void>(`/professionals/me/certifications/${id}`, { method: "DELETE" }),
 
   // Projects
-  projects: (params?: { category_id?: string; q?: string; location?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
+  projects: (params?: { category_id?: string; client_id?: string; status_filter?: string; q?: string; location?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {})
         .filter(([, v]) => v !== undefined && v !== null && v !== "")

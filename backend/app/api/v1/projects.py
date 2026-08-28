@@ -158,6 +158,7 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
 def list_projects(
     category_id: Optional[str] = None,
     status_filter: Optional[ProjectStatus] = None,
+    client_id: Optional[str] = None,
     q: Optional[str] = None,
     location: Optional[str] = None,
     budget_min: Optional[float] = None,
@@ -173,7 +174,16 @@ def list_projects(
     query = db.query(Project)
     if category_id:
         query = query.filter(Project.category_id == category_id)
-    if status_filter:
+    if client_id:
+        # A client's job history (any status) shown on their public profile
+        # so professionals can see their full posting track record, not just
+        # currently-open listings — mirrors what the client sees of their own
+        # projects, just scoped read-only and without status defaulting to
+        # "open only".
+        query = query.filter(Project.client_id == client_id)
+        if status_filter:
+            query = query.filter(Project.status == status_filter)
+    elif status_filter:
         query = query.filter(Project.status == status_filter)
     else:
         query = query.filter(Project.status == ProjectStatus.open)

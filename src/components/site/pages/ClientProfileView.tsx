@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BadgeCheck, Building2, Globe, TrendingUp, Calendar, ShieldCheck, Wallet } from "lucide-react";
+import Link from "next/link";
+import { BadgeCheck, Building2, Globe, TrendingUp, Calendar, ShieldCheck, Wallet, Briefcase } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/site/UserAvatar";
-import { api, type ClientPublicOut, type ReviewOut } from "@/lib/api";
+import { api, type ClientPublicOut, type ProjectOut, type ReviewOut } from "@/lib/api";
 import { ReviewCard } from "@/components/site/shared/ReviewCard";
 import { CATEGORIES } from "@/data/content";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBudgetRange } from "@/lib/utils";
+import { PROJECT_STATUS_COLORS } from "@/lib/statusColors";
 
 function fmtMemberSince(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "long", year: "numeric" });
@@ -25,13 +28,13 @@ function Loading() {
 /**
  * Read-only client profile view, shown to professionals/talent so they can
  * see who they'd be working with before bidding or accepting a job. Mirrors
- * the trust signals shown on ProfessionalProfileView, minus any self-edit
- * actions and minus the client's own project list (no public endpoint for
- * another user's project list exists, nor is it needed here).
+ * the trust signals and posted-project history shown on the client's own
+ * profile view, minus any self-edit actions.
  */
 export function ClientProfileView({ clientId }: { clientId: string }) {
   const [pub, setPub] = useState<ClientPublicOut | null>(null);
   const [reviews, setReviews] = useState<ReviewOut[]>([]);
+  const [projects, setProjects] = useState<ProjectOut[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -40,7 +43,10 @@ export function ClientProfileView({ clientId }: { clientId: string }) {
     api.getClientPublic(clientId)
       .then((p) => {
         setPub(p);
-        return api.reviewsForUser(clientId).then(setReviews).catch(() => {});
+        return Promise.all([
+          api.reviewsForUser(clientId).then(setReviews).catch(() => {}),
+          api.projects({ client_id: clientId, limit: 100 }).then(setProjects).catch(() => {}),
+        ]);
       })
       .catch(() => setPub(null))
       .finally(() => setLoading(false));
@@ -132,6 +138,35 @@ export function ClientProfileView({ clientId }: { clientId: string }) {
             <div className="flex flex-wrap gap-1.5">
               {preferredLabels.map((l) => <Badge key={l} variant="secondary" className="text-xs rounded-full">{l}</Badge>)}
             </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border bg-background overflow-hidden">
+        <div className="p-6 pb-3">
+          <h2 className="text-sm font-semibold">Posted Projects ({projects.length})</h2>
+        </div>
+        {projects.length === 0 ? (
+          <p className="px-6 pb-6 text-sm text-muted-foreground">No projects posted yet.</p>
+        ) : (
+          <div className="divide-y">
+            {projects.map((proj) => (
+              <Link key={proj.id} href={`/talent/dashboard/find-work/${proj.id}`} className="flex w-full items-center gap-4 p-5 text-left hover:bg-muted/30">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm">{proj.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {proj.category.label} · {proj.bid_count} bid{proj.bid_count === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <Badge className={`text-xs rounded-full ${PROJECT_STATUS_COLORS[proj.status]}`}>{proj.status.replace("_", " ")}</Badge>
+                  <span className="text-sm font-semibold">{formatBudgetRange(proj.budget_min, proj.budget_max, proj.budget_type === "hourly")}</span>
+                </div>
+              </Link>
+            ))}
           </div>
         )}
       </div>
