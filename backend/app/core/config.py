@@ -75,8 +75,10 @@ class Settings(BaseSettings):
 
     # Transactional email (password reset, verification, notifications).
     # Leave unset for local dev: emails are logged to the console instead of
-    # sent. Point these at any SMTP provider (SendGrid, Postmark, SES, etc.)
-    # to send for real.
+    # sent. Preferred provider is Resend (set RESEND_API_KEY) — sends via
+    # Resend's HTTPS API, no SMTP needed. SMTP_* is kept as a fallback for
+    # any other provider (SendGrid, Postmark, SES, etc.) if ever needed.
+    RESEND_API_KEY: str = ""
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
@@ -95,7 +97,7 @@ class Settings(BaseSettings):
 
     @property
     def email_configured(self) -> bool:
-        return bool(self.SMTP_HOST and self.SMTP_USER)
+        return bool(self.RESEND_API_KEY) or bool(self.SMTP_HOST and self.SMTP_USER)
 
     @property
     def is_production(self) -> bool:

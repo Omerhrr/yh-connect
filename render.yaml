@@ -5,7 +5,7 @@
 ## plus the database automatically.
 ##
 ## After the first deploy, go to the backend service's "Environment" tab and
-## fill in the values marked sync: false below (SMTP credentials, live payment
+## fill in the values marked sync: false below (Resend API key, live payment
 ## keys, etc.) - they're intentionally left blank here so nothing secret ends
 ## up committed to git.
 ##
@@ -57,6 +57,14 @@ services:
         sync: false
       # Leave blank/simulated until you have real credentials - the app
       # degrades gracefully (emails log to console, payments/KYC simulate).
+      # Preferred email provider: Resend. Set RESEND_API_KEY and EMAIL_FROM
+      # must use a domain verified in your Resend account.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        value: "YH Connect <no-reply@yhconnect.ng>"
+      # SMTP fallback (only used if RESEND_API_KEY is unset) - not needed
+      # when using Resend.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_USER
@@ -65,8 +73,6 @@ services:
         sync: false
       - key: SMTP_PORT
         value: "587"
-      - key: EMAIL_FROM
-        value: "YH Connect <no-reply@yhconnect.ng>"
       - key: MONNIFY_API_KEY
         sync: false
       - key: MONNIFY_SECRET_KEY

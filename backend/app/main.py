@@ -73,6 +73,13 @@ def _check_production_config():
     # than a separate VerifyMe contract, so there's no second credential to
     # check here — the monnify_configured warning above covers both payments
     # and NIN verification going unconfigured.
+    if not settings.email_configured:
+        logger.warning(
+            "PRODUCTION WARNING: No email provider configured (RESEND_API_KEY "
+            "unset, no SMTP fallback either). Password reset, email "
+            "verification, and notification emails will be logged instead of "
+            "sent."
+        )
 
 
 @app.on_event("startup")

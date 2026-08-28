@@ -1,30 +1,59 @@
 """Minimal transactional email sender.
 
-Degrades gracefully when SMTP isn't configured (local dev): instead of
+Degrades gracefully when no provider is configured (local dev): instead of
 sending, it logs the email to the console so the flow (password reset,
 email verification, notifications) can be built and tested end to end
-without a real mail provider. Once SMTP_HOST/SMTP_USER/SMTP_PASSWORD are
-set in `.env`, real emails go out automatically, no code changes needed.
+without a real mail provider.
 
-Swap-in note: this uses stdlib smtplib so it works with any SMTP provider
-(SendGrid, Postmark, Mailgun, SES SMTP, Gmail, etc.) by just pointing the
-env vars at that provider's SMTP endpoint.
+Preferred provider is Resend (https://resend.com) — set RESEND_API_KEY in
+`.env` and real emails go out via Resend's HTTPS API automatically, no code
+changes needed. SMTP_HOST/SMTP_USER/SMTP_PASSWORD remains as a fallback
+path (via stdlib smtplib) for any other SMTP-based provider, used only if
+RESEND_API_KEY isn't set.
 """
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
+import httpx
+
 from app.core.config import settings
 
 logger = logging.getLogger("yhconnect.email")
 
+RESEND_API_URL = "https://api.resend.com/emails"
 
-def send_email(to: str, subject: str, html_body: str, text_body: str | None = None) -> bool:
-    if not settings.email_configured:
-        logger.info("[email:simulated] to=%s subject=%r\n%s", to, subject, text_body or html_body)
+
+def _send_via_resend(to: str, subject: str, html_body: str, text_body: str | None) -> bool:
+    payload = {
+        "from": settings.EMAIL_FROM,
+        "to": [to],
+        "subject": subject,
+        "html": html_body,
+    }
+    if text_body:
+        payload["text"] = text_body
+    try:
+        resp = httpx.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            logger.error("Resend send failed (%s) to %s: %s", resp.status_code, to, resp.text)
+            return False
         return True
+    except Exception:
+        logger.exception("Failed to send email via Resend to %s", to)
+        return False
 
+
+def _send_via_smtp(to: str, subject: str, html_body: str, text_body: str | None) -> bool:
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = settings.EMAIL_FROM
@@ -42,8 +71,19 @@ def send_email(to: str, subject: str, html_body: str, text_body: str | None = No
             server.sendmail(settings.EMAIL_FROM, [to], msg.as_string())
         return True
     except Exception:
-        logger.exception("Failed to send email to %s", to)
+        logger.exception("Failed to send email via SMTP to %s", to)
         return False
+
+
+def send_email(to: str, subject: str, html_body: str, text_body: str | None = None) -> bool:
+    if not settings.email_configured:
+        logger.info("[email:simulated] to=%s subject=%r\n%s", to, subject, text_body or html_body)
+        return True
+
+    if settings.RESEND_API_KEY:
+        return _send_via_resend(to, subject, html_body, text_body)
+
+    return _send_via_smtp(to, subject, html_body, text_body)
 
 
 def _button(url: str, label: str) -> str:
