@@ -295,6 +295,7 @@ export type ProjectOut = {
   budget_max: number;
   budget_type: "fixed" | "hourly";
   skills: string[];
+  timeline?: string | null;
   image_urls: string[];
   video_url?: string | null;
   status: "open" | "in_progress" | "review" | "completed" | "cancelled";
@@ -1170,6 +1171,7 @@ export const api = {
     budget_max: number;
     budget_type: "fixed" | "hourly";
     skills: string[];
+    timeline?: string;
     image_urls?: string[];
     video_url?: string | null;
   }) => request<ProjectOut>("/projects", { method: "POST", body: JSON.stringify(payload) }),
@@ -1189,6 +1191,7 @@ export const api = {
     budget_max?: number;
     budget_type?: "fixed" | "hourly";
     skills?: string[];
+    timeline?: string;
     image_urls?: string[];
     video_url?: string | null;
   }) => request<ProjectOut>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

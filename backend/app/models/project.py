@@ -40,6 +40,11 @@ class Project(Base):
     budget_max: Mapped[float] = mapped_column(Float, nullable=False)
     budget_type: Mapped[BudgetType] = mapped_column(Enum(BudgetType), default=BudgetType.fixed)
     skills: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+    # Client's stated desired timeline for the project (free text, e.g.
+    # "2-3 weeks" or "By end of March"), shown to professionals before they
+    # bid so their estimated_days and cover message can account for it.
+    # Purely informational — not enforced against milestone due_dates.
+    timeline: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[ProjectStatus] = mapped_column(Enum(ProjectStatus), default=ProjectStatus.open)
     progress: Mapped[int] = mapped_column(Integer, default=0)
     # Final-review sign-off: while the project is in "review", the assigned

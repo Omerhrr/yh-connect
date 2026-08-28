@@ -19,6 +19,10 @@ class ProjectCreate(BaseModel):
     budget_max: float = 0
     budget_type: BudgetType = BudgetType.fixed
     skills: list[str] = []
+    # Client's desired timeline, free text (e.g. "2-3 weeks", "By end of
+    # March") — shown to professionals before they bid so they can factor it
+    # into their estimated_days and pitch. Purely informational.
+    timeline: Optional[str] = None
     # Optional at-a-glance visuals, gated by admin platform settings (images
     # on by default, video off by default) — silently dropped server-side if
     # the corresponding feature is disabled, see create_project.
@@ -38,6 +42,7 @@ class ProjectUpdate(BaseModel):
     budget_max: Optional[float] = None
     budget_type: Optional[BudgetType] = None
     skills: Optional[list[str]] = None
+    timeline: Optional[str] = None
     image_urls: Optional[list[str]] = None
     video_url: Optional[str] = None
     status: Optional[ProjectStatus] = None
@@ -56,6 +61,7 @@ class ProjectOut(BaseModel):
     budget_max: float
     budget_type: BudgetType
     skills: list[str] = []
+    timeline: Optional[str] = None
     image_urls: list[str] = []
     video_url: Optional[str] = None
     status: ProjectStatus

@@ -130,6 +130,7 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         budget_max=project.budget_max,
         budget_type=project.budget_type,
         skills=project.skills_list,
+        timeline=project.timeline,
         image_urls=project.image_urls or [],
         video_url=project.video_url,
         status=project.status,
@@ -250,6 +251,7 @@ def create_project(
         budget_max=payload.budget_max,
         budget_type=payload.budget_type,
         skills=",".join(payload.skills) if payload.skills else None,
+        timeline=payload.timeline,
         image_urls=image_urls or None,
         video_url=video_url,
     )

@@ -796,6 +796,7 @@ type PostProjectDraft = {
   hourlyMin: string;
   hourlyMax: string;
   skills: string[];
+  timeline: string;
   termsAgreed: boolean;
 };
 
@@ -817,6 +818,7 @@ function loadPostDraft(): PostProjectDraft | null {
       hourlyMin: typeof d.hourlyMin === "string" ? d.hourlyMin : "",
       hourlyMax: typeof d.hourlyMax === "string" ? d.hourlyMax : "",
       skills: Array.isArray(d.skills) ? d.skills.filter((s): s is string => typeof s === "string") : [],
+      timeline: typeof d.timeline === "string" ? d.timeline : "",
       termsAgreed: !!d.termsAgreed,
     };
   } catch {
@@ -855,6 +857,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   // Step 3: skills (tap suggestions or add your own).
   const [skills, setSkills] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
+  const [timeline, setTimeline] = useState("");
   // Step 4: review + project posting terms.
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
@@ -889,6 +892,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMin(draft.hourlyMin);
       setHourlyMax(draft.hourlyMax);
       setSkills(draft.skills);
+      setTimeline(draft.timeline);
       setTermsAgreed(draft.termsAgreed);
       setRestoredDraft(true);
     } else {
@@ -903,6 +907,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMin("");
       setHourlyMax("");
       setSkills([]);
+      setTimeline("");
       setTermsAgreed(false);
       setRestoredDraft(false);
     }
@@ -949,6 +954,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMin(draft.hourlyMin);
       setHourlyMax(draft.hourlyMax);
       setSkills(draft.skills);
+      setTimeline(draft.timeline);
       setTermsAgreed(draft.termsAgreed);
       setRestoredDraft(true);
     };
@@ -970,6 +976,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       hourlyMin,
       hourlyMax,
       skills,
+      timeline,
       termsAgreed,
     };
     if (isEmptyPostDraft(draft)) {
@@ -980,7 +987,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     // Broadcast to other tabs so they pick up the latest draft in real time.
     draftChannelRef.current?.postMessage(draft);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, step, needText, title, location, categoryId, categoryTouched, budgetType, budgetAmount, hourlyMin, hourlyMax, skills, termsAgreed]);
+  }, [open, step, needText, title, location, categoryId, categoryTouched, budgetType, budgetAmount, hourlyMin, hourlyMax, skills, timeline, termsAgreed]);
 
   const inferredCategoryId = inferCategoryId(needText);
   const inferredCategoryLabel = CATEGORIES.find((c) => c.id === inferredCategoryId)?.label ?? "General Contracting & Building";
@@ -1048,6 +1055,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     setHourlyMax("");
     setSkills([]);
     setCustomSkill("");
+    setTimeline("");
     setTermsAgreed(false);
     toast.success("Draft cleared, starting fresh");
   };
@@ -1069,6 +1077,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
         budget_max: budgetMax,
         budget_type: budgetType,
         skills,
+        timeline: timeline.trim() || undefined,
         image_urls: imageUrls,
         video_url: videoUrl.trim() || undefined,
       });
@@ -1334,6 +1343,17 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                   </div>
                 )}
 
+                <div className="space-y-1.5 pt-2 border-t">
+                  <label className="text-sm font-medium" htmlFor="pp-timeline">Timeline (optional)</label>
+                  <Input
+                    id="pp-timeline"
+                    value={timeline}
+                    onChange={(e) => setTimeline(e.target.value)}
+                    placeholder="e.g. 2-3 weeks, or by end of March"
+                  />
+                  <p className="text-xs text-muted-foreground">Give professionals a sense of when you need this done.</p>
+                </div>
+
                 {(mediaSettings?.images_enabled || mediaSettings?.video_enabled) && (
                   <div className="pt-2 border-t space-y-4">
                     <p className="text-xs font-medium text-muted-foreground">Photos or a video (optional) — helps professionals size up the job at a glance.</p>
@@ -1421,6 +1441,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Location</span><span className="font-medium text-right">{location || "-"}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Budget</span><span className="font-medium text-right">{budgetSummary}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Skills</span><span className="font-medium text-right">{skills.length ? skills.join(", ") : "-"}</span></div>
+                  <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Timeline</span><span className="font-medium text-right">{timeline || "-"}</span></div>
                   {(imageUrls.length > 0 || videoUrl) && (
                     <div className="flex justify-between gap-3 p-3">
                       <span className="text-muted-foreground shrink-0">Media</span>
@@ -3529,7 +3550,7 @@ export function ApplyDialog({ project, onClose, onApplied }: { project: ProjectO
             <Input type="number" value={estimatedDays} onChange={(e) => setEstimatedDays(e.target.value)} placeholder="21" />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium">Cover Letter</label>
+            <label className="text-sm font-medium">Why are you the best fit?</label>
             <textarea
               rows={4}
               value={coverLetter}

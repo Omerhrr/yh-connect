@@ -915,6 +915,7 @@ function EditProjectDialog({
   const [budgetMax, setBudgetMax] = useState(String(project.budget_max));
   const [budgetType, setBudgetType] = useState<"fixed" | "hourly">(project.budget_type);
   const [skills, setSkills] = useState(project.skills.join(", "));
+  const [timeline, setTimeline] = useState(project.timeline || "");
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
@@ -937,6 +938,7 @@ function EditProjectDialog({
         budget_max: max,
         budget_type: budgetType,
         skills: skills.split(",").map((s) => s.trim()).filter(Boolean),
+        timeline: timeline.trim() || undefined,
       });
       toast.success("Project updated");
       onSaved();
@@ -1008,6 +1010,10 @@ function EditProjectDialog({
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Skills</label>
           <Input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Comma separated, e.g. structural analysis, autocad" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Timeline</label>
+          <Input value={timeline} onChange={(e) => setTimeline(e.target.value)} placeholder="e.g. 2-3 weeks, or by end of March" />
         </div>
         <div className="flex gap-3 pt-1">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
@@ -1409,6 +1415,11 @@ export function ProjectWorkspace({
             {project.skills.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
                 {project.skills.map((s) => <Badge key={s} variant="secondary" className="text-xs rounded-full">{s}</Badge>)}
+              </div>
+            )}
+            {project.timeline && (
+              <div className="flex items-center gap-1.5 mt-3 text-sm text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" /> Timeline: <span className="text-foreground font-medium">{project.timeline}</span>
               </div>
             )}
             <div className="flex items-center gap-2 mt-4 pt-4 border-t">

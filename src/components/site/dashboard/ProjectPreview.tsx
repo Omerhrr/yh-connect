@@ -367,6 +367,12 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
               <p className="text-xs text-muted-foreground">Bids</p>
               <p className="font-medium">{project.bid_count}</p>
             </div>
+            {project.timeline && (
+              <div>
+                <p className="text-xs text-muted-foreground">Timeline</p>
+                <p className="font-medium flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {project.timeline}</p>
+              </div>
+            )}
           </div>
 
           <div>
