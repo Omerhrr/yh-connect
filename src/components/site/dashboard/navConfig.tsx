@@ -30,7 +30,7 @@ export const CLIENT_NAV: DashboardNavItem[] = [
   { href: "/client/dashboard", label: "Overview", icon: BarChart3, mobile: true },
   { href: "/client/dashboard/projects", label: "My Projects", icon: Briefcase, mobile: true },
   { href: "/client/dashboard/find-talent", label: "Find Professionals", icon: Users, mobile: true },
-  { href: "/client/dashboard/saved", label: "Saved", icon: Heart },
+  { href: "/client/dashboard/saved", label: "Bookmark", icon: Heart },
   { href: "/client/dashboard/messages", label: "Messages", icon: MessageSquare, mobile: true },
   { href: "/client/dashboard/payments", label: "Payments", icon: Wallet },
   { href: "/client/dashboard/disputes", label: "Disputes", icon: ShieldAlert },
