@@ -89,6 +89,8 @@ import {
   type ClientPublicOut,
   type PayoutAccountOut,
   type ProjectMediaSettingsOut,
+  type PaymentPolicyOut,
+  type PendingHoldbackOut,
   DISPUTE_CATEGORY_LABELS,
   DISPUTE_OUTCOME_LABELS,
 } from "@/lib/api";
@@ -3891,11 +3893,15 @@ export function TalentEarnings() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [hasPayoutDetails, setHasPayoutDetails] = useState<boolean | null>(null);
+  const [policy, setPolicy] = useState<PaymentPolicyOut | null>(null);
+  const [holdback, setHoldback] = useState<PendingHoldbackOut | null>(null);
 
   const load = () => {
     setLoading(true);
     api.walletTransactions().then(setTxs).catch(() => toast.error("Could not load earnings")).finally(() => setLoading(false));
     api.myProfile().then((p) => setHasPayoutDetails(p.has_payout_details)).catch(() => undefined);
+    api.paymentPolicy().then(setPolicy).catch(() => undefined);
+    api.pendingHoldbacks().then(setHoldback).catch(() => undefined);
   };
   useEffect(load, []);
 
@@ -3941,10 +3947,29 @@ export function TalentEarnings() {
         <p className="text-xs text-emerald-100 mt-2">Available to withdraw to your bank account anytime.</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      {!!policy && policy.withholding_percent > 0 && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800">
+            <span className="font-medium">Payment protection: </span>
+            {policy.withholding_percent}% of every milestone payout is held back for {policy.withholding_release_days} day{policy.withholding_release_days === 1 ? "" : "s"} after release, then added to your wallet automatically. The rest lands instantly, as usual.
+            {!!holdback && holdback.total_pending > 0 && (
+              <>
+                {" "}Right now <span className="font-medium">{fmtNaira(holdback.total_pending)}</span> is held back
+                {holdback.next_release_at ? ` — next release on ${new Date(holdback.next_release_at).toLocaleDateString()}.` : "."}
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
+      <div className={`grid gap-4 ${policy && policy.withholding_percent > 0 ? "grid-cols-4" : "grid-cols-3"}`}>
         <StatCard label="Total Earned" value={fmtNaira(paid)} icon={TrendingUp} color="emerald" />
         <StatCard label="Withdrawn" value={fmtNaira(withdrawn)} icon={CheckCircle2} />
         <StatCard label="Payouts" value={String(filtered.filter((t) => t.type === "release").length)} icon={Clock} />
+        {!!policy && policy.withholding_percent > 0 && (
+          <StatCard label="Held Back" value={fmtNaira(holdback?.total_pending || 0)} icon={ShieldCheck} />
+        )}
       </div>
       <div className="rounded-xl border bg-background">
         <div className="p-5 border-b">

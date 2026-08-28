@@ -62,6 +62,17 @@ class WalletTransactionOut(BaseModel):
         from_attributes = True
 
 
+class PaymentPolicyOut(BaseModel):
+    withholding_percent: float
+    withholding_release_days: float
+
+
+class PendingHoldbackOut(BaseModel):
+    total_pending: float
+    count: int
+    next_release_at: Optional[datetime] = None
+
+
 class PayoutDetailsIn(BaseModel):
     bank_code: str
     bank_account_number: str

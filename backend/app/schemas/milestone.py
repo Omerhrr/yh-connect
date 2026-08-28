@@ -55,6 +55,18 @@ class MilestoneOut(BaseModel):
     net_to_professional: float = 0.0
     rejection_note: Optional[str] = None
     rejected_at: Optional[datetime] = None
+    # Payment protection holdback (see platform_settings
+    # "payment_withholding_percent"/"payment_withholding_release_days").
+    # withholding_percent/withholding_release_days are the platform's
+    # current configured values (shown to talent before payout so it's never
+    # a surprise); withheld_amount/withheld_release_at/withheld_released_at
+    # only get set once this specific milestone's payout has actually been
+    # disbursed with a holdback applied.
+    withholding_percent: float = 0.0
+    withholding_release_days: float = 0.0
+    withheld_amount: Optional[float] = None
+    withheld_release_at: Optional[datetime] = None
+    withheld_released_at: Optional[datetime] = None
     updates: list[MilestoneUpdateOut] = []
 
     class Config:

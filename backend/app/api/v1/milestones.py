@@ -10,8 +10,12 @@ from app.models.milestone import Milestone, MilestoneStatus
 from app.models.milestone_update import MilestoneUpdate
 from app.models.project import Project, ProjectStatus
 from app.models.user import User, UserRole
-from app.services.platform_settings import get_platform_fee_percent
-from app.services.auto_release import check_project_auto_release
+from app.services.platform_settings import (
+    get_platform_fee_percent,
+    get_payment_withholding_percent,
+    get_payment_withholding_release_days,
+)
+from app.services.auto_release import check_project_auto_release, release_due_withholds
 from app.services.disputes import has_blocking_dispute
 from app.services.escrow import disburse_milestone, refund_milestone, EscrowActionError
 from app.services.project_log import post_system_message
@@ -48,6 +52,8 @@ def _milestone_out(m: Milestone, db: Session) -> MilestoneOut:
         if creator:
             creator_name = f"{creator.first_name} {creator.last_name}"
     fee_percent = get_platform_fee_percent(db)
+    withholding_percent = get_payment_withholding_percent(db)
+    withholding_release_days = get_payment_withholding_release_days(db)
     return MilestoneOut(
         id=m.id,
         project_id=m.project_id,
@@ -65,6 +71,11 @@ def _milestone_out(m: Milestone, db: Session) -> MilestoneOut:
         net_to_professional=round(m.amount * (1 - fee_percent / 100), 2),
         rejection_note=m.rejection_note,
         rejected_at=m.rejected_at,
+        withholding_percent=withholding_percent,
+        withholding_release_days=withholding_release_days,
+        withheld_amount=m.withheld_amount,
+        withheld_release_at=m.withheld_release_at,
+        withheld_released_at=m.withheld_released_at,
         updates=[_update_out(u) for u in m.updates],
     )
 
@@ -83,6 +94,8 @@ def list_milestones(project_id: str, current_user: User = Depends(get_current_us
     # Opportunistic auto-release check, see app/services/auto_release.py —
     # no scheduler in this app, so this is the load-bearing trigger point.
     check_project_auto_release(db, project)
+    if project.assigned_professional_id:
+        release_due_withholds(db, project.assigned_professional_id)
     return [_milestone_out(m, db) for m in project.milestones]
 
 

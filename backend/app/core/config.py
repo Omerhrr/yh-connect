@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     # "profile_name_change_cooldown_hours".
     PROFILE_NAME_CHANGE_COOLDOWN_HOURS: float = 24.0
 
+    # Payment protection holdback: a percentage of every milestone payout is
+    # withheld from the professional's wallet for a set number of days after
+    # release (instead of landing instantly in full), giving the client a
+    # window to raise an issue before that portion becomes withdrawable. Set
+    # the percent to 0 to disable (default) — admin-editable via
+    # platform_settings keys "payment_withholding_percent" and
+    # "payment_withholding_release_days".
+    PAYMENT_WITHHOLDING_PERCENT: float = 0.0
+    PAYMENT_WITHHOLDING_RELEASE_DAYS: float = 7.0
+
     # NIN identity verification (client + professional KYC) now goes through
     # Monnify's Verification API (see MONNIFY_* above) rather than a separate
     # VerifyMe contract, so no separate credentials are needed here.

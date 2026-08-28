@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Check, FileText, Image as ImageIcon, Loader2, Percent, RotateCcw, Save, ShieldAlert, Sparkles, Tags, Type, Users, Video } from "lucide-react";
+import { AlertTriangle, Check, FileText, Image as ImageIcon, Loader2, Lock, Percent, RotateCcw, Save, ShieldAlert, Sparkles, Tags, Type, Users, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,8 @@ const NUMERIC_KEYS = new Set([
   "tier2_daily_proposal_limit",
   "tier2_concurrent_project_limit",
   "profile_name_change_cooldown_hours",
+  "payment_withholding_percent",
+  "payment_withholding_release_days",
 ]);
 
 // Every persisted key this page can write, so Save only ever sends fields
@@ -39,6 +41,8 @@ const ALL_KEYS = [
   "tier2_daily_proposal_limit",
   "tier2_concurrent_project_limit",
   "profile_name_change_cooldown_hours",
+  "payment_withholding_percent",
+  "payment_withholding_release_days",
 ];
 
 function SectionCard({ icon: Icon, title, description, children }: { icon: React.ElementType; title: string; description: string; children: React.ReactNode }) {
@@ -493,6 +497,16 @@ export default function AdminSettingsPage() {
       );
       if (!ok) return;
     }
+    const withholdPercent = Number(valueFor("payment_withholding_percent"));
+    if (valueFor("payment_withholding_percent") !== "" && (isNaN(withholdPercent) || withholdPercent < 0 || withholdPercent > 100)) {
+      toast.error("Payment withholding must be a number between 0 and 100");
+      return;
+    }
+    const withholdDays = Number(valueFor("payment_withholding_release_days"));
+    if (valueFor("payment_withholding_release_days") !== "" && (isNaN(withholdDays) || withholdDays < 0)) {
+      toast.error("Withholding release delay must be zero or a positive number");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -574,6 +588,28 @@ export default function AdminSettingsPage() {
                 <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> That&apos;s a large change, you&apos;ll be asked to confirm before it saves.
               </p>
             )}
+          </SectionCard>
+
+          <SectionCard icon={Lock} title="Payment Protection Holdback" description="Withhold a portion of every milestone payout for a set number of days after release, giving a window to catch issues before it's fully in the professional's wallet.">
+            <NumberField
+              label="Withholding Percentage"
+              help="Portion of each payout kept back from the professional's wallet at release time. Set to 0 to disable — the full amount then releases instantly as before."
+              value={valueFor("payment_withholding_percent")}
+              onChange={(v) => setField("payment_withholding_percent", v)}
+              min={0}
+              max={100}
+              suffix="%"
+              dirty={isDirty("payment_withholding_percent")}
+            />
+            <NumberField
+              label="Withholding Release Delay"
+              help="How many days after release the withheld portion automatically lands in the professional's wallet. Professionals see this on every milestone payout, so it's never a surprise."
+              value={valueFor("payment_withholding_release_days")}
+              onChange={(v) => setField("payment_withholding_release_days", v)}
+              min={0}
+              suffix="days"
+              dirty={isDirty("payment_withholding_release_days")}
+            />
           </SectionCard>
 
           <SectionCard icon={ShieldAlert} title="Account Security" description="Guardrails that slow down account takeover attempts.">

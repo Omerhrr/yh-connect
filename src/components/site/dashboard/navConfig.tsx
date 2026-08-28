@@ -44,7 +44,7 @@ export const TALENT_NAV: DashboardNavItem[] = [
   { href: "/talent/dashboard/active", label: "Active Jobs", icon: Package, mobile: true },
   { href: "/talent/dashboard/history", label: "Work History", icon: FolderKanban },
   { href: "/talent/dashboard/messages", label: "Messages", icon: MessageSquare, mobile: true },
-  { href: "/talent/dashboard/saved", label: "Saved", icon: Heart },
+  { href: "/talent/dashboard/saved", label: "Bookmark", icon: Heart },
   { href: "/talent/dashboard/bids", label: "My Bids", icon: FileText },
   { href: "/talent/dashboard/earnings", label: "Earnings", icon: Wallet },
   { href: "/talent/dashboard/disputes", label: "Disputes", icon: ShieldAlert },

@@ -54,6 +54,26 @@ def get_profile_name_change_cooldown_hours(db: Session) -> float:
     return settings.PROFILE_NAME_CHANGE_COOLDOWN_HOURS
 
 
+def get_payment_withholding_percent(db: Session) -> float:
+    row = db.get(PlatformSetting, "payment_withholding_percent")
+    if row and row.value:
+        try:
+            return float(row.value)
+        except ValueError:
+            pass
+    return settings.PAYMENT_WITHHOLDING_PERCENT
+
+
+def get_payment_withholding_release_days(db: Session) -> float:
+    row = db.get(PlatformSetting, "payment_withholding_release_days")
+    if row and row.value:
+        try:
+            return float(row.value)
+        except ValueError:
+            pass
+    return settings.PAYMENT_WITHHOLDING_RELEASE_DAYS
+
+
 def get_featured_category_ids(db: Session) -> list[str]:
     row = db.get(PlatformSetting, "featured_category_ids")
     if not row or not row.value:

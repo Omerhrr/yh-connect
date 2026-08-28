@@ -407,7 +407,23 @@ export type MilestoneOut = {
   net_to_professional: number;
   rejection_note?: string | null;
   rejected_at?: string | null;
+  withholding_percent: number;
+  withholding_release_days: number;
+  withheld_amount?: number | null;
+  withheld_release_at?: string | null;
+  withheld_released_at?: string | null;
   updates: MilestoneUpdateOut[];
+};
+
+export type PaymentPolicyOut = {
+  withholding_percent: number;
+  withholding_release_days: number;
+};
+
+export type PendingHoldbackOut = {
+  total_pending: number;
+  count: number;
+  next_release_at?: string | null;
 };
 
 export type ChangeOrderOut = {
@@ -1244,6 +1260,8 @@ export const api = {
       { method: "POST", body: JSON.stringify({ amount }) }
     ),
   walletTransactions: () => request<WalletTransactionOut[]>("/wallet/transactions"),
+  paymentPolicy: () => request<PaymentPolicyOut>("/wallet/payment-policy"),
+  pendingHoldbacks: () => request<PendingHoldbackOut>("/wallet/pending-holdbacks"),
   payoutAccounts: () => request<PayoutAccountOut[]>("/professionals/me/payout-accounts"),
   addPayoutAccount: (payload: { bank_code: string; bank_name?: string; account_number: string }) =>
     request<PayoutAccountOut>("/professionals/me/payout-accounts", { method: "POST", body: JSON.stringify(payload) }),

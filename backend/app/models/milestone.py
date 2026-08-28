@@ -53,6 +53,16 @@ class Milestone(Base):
     rejection_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Payment protection holdback (see platform_settings
+    # "payment_withholding_percent"/"payment_withholding_release_days"): the
+    # portion of a released payout kept back from the professional's wallet
+    # until `withheld_release_at`, at which point it's auto-credited. Null
+    # `withheld_amount` means no holdback applied to this milestone's payout
+    # (feature disabled, or milestone not yet paid).
+    withheld_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    withheld_release_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withheld_released_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     project: Mapped["Project"] = relationship("Project", back_populates="milestones")
     updates: Mapped[list["MilestoneUpdate"]] = relationship(
         "MilestoneUpdate", back_populates="milestone", cascade="all, delete-orphan", order_by="MilestoneUpdate.created_at"

@@ -179,19 +179,34 @@ function milestoneStatusCopy(m: MilestoneOut, isClient: boolean): { label: strin
       return { label: "Submitted, awaiting funding", hint: isClient ? "Fund it to review and approve." : "The client hasn't funded this milestone yet." };
     case "funded": {
       const d = m.submitted_at ? daysAgo(m.submitted_at) : null;
+      const withholdNote = !isClient && m.withholding_percent > 0
+        ? ` Heads up: ${m.withholding_percent}% of the payout will be held back for ${m.withholding_release_days} day${m.withholding_release_days === 1 ? "" : "s"} after release, as part of our payment protection policy.`
+        : "";
       return {
         label: m.submitted_at ? "Submitted, awaiting review" : "Funded, in escrow",
         hint: m.submitted_at
           ? isClient
             ? `Delivered ${d === 0 ? "today" : `${d} day${d === 1 ? "" : "s"} ago`}. Approve to release payment instantly, or reject with a reason.`
             : "Submitted — waiting on the client's review."
-          : isClient ? "Funded — the professional can start work now." : "Funded — start work, then submit it for review when it's done.",
+          : isClient ? "Funded — the professional can start work now." : `Funded — start work, then submit it for review when it's done.${withholdNote}`,
       };
     }
     case "approved":
       return { label: "Approved", hint: `₦${m.net_to_professional.toLocaleString()} released to the professional.` };
-    case "paid":
+    case "paid": {
+      if (m.withheld_amount && m.withheld_amount > 0) {
+        const releasedNow = m.net_to_professional - m.withheld_amount;
+        const released = !!m.withheld_released_at;
+        const dateStr = m.withheld_release_at ? new Date(m.withheld_release_at).toLocaleDateString() : "soon";
+        return {
+          label: "Paid out",
+          hint: released
+            ? `₦${m.net_to_professional.toLocaleString()} fully released, including the held-back portion.`
+            : `₦${releasedNow.toLocaleString()} sent instantly. ₦${m.withheld_amount.toLocaleString()} is held back as payment protection and auto-releases on ${dateStr}.`,
+        };
+      }
       return { label: "Paid out", hint: `₦${m.net_to_professional.toLocaleString()} sent to the professional's wallet.` };
+    }
     case "refunded":
       return {
         label: "Refunded to client",

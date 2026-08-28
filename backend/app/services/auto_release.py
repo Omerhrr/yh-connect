@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.models.milestone import Milestone, MilestoneStatus
 from app.models.notification import NotificationType
 from app.models.project import Project
+from app.models.user import User
 from app.services.escrow import disburse_milestone, EscrowActionError
 from app.services.disputes import has_blocking_dispute
 from app.services.notify import notify
@@ -70,3 +71,44 @@ def check_project_auto_release(db: Session, project: Project) -> None:
             )
             milestone.auto_release_reminder_sent = True
             db.commit()
+
+
+def release_due_withholds(db: Session, professional_id: str) -> None:
+    """Credit any payment-protection holdbacks (see escrow.disburse_milestone)
+    whose release date has passed into the professional's wallet balance.
+    Same "no scheduler" pattern as check_project_auto_release above — this
+    runs opportunistically whenever the professional views their earnings or
+    transactions, or attempts a withdrawal, so a due holdback is never stuck
+    waiting on a cron that doesn't exist. Commits internally per milestone."""
+    now = datetime.utcnow()
+    due = (
+        db.query(Milestone)
+        .join(Project, Milestone.project_id == Project.id)
+        .filter(
+            Project.assigned_professional_id == professional_id,
+            Milestone.withheld_amount.isnot(None),
+            Milestone.withheld_amount > 0,
+            Milestone.withheld_released_at.is_(None),
+            Milestone.withheld_release_at.isnot(None),
+            Milestone.withheld_release_at <= now,
+        )
+        .all()
+    )
+    if not due:
+        return
+
+    professional = db.get(User, professional_id)
+    if not professional:
+        return
+
+    for milestone in due:
+        amount = milestone.withheld_amount
+        professional.wallet_balance += amount
+        milestone.withheld_released_at = now
+        notify(
+            db, professional_id, NotificationType.general,
+            f"Held-back payment released for \"{milestone.title}\"",
+            body=f"₦{amount:,.2f} that was held back as part of our payment protection window has now been added to your wallet balance.",
+            link="/talent/dashboard/earnings", email_also=True,
+        )
+        db.commit()

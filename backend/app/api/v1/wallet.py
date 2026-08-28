@@ -16,6 +16,8 @@ from app.models.notification import NotificationType
 from app.schemas.wallet import (
     FundMilestoneRequest,
     FundMilestoneResponse,
+    PaymentPolicyOut,
+    PendingHoldbackOut,
     PayoutAccountCreate,
     PayoutAccountOut,
     WalletTopupRequest,
@@ -24,11 +26,16 @@ from app.schemas.wallet import (
     WalletWithdrawRequest,
     WalletWithdrawResponse,
 )
+from app.services.auto_release import release_due_withholds
 from app.services.disputes import has_blocking_dispute
 from app.services.monnify import monnify_client
 from app.services.notify import notify
 from app.services.payout import names_match
-from app.services.platform_settings import get_platform_fee_percent
+from app.services.platform_settings import (
+    get_platform_fee_percent,
+    get_payment_withholding_percent,
+    get_payment_withholding_release_days,
+)
 from app.services.project_log import post_system_message
 
 router = APIRouter(tags=["wallet"])
@@ -106,6 +113,9 @@ def withdraw_wallet(
 ):
     """Professional withdraws from their wallet balance to their bank
     account, on their own schedule, separate from when the payout landed."""
+    # Make sure any payment-protection holdback that's come due lands in the
+    # balance before we check whether there's enough to withdraw.
+    release_due_withholds(db, current_user.id)
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount greater than zero")
     if payload.amount > current_user.wallet_balance:
@@ -297,8 +307,45 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
 # disburse_milestone() escrow helper this endpoint used to call.
 
 
+@router.get("/wallet/payment-policy", response_model=PaymentPolicyOut)
+def payment_policy(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Current payment-protection holdback settings, so talent can always see
+    what portion of a payout is withheld and for how long before they hit
+    it on an actual milestone payout."""
+    return PaymentPolicyOut(
+        withholding_percent=get_payment_withholding_percent(db),
+        withholding_release_days=get_payment_withholding_release_days(db),
+    )
+
+
+@router.get("/wallet/pending-holdbacks", response_model=PendingHoldbackOut)
+def pending_holdbacks(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
+    """Summary of payment-protection holdbacks not yet released to this
+    professional's wallet, so Earnings can show what's still coming and
+    when — releases any that have come due first."""
+    release_due_withholds(db, current_user.id)
+    pending = (
+        db.query(Milestone)
+        .join(Project, Milestone.project_id == Project.id)
+        .filter(
+            Project.assigned_professional_id == current_user.id,
+            Milestone.withheld_amount.isnot(None),
+            Milestone.withheld_amount > 0,
+            Milestone.withheld_released_at.is_(None),
+        )
+        .all()
+    )
+    total = sum(m.withheld_amount or 0 for m in pending)
+    next_release = min((m.withheld_release_at for m in pending if m.withheld_release_at), default=None)
+    return PendingHoldbackOut(total_pending=total, count=len(pending), next_release_at=next_release)
+
+
 @router.get("/wallet/transactions", response_model=list[WalletTransactionOut])
 def my_transactions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.role == UserRole.professional:
+        # Opportunistic check, see app/services/auto_release.py — no
+        # scheduler in this app, so this is the load-bearing trigger point.
+        release_due_withholds(db, current_user.id)
     query = db.query(WalletTransaction)
     if current_user.role == UserRole.client:
         query = query.filter(WalletTransaction.client_id == current_user.id)
