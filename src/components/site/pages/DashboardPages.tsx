@@ -3776,7 +3776,7 @@ export function TalentFindWork() {
                   href={`/talent/dashboard/find-work/${proj.id}`}
                   className="inline-flex items-center justify-center rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium h-8 px-3"
                 >
-                  Express Interest
+                  Apply
                 </Link>
               )}
             </div>
@@ -3862,7 +3862,7 @@ export function TalentSavedProjects() {
                   href={`/talent/dashboard/find-work/${proj.id}`}
                   className="inline-flex items-center justify-center rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium h-8 px-3"
                 >
-                  Express Interest
+                  Apply
                 </Link>
               )}
             </div>
