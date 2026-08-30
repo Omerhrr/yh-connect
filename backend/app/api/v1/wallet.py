@@ -40,12 +40,10 @@ from app.services.project_log import post_system_message
 
 router = APIRouter(tags=["wallet"])
 
-
 def _tx_out(tx: WalletTransaction) -> WalletTransactionOut:
     out = WalletTransactionOut.model_validate(tx)
     out.project_title = tx.project.title if tx.project else None
     return out
-
 
 @router.post("/wallet/topup", response_model=WalletTopupResponse)
 def topup_wallet(
@@ -67,8 +65,7 @@ def topup_wallet(
             redirect_url=payload.redirect_url,
         )
     except Exception as e:
-        # MonnifyError and httpx transport errors (timeouts, DNS, 5xx)
-        # land here too; surface a clean 400 instead of an unhandled 500.
+
         raise HTTPException(status_code=400, detail=f"Could not start payment: {e}")
     reference = result.get("transactionReference") or result.get("paymentReference")
 
@@ -85,8 +82,6 @@ def topup_wallet(
     )
     db.add(tx)
 
-    # In local/simulated mode (no live Monnify keys) credit the wallet
-    # immediately so the rest of the flow can be exercised end to end.
     if result.get("simulated"):
         tx.status = WalletTransactionStatus.successful
         current_user.wallet_balance += payload.amount
@@ -104,7 +99,6 @@ def topup_wallet(
         wallet_balance=current_user.wallet_balance,
     )
 
-
 @router.post("/wallet/withdraw", response_model=WalletWithdrawResponse)
 def withdraw_wallet(
     payload: WalletWithdrawRequest,
@@ -113,8 +107,7 @@ def withdraw_wallet(
 ):
     """Professional withdraws from their wallet balance to their bank
     account, on their own schedule, separate from when the payout landed."""
-    # Make sure any payment-protection holdback that's come due lands in the
-    # balance before we check whether there's enough to withdraw.
+
     release_due_withholds(db, current_user.id)
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount greater than zero")
@@ -134,9 +127,7 @@ def withdraw_wallet(
             status_code=400,
             detail="Add and select a payout bank account before requesting a withdrawal.",
         )
-    # The core protection against a compromised account being drained to an
-    # attacker's bank account: the resolved account holder name has to
-    # plausibly be this professional, checked when the account was added.
+
     if not account.name_match:
         raise HTTPException(
             status_code=400,
@@ -188,7 +179,6 @@ def withdraw_wallet(
         wallet_balance=current_user.wallet_balance,
         status=tx.status,
     )
-
 
 @router.post("/milestones/{milestone_id}/fund", response_model=FundMilestoneResponse)
 def fund_milestone(
@@ -242,7 +232,6 @@ def fund_milestone(
         reserved_account=None,
         amount=milestone.amount,
     )
-
 
 @router.post("/webhooks/monnify")
 async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
@@ -299,14 +288,6 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "ok"}
 
-
-# Note: milestone payout release used to be a separate manual step here
-# (POST /milestones/{id}/release). It's now folded into approving the
-# milestone itself — see approve_milestone in api/v1/milestones.py, which
-# disburses funds the instant the client approves, using the same
-# disburse_milestone() escrow helper this endpoint used to call.
-
-
 @router.get("/wallet/payment-policy", response_model=PaymentPolicyOut)
 def payment_policy(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Current payment-protection holdback settings, so talent can always see
@@ -316,7 +297,6 @@ def payment_policy(current_user: User = Depends(get_current_user), db: Session =
         withholding_percent=get_payment_withholding_percent(db),
         withholding_release_days=get_payment_withholding_release_days(db),
     )
-
 
 @router.get("/wallet/pending-holdbacks", response_model=PendingHoldbackOut)
 def pending_holdbacks(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
@@ -339,12 +319,10 @@ def pending_holdbacks(current_user: User = Depends(require_role(UserRole.profess
     next_release = min((m.withheld_release_at for m in pending if m.withheld_release_at), default=None)
     return PendingHoldbackOut(total_pending=total, count=len(pending), next_release_at=next_release)
 
-
 @router.get("/wallet/transactions", response_model=list[WalletTransactionOut])
 def my_transactions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role == UserRole.professional:
-        # Opportunistic check, see app/services/auto_release.py — no
-        # scheduler in this app, so this is the load-bearing trigger point.
+
         release_due_withholds(db, current_user.id)
     query = db.query(WalletTransaction)
     if current_user.role == UserRole.client:
@@ -353,7 +331,6 @@ def my_transactions(current_user: User = Depends(get_current_user), db: Session 
         query = query.filter(WalletTransaction.professional_id == current_user.id)
     txs = query.order_by(WalletTransaction.created_at.desc()).all()
     return [_tx_out(t) for t in txs]
-
 
 @router.get("/wallet/transactions/{transaction_id}/receipt")
 def download_receipt(transaction_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -373,7 +350,6 @@ def download_receipt(transaction_id: str, current_user: User = Depends(get_curre
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
 @router.get("/professionals/me/payout-accounts", response_model=list[PayoutAccountOut])
 def list_payout_accounts(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
     return (
@@ -382,7 +358,6 @@ def list_payout_accounts(current_user: User = Depends(require_role(UserRole.prof
         .order_by(PayoutAccount.is_default.desc(), PayoutAccount.created_at.desc())
         .all()
     )
-
 
 @router.post("/professionals/me/payout-accounts", response_model=PayoutAccountOut, status_code=201)
 def add_payout_account(
@@ -431,7 +406,6 @@ def add_payout_account(
     db.refresh(account)
     return account
 
-
 @router.patch("/professionals/me/payout-accounts/{account_id}/default", response_model=PayoutAccountOut)
 def set_default_payout_account(
     account_id: str,
@@ -448,7 +422,6 @@ def set_default_payout_account(
     db.commit()
     db.refresh(account)
     return account
-
 
 @router.delete("/professionals/me/payout-accounts/{account_id}", status_code=204)
 def delete_payout_account(

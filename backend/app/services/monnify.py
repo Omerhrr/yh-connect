@@ -30,10 +30,8 @@ import httpx
 
 from app.core.config import settings
 
-
 class MonnifyError(Exception):
     pass
-
 
 class MonnifyClient:
     def __init__(self) -> None:
@@ -79,7 +77,7 @@ class MonnifyClient:
         resp.raise_for_status()
         data = resp.json()["responseBody"]
         self._token = data["accessToken"]
-        # tokens are valid ~1hr; refresh a little early
+
         self._token_expires_at = time.time() + 55 * 60
         return self._token
 
@@ -98,7 +96,7 @@ class MonnifyClient:
         payment_reference = payment_reference or f"YHC-{uuid.uuid4().hex[:12]}"
 
         if not self.is_configured:
-            # Simulated response for local dev without live Monnify keys.
+
             return {
                 "simulated": True,
                 "paymentReference": payment_reference,
@@ -229,6 +227,5 @@ class MonnifyClient:
         if not data.get("requestSuccessful"):
             raise MonnifyError(data.get("responseMessage", "Disbursement failed"))
         return data["responseBody"]
-
 
 monnify_client = MonnifyClient()

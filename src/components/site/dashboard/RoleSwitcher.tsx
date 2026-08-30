@@ -10,11 +10,6 @@ import { useAuth } from "@/store/auth";
 import { api, ApiError } from "@/lib/api";
 import { toast } from "sonner";
 
-/**
- * Quick professional-profile setup shown inline when a client without a
- * talent profile tries to switch into talent mode. Deliberately short,
- * the rest can be filled in later from Talent Settings.
- */
 function BecomeTalentDialog({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [title, setTitle] = useState("");
   const [categoryId, setCategoryId] = useState(CATEGORIES[0]?.id || "");
@@ -90,12 +85,6 @@ function BecomeTalentDialog({ onClose, onDone }: { onClose: () => void; onDone: 
   );
 }
 
-/**
- * Lets an account flip between client mode and talent mode without a new
- * registration. Both sides of the account (client fields, professional
- * profile) coexist independently, switching just changes which dashboard
- * and gating currently applies.
- */
 export function RoleSwitcher({ className = "", onSwitched }: { className?: string; onSwitched?: () => void }) {
   const user = useAuth((s) => s.user);
   const setSession = useAuth((s) => s.setSession);
@@ -116,12 +105,6 @@ export function RoleSwitcher({ className = "", onSwitched }: { className?: strin
       setSession(res.user, res.access_token);
       toast.success(`Switched to ${targetLabel} mode`);
       onSwitched?.();
-      // Client-side navigation, not a hard reload: setSession above has
-      // already updated the in-memory store synchronously, so the new
-      // layout's auth guard sees the correct role on its very first render.
-      // A hard reload (window.location.href) forces the store to rehydrate
-      // from localStorage from scratch, which can lose the race against the
-      // guard's redirect and dead-end back on the login page.
       router.push(targetHref);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not switch modes");
@@ -131,9 +114,6 @@ export function RoleSwitcher({ className = "", onSwitched }: { className?: strin
   };
 
   const handleClick = (e: React.MouseEvent) => {
-    // Prevent this from bubbling into the dropdown's outside-click handling,
-    // which would close (and unmount) this component before the inline
-    // setup dialog below ever gets a chance to render.
     e.stopPropagation();
     if (targetRole === "professional" && !user.has_professional_profile) {
       setSetupOpen(true);

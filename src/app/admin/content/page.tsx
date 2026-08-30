@@ -39,15 +39,8 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-// Slugs the public site actually renders somewhere: most via <CmsPage
-// slug="..."> (see src/components/site/pages/HomePage.tsx), and
-// "client-project-terms" as the terms-and-conditions text shown in the
-// client "Get Started" wizard just before posting (see AuthPages.tsx).
-// Keep this list in sync with that wiring: creating a page with any other
-// slug here would be dead content with no route to show it.
 const KNOWN_PAGE_SLUGS = ["privacy", "terms", "how-it-works", "client-project-terms"] as const;
 
-// ─── Pages tab ────────────────────────────────────────────────────────────
 function PagesTab() {
   const [pages, setPages] = useState<ContentPageOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,7 +142,6 @@ function PagesTab() {
   );
 }
 
-// ─── Blog tab ─────────────────────────────────────────────────────────────
 function BlogTab() {
   const [posts, setPosts] = useState<BlogPostOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -323,7 +315,6 @@ function BlogTab() {
   );
 }
 
-// ─── Highlights tab ───────────────────────────────────────────────────────
 function HighlightsTab() {
   const [highlights, setHighlights] = useState<HighlightOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -493,7 +484,6 @@ function HighlightsTab() {
   );
 }
 
-// ─── FAQ tab ───────────────────────────────────────────────────────────────
 const DEFAULT_FAQ_CATEGORIES = ["General", "For Clients", "For Professionals", "Payments & Escrow"];
 
 function FaqTab() {
@@ -688,7 +678,6 @@ function FaqTab() {
   );
 }
 
-// ─── Categories tab ───────────────────────────────────────────────────────
 function CategoriesTab() {
   const [categories, setCategories] = useState<CategoryOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -787,7 +776,6 @@ function CategoriesTab() {
   );
 }
 
-// ─── Site Content tab (header / footer / homepage structured CMS) ─────────
 const SITE_CONTENT_SECTIONS: { key: SiteContentKey; label: string }[] = [
   { key: "header", label: "Header" },
   { key: "footer", label: "Footer" },
@@ -854,7 +842,7 @@ function HeroImagesEditor({ images, onChange }: { images: string[]; onChange: (i
         <div className="grid grid-cols-3 gap-2">
           {images.map((src, i) => (
             <div key={src + i} className="relative rounded-lg border overflow-hidden group">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {}
               <img src={src} alt="" className="h-20 w-full object-cover" />
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
                 <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="p-1 rounded bg-white/90 disabled:opacity-30"><ChevronUp className="h-3.5 w-3.5" /></button>

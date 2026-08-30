@@ -1,6 +1,3 @@
-// YH Connect - static content and type definitions for the construction
-// industry marketplace (architects, engineers, contractors, MEP, quantity
-// surveyors and related trades).
 
 export type Skill = {
   id: string;
@@ -14,8 +11,6 @@ export type Category = {
   icon: string;
 };
 
-// These ids must match the construction category taxonomy seeded by the
-// FastAPI backend (backend/app/seed.py) so registration/project forms line up.
 export const CATEGORIES: Category[] = [
   { id: "architecture", label: "Architecture", icon: "Building2" },
   { id: "civil-structural-engineering", label: "Civil & Structural Engineering", icon: "HardHat" },

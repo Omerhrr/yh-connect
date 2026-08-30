@@ -29,16 +29,13 @@ from app.services.monnify import MonnifyError, monnify_client
 
 NIN_PATTERN = re.compile(r"^\d{11}$")
 
-
 class NinVerificationError(Exception):
     pass
-
 
 def _names_match(claimed: str, on_file: str | None) -> bool:
     if not on_file:
         return False
     return claimed.strip().casefold() == on_file.strip().casefold()
-
 
 class NinVerificationClient:
     @property
@@ -56,17 +53,12 @@ class NinVerificationClient:
             raise NinVerificationError(str(e))
 
         if record.get("simulated"):
-            # No live Monnify credentials configured: any well-formed
-            # 11-digit NIN is treated as a match so the KYC flow can be
-            # exercised without a live key.
+
             return {"verified": True, "reason": None, "simulated": True}
 
         if not record.get("found"):
             return {"verified": False, "reason": "NIN not found. Please double-check the number.", "simulated": False}
 
-        # Defensive about exact field casing since this hasn't been run
-        # against a live Monnify NIN response yet — try the conventions
-        # their other verification endpoints use.
         on_file_first = record.get("firstName") or record.get("firstname") or record.get("first_name")
         on_file_last = record.get("lastName") or record.get("lastname") or record.get("surname") or record.get("last_name")
 
@@ -77,6 +69,5 @@ class NinVerificationClient:
             "reason": "The name on this NIN doesn't match the name on your account.",
             "simulated": False,
         }
-
 
 nin_verification_client = NinVerificationClient()

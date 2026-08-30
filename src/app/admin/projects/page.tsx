@@ -46,11 +46,9 @@ export default function AdminProjectsPage() {
       })
       .catch(() => toast.error("Could not load projects"))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, q, disputeOnly]);
 
-  useEffect(() => { load(false); }, [status, q, disputeOnly]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(false); }, [status, q, disputeOnly]);
   const applySearch = () => setQ(qDraft);
   const clearSearch = () => { setQDraft(""); setQ(""); };
 

@@ -6,10 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class MilestoneUpdate(Base):
     __tablename__ = "milestone_updates"
@@ -18,7 +16,7 @@ class MilestoneUpdate(Base):
     milestone_id: Mapped[str] = mapped_column(String, ForeignKey("milestones.id"), nullable=False)
     created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    photo_urls: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+    photo_urls: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     milestone: Mapped["Milestone"] = relationship("Milestone", back_populates="updates")

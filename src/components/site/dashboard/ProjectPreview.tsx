@@ -62,7 +62,6 @@ function fmtPostedAgo(d: string) {
   return `${months} month${months === 1 ? "" : "s"} ago`;
 }
 
-// ─── Save (favorite) toggle, styled as a full-width sidebar row ──────────────
 function SaveJobButton({ projectId, saved, onToggle, guard }: { projectId: string; saved: boolean; onToggle: (next: boolean) => void; guard: (action: () => void) => void }) {
   const [busy, setBusy] = useState(false);
 
@@ -89,7 +88,6 @@ function SaveJobButton({ projectId, saved, onToggle, guard }: { projectId: strin
   );
 }
 
-// ─── Copy job link ─────────────────────────────────────────────────────────
 function CopyLinkButton({ projectId }: { projectId: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -113,7 +111,6 @@ function CopyLinkButton({ projectId }: { projectId: string }) {
   );
 }
 
-// ─── Flag as inappropriate ────────────────────────────────────────────────
 function FlagProjectDialog({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const [reason, setReason] = useState(REPORT_REASONS[0]);
   const [details, setDetails] = useState("");
@@ -175,20 +172,15 @@ function FlagProjectDialog({ projectId, onClose }: { projectId: string; onClose:
   );
 }
 
-// ─── Big project images: single hero image, or a slow auto-scrolling marquee
-// when there's more than one so talent can see them all clearly. ────────────
 function ProjectImageMarquee({ images }: { images: string[] }) {
   if (images.length === 1) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
       <a href={images[0]} target="_blank" rel="noopener noreferrer" className="block w-full rounded-xl overflow-hidden border bg-muted">
         <img src={images[0]} alt="Project" className="w-full max-h-[520px] object-cover" />
       </a>
     );
   }
 
-  // Fixed pixel width per slide so the doubled track's translateX(-50%)
-  // lines up exactly on the loop seam, regardless of viewport size.
   const slideWidth = 560;
   const loop = [...images, ...images];
 
@@ -207,7 +199,7 @@ function ProjectImageMarquee({ images }: { images: string[] }) {
             className="block h-[420px] shrink-0 overflow-hidden rounded-xl"
             style={{ width: `${slideWidth}px` }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            {}
             <img src={url} alt="Project" className="h-full w-full object-cover" />
           </a>
         ))}
@@ -216,7 +208,6 @@ function ProjectImageMarquee({ images }: { images: string[] }) {
   );
 }
 
-// ─── About the client trust panel ─────────────────────────────────────────
 function AboutClientPanel({ project }: { project: ProjectOut }) {
   return (
     <div className="rounded-xl border bg-background p-4 space-y-3">
@@ -278,12 +269,6 @@ function AboutClientPanel({ project }: { project: ProjectOut }) {
   );
 }
 
-/**
- * Job detail page for a talent browsing Find Work or reviewing a client
- * invite, before deciding to apply. Two-column layout modeled on how a
- * job listing reads to talent on Upwork: brief + requirements on the left,
- * apply/save/flag/client-trust actions in a sticky sidebar on the right.
- */
 export function ProjectPreview({ projectId }: { projectId: string; backHref?: string }) {
   const router = useRouter();
   const { user } = useAuth();
@@ -329,7 +314,6 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
       .then((favs) => setSaved(favs.some((f) => f.target_type === "project" && f.target_id === projectId)))
       .catch(() => {});
     loadMyRequests();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, user]);
 
   const inspectionRequest = myRequests.find((r) => r.request_type === "inspection");
@@ -365,8 +349,6 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
     }
   };
 
-  // Anonymous visitors and clients can view this page (register-on-intent),
-  // but only logged-in professionals can actually apply, save, or flag.
   const requireProfessional = (action: () => void) => {
     if (!user) {
       router.push(`/talent/register?next=${encodeURIComponent(`/find-work/${projectId}`)}`);
@@ -384,7 +366,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-      {/* Left: job brief */}
+      {}
       <div className="lg:col-span-2 space-y-5">
         <div className="rounded-xl border bg-background p-6 space-y-4">
           <div>
@@ -456,7 +438,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
         </div>
       </div>
 
-      {/* Right: apply / save / flag / client trust sidebar */}
+      {}
       <div className="space-y-4 lg:sticky lg:top-4">
         <div className="rounded-xl border bg-background p-4 space-y-3">
           {project.status === "open" && bidStatus && bidStatus !== "withdrawn" && (

@@ -23,7 +23,6 @@ from app.services.disputes import has_blocking_dispute
 from app.services.notify import notify
 from app.services.platform_settings import get_milestone_auto_release_days
 
-
 def check_project_auto_release(db: Session, project: Project) -> None:
     """Check every eligible milestone on a project and either send a
     reminder or auto-release it. Commits internally per milestone so one bad
@@ -33,7 +32,7 @@ def check_project_auto_release(db: Session, project: Project) -> None:
 
     auto_release_days = get_milestone_auto_release_days(db)
     if auto_release_days <= 0:
-        return  # admin disabled auto-release
+        return
     reminder_days = max(auto_release_days - 2, auto_release_days / 2)
     now = datetime.utcnow()
 
@@ -41,7 +40,7 @@ def check_project_auto_release(db: Session, project: Project) -> None:
         if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.approved):
             continue
         if not milestone.submitted_at:
-            continue  # never auto-release work that was never actually submitted
+            continue
         if has_blocking_dispute(db, project.id, milestone.id):
             continue
 
@@ -71,7 +70,6 @@ def check_project_auto_release(db: Session, project: Project) -> None:
             )
             milestone.auto_release_reminder_sent = True
             db.commit()
-
 
 def release_due_withholds(db: Session, professional_id: str) -> None:
     """Credit any payment-protection holdbacks (see escrow.disburse_milestone)

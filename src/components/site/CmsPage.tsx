@@ -3,12 +3,6 @@
 import { useEffect, useState } from "react";
 import { api, type ContentPageOut } from "@/lib/api";
 
-/**
- * Renders admin-edited CMS content for a static page when it exists,
- * falling back to the given hardcoded JSX otherwise (and while loading, so
- * there's never a blank flash). Once an admin creates/edits a page with a
- * matching slug in /admin/content, this swaps to that content automatically.
- */
 export function CmsPage({ slug, children }: { slug: string; children: React.ReactNode }) {
   const [content, setContent] = useState<ContentPageOut | null>(null);
 
@@ -20,7 +14,6 @@ export function CmsPage({ slug, children }: { slug: string; children: React.Reac
         if (!cancelled) setContent(c);
       })
       .catch(() => {
-        // No CMS override for this slug yet, keep showing the fallback.
       });
     return () => {
       cancelled = true;

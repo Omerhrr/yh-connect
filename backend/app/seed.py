@@ -4,7 +4,7 @@ Run with: python -m app.seed
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models.category import Category
-import app.models  # noqa: F401 ensures all models are registered on Base
+import app.models
 
 CATEGORIES = [
     ("architecture", "Architecture", "Building2", "Building & landscape architects, interior architects"),
@@ -21,7 +21,6 @@ CATEGORIES = [
     ("masonry-carpentry", "Masonry, Carpentry & Skilled Trades", "Hammer", "Masons, carpenters, welders, tilers, painters"),
 ]
 
-
 def run():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
@@ -33,7 +32,6 @@ def run():
         print(f"Seeded {len(CATEGORIES)} construction categories.")
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     run()

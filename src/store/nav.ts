@@ -2,10 +2,6 @@
 
 import { useRouter, usePathname } from "next/navigation";
 
-// Legacy view-key vocabulary, kept so existing call sites
-// (HomePage.tsx, AuthPages.tsx, Footer.tsx, Header.tsx) don't need to change
-// one-by-one. `navigate(view)` now pushes a real Next.js route instead of
-// flipping in-memory state, so browser/gesture back works everywhere.
 export type ViewKey =
   | "home"
   | "how-it-works"
@@ -51,15 +47,6 @@ function pathToView(pathname: string | null): ViewKey {
   return (entry?.[0] as ViewKey) ?? "home";
 }
 
-/**
- * Compatibility shim over Next.js's router. Real navigation/back-button
- * support now comes from actual routes (see docs/platform-hardening-plan.md,
- * Phase 2), this hook just keeps the old `navigate("view-key")` call sites
- * working without a mechanical find-and-replace across every page.
- *
- * `setClientAuth`/`setTalentAuth` are now no-ops: auth state lives in
- * `useAuth` (`user.role`), set once via `setSession` on login.
- */
 export function useNav() {
   const router = useRouter();
   const pathname = usePathname();

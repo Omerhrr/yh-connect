@@ -145,7 +145,6 @@ function AddAdminDialog({ onClose, onAdded }: { onClose: () => void; onAdded: ()
   );
 }
 
-
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUserOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,8 +169,7 @@ export default function AdminUsersPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, []);
   const search = () => { setUsers([]); load(); };
 
   const unsuspend = async (user: AdminUserOut) => {

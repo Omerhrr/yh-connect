@@ -30,8 +30,6 @@ const NUMERIC_KEYS = new Set([
   "payment_withholding_release_days",
 ]);
 
-// Every persisted key this page can write, so Save only ever sends fields
-// the admin can actually see and edit (never a blind full-table write).
 const ALL_KEYS = [
   "platform_fee_percent",
   "milestone_auto_release_days",
@@ -277,8 +275,6 @@ function ReceiptBrandingSection() {
   const preview = async () => {
     setPreviewing(true);
     try {
-      // Preview always reflects what's currently saved (not the unsaved
-      // draft) — save first if you want to preview a change.
       if (dirty) {
         toast.message("Save your changes first to preview them.");
       } else {
@@ -330,7 +326,6 @@ function ReceiptBrandingSection() {
           <label className="text-sm font-medium">Logo</label>
           <div className="flex items-center gap-3">
             {draft.logo_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
               <img src={draft.logo_url} alt="Logo" className="h-12 w-12 rounded-md border object-contain bg-white p-1" />
             ) : (
               <div className="h-12 w-12 rounded-md border border-dashed flex items-center justify-center text-muted-foreground">
@@ -465,7 +460,6 @@ export default function AdminSettingsPage() {
 
   const featuredIds = useMemo(
     () => valueFor("featured_category_ids").split(",").map((s) => s.trim()).filter(Boolean),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [drafts.featured_category_ids, settings]
   );
   const toggleCategory = (id: string) => {
@@ -479,7 +473,6 @@ export default function AdminSettingsPage() {
   const discard = () => setDrafts(Object.fromEntries(settings.map((s) => [s.key, s.value])));
 
   const save = async () => {
-    // Basic sanity checks before anything goes over the wire.
     if (valueFor("platform_fee_percent") !== "" && (isNaN(feeValue) || feeValue < 0 || feeValue > 100)) {
       toast.error("Platform fee must be a number between 0 and 100");
       return;

@@ -7,22 +7,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
 
-
 class DisputeStatus(str, enum.Enum):
-    open = "open"                # just filed, awaiting admin triage
-    under_review = "under_review"  # an admin has picked it up and is actively looking into it
-    escalated = "escalated"      # flagged as higher priority / needs senior review
-    resolved = "resolved"        # admin has made a final call
-    withdrawn = "withdrawn"      # the raiser retracted it
+    open = "open"
+    under_review = "under_review"
+    escalated = "escalated"
+    resolved = "resolved"
+    withdrawn = "withdrawn"
 
-
-# Statuses that still block fund release / new funding on the related milestone.
 BLOCKING_STATUSES = (DisputeStatus.open, DisputeStatus.under_review, DisputeStatus.escalated)
-
 
 class DisputeCategory(str, enum.Enum):
     payment = "payment"
@@ -32,13 +27,11 @@ class DisputeCategory(str, enum.Enum):
     unresponsive = "unresponsive"
     other = "other"
 
-
 class DisputeOutcome(str, enum.Enum):
     refund_client = "refund_client"
     release_professional = "release_professional"
     partial_split = "partial_split"
     no_action = "no_action"
-
 
 class ProposalStatus(str, enum.Enum):
     none = "none"
@@ -46,7 +39,6 @@ class ProposalStatus(str, enum.Enum):
     accepted = "accepted"
     declined = "declined"
     expired = "expired"
-
 
 class Dispute(Base):
     __tablename__ = "disputes"
@@ -57,7 +49,7 @@ class Dispute(Base):
     raised_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     category: Mapped[DisputeCategory] = mapped_column(Enum(DisputeCategory), default=DisputeCategory.other)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    evidence_urls: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+    evidence_urls: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     status: Mapped[DisputeStatus] = mapped_column(Enum(DisputeStatus), default=DisputeStatus.open)
     outcome: Mapped[DisputeOutcome | None] = mapped_column(Enum(DisputeOutcome), nullable=True)
@@ -65,11 +57,6 @@ class Dispute(Base):
     resolved_by: Mapped[str | None] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # First-tier direct resolution: either party can propose a settlement
-    # before this ever reaches an admin, the way Fiverr's Resolution Center
-    # and Upwork's initial claim step work. If the other side doesn't
-    # respond within the window, it auto-accepts, putting time pressure on
-    # an unresponsive party without anyone having to escalate.
     proposal_status: Mapped[ProposalStatus] = mapped_column(Enum(ProposalStatus), default=ProposalStatus.none)
     proposed_outcome: Mapped[DisputeOutcome | None] = mapped_column(Enum(DisputeOutcome), nullable=True)
     proposed_split_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -95,7 +82,6 @@ class Dispute(Base):
             return []
         return [u.strip() for u in self.evidence_urls.split(",") if u.strip()]
 
-
 class DisputeMessage(Base):
     """Threaded back-and-forth on a dispute case: raiser, other party, and admins."""
 
@@ -108,7 +94,6 @@ class DisputeMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     dispute: Mapped["Dispute"] = relationship("Dispute", back_populates="messages")
-
 
 class DisputeEvent(Base):
     """Audit trail of every status change on a dispute, for accountability."""

@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="min-h-screen flex bg-slate-950">
-      {/* Left: brand / security panel, hidden on small screens */}
+      {}
       <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white">
         <div
           className="pointer-events-none absolute inset-0 opacity-40"
@@ -118,7 +118,7 @@ export default function AdminLoginPage() {
         </div>
       </div>
 
-      {/* Right: sign-in form */}
+      {}
       <div className="flex-1 flex items-center justify-center px-4 py-12 bg-slate-950 lg:bg-background">
         <div className="w-full max-w-sm">
           <div className="lg:hidden flex items-center gap-2.5 mb-8 justify-center">

@@ -55,7 +55,6 @@ import { useProjectUnread } from "@/hooks/useProjectUnread";
 import { toast } from "sonner";
 import Link from "next/link";
 
-// ─── Add milestone (client only — funds it before the professional starts work) ─
 function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -107,7 +106,6 @@ function AddMilestoneForm({ projectId, onAdded }: { projectId: string; onAdded: 
   );
 }
 
-// ─── Post progress update (professional) ────────────────────────────────────
 function PostUpdateForm({ milestoneId, onPosted }: { milestoneId: string; onPosted: () => void }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
@@ -165,10 +163,6 @@ function PostUpdateForm({ milestoneId, onPosted }: { milestoneId: string; onPost
   );
 }
 
-// Named, action-oriented milestone states shown instead of raw enum values —
-// tells each party what's true and what happens next in one line, the way
-// Freelancer.com names milestone states explicitly rather than making people
-// infer status from a generic badge.
 function milestoneStatusCopy(m: MilestoneOut, isClient: boolean): { label: string; hint?: string } {
   const daysAgo = (iso: string) => Math.max(Math.floor((Date.now() - new Date(iso).getTime()) / 86400000), 0);
   switch (m.status) {
@@ -461,12 +455,7 @@ function ChangeOrdersSection({
   currentUserId?: string;
   isClient: boolean;
   isProfessional: boolean;
-  /** Whether the project is still in a state where change orders can be
-   * proposed/acted on (i.e. not completed or cancelled). Once closed, this
-   * section becomes a read-only record of what happened. */
   active: boolean;
-  /** Called after an approval that created a milestone, so the parent can
-   * refresh its milestone list without the user having to reload the page. */
   onMilestoneCreated?: () => void;
 }) {
   const [orders, setOrders] = useState<ChangeOrderOut[]>([]);
@@ -478,8 +467,7 @@ function ChangeOrdersSection({
     api.changeOrders(projectId).then(setOrders).catch(() => toast.error("Could not load change orders")).finally(() => setLoading(false));
   };
 
-  useEffect(load, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(load, [projectId]);
   const respond = async (id: string, status: "approved" | "rejected") => {
     setBusyId(id);
     try {
@@ -512,7 +500,6 @@ function ChangeOrdersSection({
       )}
       {orders.map((co) => {
         const proposedByMe = co.proposed_by === currentUserId;
-        // Whoever didn't propose it approves it — mirrors the backend rule.
         const canRespond = !proposedByMe && (isClient || isProfessional);
         return (
         <div key={co.id} className="rounded-lg border bg-background p-3 flex items-start justify-between gap-3">
@@ -549,7 +536,6 @@ function ChangeOrdersSection({
   );
 }
 
-// ─── Invite a professional directly ──────────────────────────────────────────
 function InviteDialog({ projectId, onClose, onInvited }: { projectId: string; onClose: () => void; onInvited: () => void }) {
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<ProfessionalOut[]>([]);
@@ -648,7 +634,6 @@ function InviteDialog({ projectId, onClose, onInvited }: { projectId: string; on
   );
 }
 
-// ─── Bid comparison card ──────────────────────────────────────────────────────
 function BidCard({
   bid,
   onShortlist,
@@ -662,7 +647,7 @@ function BidCard({
   onAccept: () => void;
   onOffer: () => void;
   onMessage: () => void;
-  /** Unread messages in this bidder's thread on the project. */
+
   unread?: number;
 }) {
   return (
@@ -726,7 +711,6 @@ function BidCard({
   );
 }
 
-// ─── Leave a review on completion ────────────────────────────────────────────
 function ReviewForm({ projectId, revieweeId, revieweeName }: { projectId: string; revieweeId: string; revieweeName: string }) {
   const { user } = useAuth();
   const [alreadyReviewed, setAlreadyReviewed] = useState(false);
@@ -787,7 +771,6 @@ function ReviewForm({ projectId, revieweeId, revieweeName }: { projectId: string
   );
 }
 
-// ─── Raise a dispute ──────────────────────────────────────────────────────
 const DISPUTE_CATEGORIES: DisputeCategory[] = ["quality", "non_delivery", "payment", "scope_disagreement", "unresponsive", "other"];
 
 function RaiseDisputeDialog({
@@ -899,7 +882,6 @@ function RaiseDisputeDialog({
   );
 }
 
-// ─── Edit project (client, open projects only) ───────────────────────────────
 function EditProjectDialog({
   project,
   onClose,
@@ -1088,7 +1070,7 @@ function EditProjectDialog({
                 <div className="flex flex-wrap gap-2">
                   {imageUrls.map((url) => (
                     <div key={url} className="relative h-16 w-16 rounded-md overflow-hidden border">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
+
                       <img src={url} alt="" className="h-full w-full object-cover" />
                       <button
                         type="button"
@@ -1161,7 +1143,6 @@ function EditProjectDialog({
   );
 }
 
-// ─── Final-review sign-off (project status: review) ─────────────────────────
 function FinalReviewSection({
   project,
   isClient,
@@ -1321,7 +1302,6 @@ function ApproveInspectionDialog({
   );
 }
 
-// ─── Full project workspace (milestones + bids) ──────────────────────────────
 export function ProjectWorkspace({
   project: initialProject,
   onClose,
@@ -1332,9 +1312,7 @@ export function ProjectWorkspace({
   backHref?: string;
 }) {
   const { user } = useAuth();
-  // Mirror the fetched project into local state so status-affecting actions
-  // (accept bid, move to review, confirm, reopen, closing note) can
-  // refresh it in place instead of leaving the UI stuck on a stale status.
+
   const [project, setProject] = useState(initialProject);
   useEffect(() => { setProject(initialProject); }, [initialProject]);
   const [milestones, setMilestones] = useState<MilestoneOut[]>([]);
@@ -1350,11 +1328,9 @@ export function ProjectWorkspace({
   const [bidsTab, setBidsTab] = useState<"all" | "shortlisted">("all");
   const [editOpen, setEditOpen] = useState(false);
   const [activeThread, setActiveThread] = useState<{ id: string; name: string } | null>(null);
-  // Live unread counts for this project's threads (from the shared hook that
-  // polls /messages/threads, same source as the Messages app).
+
   const { threads, loadUnread } = useProjectUnread();
   const projectThreads = threads.filter((t) => t.project_id === project.id);
-  // other_user_id -> unread, for per-bidder badges on open projects.
   const threadUnread: Record<string, number> = {};
   for (const t of projectThreads) {
     if (t.unread_count > 0) {
@@ -1363,8 +1339,6 @@ export function ProjectWorkspace({
   }
   const projectUnread = Object.values(threadUnread).reduce((a, b) => a + b, 0);
 
-  // If the active thread's counterpart has an approved inspection request
-  // with an address on file, surface it as a map preview inside the chat.
   const activeInspection = activeThread
     ? accessRequests.find((r) => r.professional_id === activeThread.id && r.request_type === "inspection" && r.status === "approved" && r.address)
     : undefined;
@@ -1413,8 +1387,7 @@ export function ProjectWorkspace({
     api.project(project.id).then(setProject).catch(() => {});
   };
 
-  useEffect(() => { load(); }, [project.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, [project.id]);
   const closeProject = async () => {
     if (!confirm("Close this project? It will stop accepting bids and be marked as closed.")) return;
     try {
@@ -1483,8 +1456,6 @@ export function ProjectWorkspace({
   const inEscrowTotal = milestones.filter((m) => ["funded", "submitted", "approved"].includes(m.status)).reduce((s, m) => s + m.amount, 0);
   const upcomingTotal = milestones.filter((m) => ["pending", "in_progress"].includes(m.status)).reduce((s, m) => s + m.amount, 0);
   const projectTotal = paidTotal + inEscrowTotal + upcomingTotal;
-  // Terminal states (paid or refunded via dispute) count as closed, so a
-  // completed project can actually reach 100%.
   const closedCount = milestones.filter((m) => m.status === "paid" || m.status === "refunded").length;
   const progressPct = milestones.length > 0 ? Math.round((closedCount / milestones.length) * 100) : 0;
 
@@ -1497,8 +1468,7 @@ export function ProjectWorkspace({
 
   return (
     <div className="-mx-4 -mt-4 md:-mx-6 md:-mt-6 min-h-full bg-muted/30">
-      {/* Sticky header — sticks within the dashboard's own scroll container,
-          not a full-viewport overlay, so the mobile bottom nav stays usable. */}
+      {}
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b">
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1521,9 +1491,9 @@ export function ProjectWorkspace({
       </div>
 
       <div className="max-w-6xl mx-auto p-4 md:p-6 grid lg:grid-cols-3 gap-6 pb-4">
-        {/* Main column */}
+        {}
         <div className="lg:col-span-2 space-y-6 min-w-0">
-          {/* Overview card */}
+          {}
           <div className="rounded-xl border bg-background p-4 md:p-5">
             <p className="text-sm text-muted-foreground leading-relaxed">{project.description}</p>
             {(project.image_urls?.length > 0 || project.video_url) && (
@@ -1531,7 +1501,6 @@ export function ProjectWorkspace({
                 {project.image_urls?.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-2">
                     {project.image_urls.map((url) => (
-                      // eslint-disable-next-line @next/next/no-img-element
                       <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block h-20 w-20 rounded-lg overflow-hidden border">
                         <img src={url} alt="Project" className="h-full w-full object-cover" />
                       </a>
@@ -1570,9 +1539,7 @@ export function ProjectWorkspace({
                   : project.budget_min === project.budget_max ? "estimated budget" : "project budget range"}
               </span>
             </div>
-            {/* Once someone is hired, the accepted bid — not the posted range
-                above — is the number milestones should sum toward. Surfacing
-                it explicitly avoids ambiguity about which figure governs. */}
+            {}
             {project.contract_amount != null && (
               <div className="flex items-center gap-2 mt-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -1580,10 +1547,7 @@ export function ProjectWorkspace({
                 <span className="text-xs text-muted-foreground">agreed contract amount — milestones should total toward this</span>
               </div>
             )}
-            {/* The system's own answer to "is there money still expected
-                later that hasn't become a milestone yet" — a positive number
-                here isn't missing money, it's the part of the contract not
-                yet broken into a fundable milestone. */}
+            {}
             {project.remaining_unallocated != null && Math.abs(project.remaining_unallocated) > 0.01 && (
               <div className={`flex items-center gap-2 mt-2 rounded-md px-2.5 py-1.5 ${project.remaining_unallocated > 0 ? "bg-amber-50" : "bg-red-50"}`}>
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${project.remaining_unallocated > 0 ? "text-amber-600" : "text-red-600"}`} />
@@ -1596,8 +1560,7 @@ export function ProjectWorkspace({
             )}
           </div>
 
-          {/* Site inspection / start-chat requests from interested professionals,
-              awaiting the client's approval or rejection. */}
+          {}
           {isClient && accessRequests.length > 0 && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">
               <h2 className="font-semibold flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /> Requests ({accessRequests.length})</h2>
@@ -1660,7 +1623,7 @@ export function ProjectWorkspace({
             />
           )}
 
-          {/* Final review: professional closing note + client sign-off */}
+          {}
           {project.status === "review" && (isClient || isProfessional) && (
             <FinalReviewSection
               project={project}
@@ -1670,7 +1633,7 @@ export function ProjectWorkspace({
             />
           )}
 
-          {/* Open project: compare bids, invite directly */}
+          {}
           {isClient && project.status === "open" && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1772,7 +1735,7 @@ export function ProjectWorkspace({
             </div>
           )}
 
-          {/* Messaging with the assigned professional / client */}
+          {}
           {project.status !== "open" && (isClient || isProfessional) && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1813,7 +1776,7 @@ export function ProjectWorkspace({
             </div>
           )}
 
-          {/* Milestones */}
+          {}
           {project.status !== "open" && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -1856,7 +1819,7 @@ export function ProjectWorkspace({
             </div>
           )}
 
-          {/* Change orders */}
+          {}
           {project.status !== "open" && (isClient || isProfessional) && (
             <ChangeOrdersSection
               projectId={project.id}
@@ -1868,7 +1831,7 @@ export function ProjectWorkspace({
             />
           )}
 
-          {/* Review prompt on completion */}
+          {}
           {project.status === "completed" && isClient && project.assigned_professional_id && (
             <ReviewForm projectId={project.id} revieweeId={project.assigned_professional_id} revieweeName="your professional" />
           )}
@@ -1877,7 +1840,7 @@ export function ProjectWorkspace({
           )}
         </div>
 
-        {/* Sidebar */}
+        {}
         <div className="space-y-6 lg:sticky lg:top-24 self-start">
           {project.status !== "open" && milestones.length > 0 && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">

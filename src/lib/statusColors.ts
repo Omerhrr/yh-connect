@@ -1,8 +1,4 @@
-/**
- * Shared status -> badge color token maps, used across client, talent, and
- * admin surfaces so the same status always renders with the same color
- * regardless of which page/component is showing it.
- */
+
 
 export const PROJECT_STATUS_COLORS: Record<string, string> = {
   open: "bg-gray-100 text-gray-600",

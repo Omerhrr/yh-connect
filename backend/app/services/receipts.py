@@ -24,17 +24,14 @@ _FONT_FAMILIES = {
 
 _TYPE_LABELS = {"funding": "Escrow Funding Receipt", "release": "Payout Receipt", "refund": "Refund Receipt"}
 
-
 def _naira(amount: float) -> str:
     return f"₦{amount:,.2f}"
-
 
 def _safe_color(hex_value: str, fallback):
     try:
         return HexColor(hex_value)
     except Exception:
         return fallback
-
 
 def _fetch_logo(logo_url: str | None) -> ImageReader | None:
     if not logo_url:
@@ -44,10 +41,8 @@ def _fetch_logo(logo_url: str | None) -> ImageReader | None:
         resp.raise_for_status()
         return ImageReader(io.BytesIO(resp.content))
     except Exception:
-        # A broken/unreachable logo URL should never break receipt
-        # generation — fall back to text-only branding.
-        return None
 
+        return None
 
 def _receipt_rows(tx: WalletTransaction) -> list[tuple[str, str]]:
     rows = [
@@ -65,14 +60,12 @@ def _receipt_rows(tx: WalletTransaction) -> list[tuple[str, str]]:
         rows.append(("Note", tx.note))
     return rows
 
-
 def _draw_modern(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     width, height = A4
     fonts = _FONT_FAMILIES[cfg["font"]]
     primary = _safe_color(cfg["primary_color"], HexColor("#0f766e"))
     accent = _safe_color(cfg["accent_color"], black)
 
-    # Full-width colored header band with logo + company name in white.
     band_h = 42 * mm
     c.setFillColor(primary)
     c.rect(0, height - band_h, width, band_h, stroke=0, fill=1)
@@ -95,7 +88,6 @@ def _draw_modern(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     c.setFont(fonts["bold"], 12)
     c.drawRightString(width - x, height - 24 * mm, title)
 
-    # Amount card, prominent, just below the header band.
     y = height - band_h - 16 * mm
     c.setFillColor(accent)
     c.setFont(fonts["regular"], 9)
@@ -125,7 +117,6 @@ def _draw_modern(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     c.setFont(fonts["italic"], 8)
     c.setFillColor(HexColor("#6b7280"))
     c.drawString(x, y, cfg["footer_note"])
-
 
 def _draw_classic(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     width, height = A4
@@ -179,7 +170,6 @@ def _draw_classic(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     c.setFillColor(HexColor("#6b7280"))
     c.drawString(x, y, cfg["footer_note"])
 
-
 def _draw_minimal(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     width, height = A4
     fonts = _FONT_FAMILIES[cfg["font"]]
@@ -232,9 +222,7 @@ def _draw_minimal(c: canvas.Canvas, tx: WalletTransaction, cfg: dict) -> None:
     c.setFillColor(HexColor("#9ca3af"))
     c.drawString(x, y, cfg["footer_note"])
 
-
 _TEMPLATES = {"modern": _draw_modern, "classic": _draw_classic, "minimal": _draw_minimal}
-
 
 def build_transaction_receipt_pdf(tx: WalletTransaction, receipt_settings: dict | None = None) -> bytes:
     from app.schemas.receipt import ReceiptSettingsOut

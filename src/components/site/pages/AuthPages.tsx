@@ -31,7 +31,6 @@ import { SKILLS, CATEGORIES } from "@/data/content";
 import { inferCategoryId } from "@/lib/categoryInference";
 import { toast } from "sonner";
 
-// ─── Shared helpers ──────────────────────────────────────────────────────────
 function PasswordInput({
   id,
   label,
@@ -153,7 +152,6 @@ function AuthLogo() {
   );
 }
 
-// ─── Client Login ────────────────────────────────────────────────────────────
 export function ClientLoginPage() {
   const { navigate, setClientAuth } = useNav();
   const { setSession } = useAuth();
@@ -172,19 +170,12 @@ export function ClientLoginPage() {
     try {
       const res = await api.login(email, password);
       if (res.user.role !== "client") {
-        // The account is in talent mode. Switch it seamlessly instead of
-        // dead-ending: both sides of the account coexist, switching just
-        // flips which dashboard applies, with no logout or re-login.
         setSession(res.user, res.access_token);
         try {
           const switched = await api.switchRole("client");
           setSession(switched.user, switched.access_token);
           setClientAuth(true);
           toast.success("Switched to client mode", { description: "You are now logged in as a client." });
-          // Client-side navigation: setSession above already updated the
-          // store synchronously, a hard reload would force it to rehydrate
-          // from localStorage from scratch and can lose that race, dead-
-          // ending back on this login page instead of the dashboard.
           router.push("/client/dashboard");
         } catch (switchErr) {
           toast.error(switchErr instanceof ApiError ? switchErr.message : "Could not switch this account to client mode.");
@@ -256,11 +247,7 @@ export function ClientLoginPage() {
   );
 }
 
-// ─── Client Register (3 steps) ───────────────────────────────────────────────
 const CLIENT_STEPS = ["What you need", "Project", "Budget", "Skills", "Name", "Email", "Password", "Terms"];
-
-// Category inference from free-text descriptions lives in
-// src/lib/categoryInference.ts (shared with the dashboard Post Project wizard).
 
 export function ClientRegisterPage() {
   const { navigate, setClientAuth } = useNav();
@@ -272,36 +259,27 @@ export function ClientRegisterPage() {
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
 
-  // Step 0: what they want, described in their own words
-  // Prefilled from the homepage search bar (?need=...), when present.
   const [needText, setNeedText] = useState(searchParams.get("need") || "");
   const inferredCategoryId = inferCategoryId(needText);
   const inferredCategoryLabel = CATEGORIES.find((c) => c.id === inferredCategoryId)?.label ?? "General Contracting & Building";
 
-  // Step 1: project title + location
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
 
-  // Step 2: budget
   const [budget, setBudget] = useState("");
 
-  // Step 3: skills required (pick from suggestions or add your own)
   const [skills, setSkills] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
 
-  // Step 4: name
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
-  // Step 5: email
   const [email, setEmail] = useState("");
 
-  // Step 6: password
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreed, setAgreed] = useState(false);
 
-  // Step 7: project posting terms (admin-configurable), shown just before posting
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
 
@@ -374,8 +352,6 @@ export function ClientRegisterPage() {
         toast.success("Account created!", { description: "We couldn't auto-post your project, you can post it from your dashboard." });
       }
 
-      // Land them on the new project so the first thing they see is where
-      // bids will arrive, rather than a generic overview.
       if (next) {
         router.push(next);
       } else if (createdProjectId) {
@@ -397,8 +373,6 @@ export function ClientRegisterPage() {
     setCustomSkill("");
   };
 
-  // Rank the skill suggestions so ones likely related to the inferred
-  // category surface first, keeping the full list as fallback.
   const suggestedSkills = [...SKILLS].sort((a, b) => {
     const catWord = inferredCategoryId.split("-")[0];
     const relevance = (s: (typeof SKILLS)[number]) =>
@@ -424,7 +398,7 @@ export function ClientRegisterPage() {
 
         <form onSubmit={step === CLIENT_STEPS.length - 1 ? handleSubmit : (e) => e.preventDefault()}>
           <div key={step} className={animationClass}>
-            {/* Step 0: What you need, in their own words */}
+
             {step === 0 && (
               <div>
                 <ChatBubble>Hi there! Let's get your project posted. In your own words, what do you need help with?</ChatBubble>
@@ -447,7 +421,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 1: Project title + location */}
+
             {step === 1 && (
               <div>
                 <ChatBubble>Good choice. What should we call this project, and where's it based?</ChatBubble>
@@ -464,7 +438,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 2: Budget */}
+            {}
             {step === 2 && (
               <div>
                 <ChatBubble>What's your estimated budget for this? A rough figure is fine, you can refine it later.</ChatBubble>
@@ -478,7 +452,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 3: Skills required */}
+
             {step === 3 && (
               <div>
                 <ChatBubble>What skills should they bring to the table? Tap the ones you need, or add your own.</ChatBubble>
@@ -529,7 +503,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 4: Name */}
+
             {step === 4 && (
               <div>
                 <ChatBubble>Almost there. Who am I speaking with?</ChatBubble>
@@ -549,7 +523,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 5: Email */}
+
             {step === 5 && (
               <div>
                 <ChatBubble>
@@ -565,7 +539,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 6: Password */}
+
             {step === 6 && (
               <div>
                 <ChatBubble>Last step, set a password to secure your account. We'll create it and post your project right after.</ChatBubble>
@@ -585,7 +559,7 @@ export function ClientRegisterPage() {
               </div>
             )}
 
-            {/* Step 7: Project posting terms */}
+
             {step === 7 && (
               <div>
                 <ChatBubble>One last thing, please review and accept our project posting terms.</ChatBubble>
@@ -605,7 +579,7 @@ export function ClientRegisterPage() {
             )}
           </div>
 
-          {/* Nav buttons */}
+
           <div className="mt-8 flex gap-3">
             {step > 0 && (
               <Button type="button" variant="outline" onClick={goBack}>
@@ -634,7 +608,6 @@ export function ClientRegisterPage() {
   );
 }
 
-// ─── Talent Login ────────────────────────────────────────────────────────────
 export function TalentLoginPage() {
   const { navigate, setTalentAuth } = useNav();
   const { setSession } = useAuth();
@@ -650,16 +623,14 @@ export function TalentLoginPage() {
     try {
       const res = await api.login(email, password);
       if (res.user.role !== "professional") {
-        // The account is in client mode. Switch it seamlessly instead of
-        // dead-ending (a client without a talent profile gets the backend's
-        // clear "set up your professional profile first" message).
+
         setSession(res.user, res.access_token);
         try {
           const switched = await api.switchRole("professional");
           setSession(switched.user, switched.access_token);
           setTalentAuth(true);
           toast.success("Switched to talent mode", { description: "You are now logged in as a professional." });
-          // Client-side navigation, see the comment in ClientLoginPage above.
+
           router.push("/talent/dashboard");
         } catch (switchErr) {
           toast.error(switchErr instanceof ApiError ? switchErr.message : "Could not switch this account to talent mode.");
@@ -719,7 +690,6 @@ export function TalentLoginPage() {
   );
 }
 
-// ─── Talent Register (3 steps) ───────────────────────────────────────────────
 const TALENT_STEPS = ["Account", "Profile", "Skills & Rates", "Verification"];
 
 export function TalentRegisterPage() {
@@ -728,28 +698,24 @@ export function TalentRegisterPage() {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  // Step 0
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Step 1
   const [title, setTitle] = useState("");
   const [specialization, setSpecialization] = useState("");
   const [bio, setBio] = useState("");
   const [location, setLocation] = useState("");
   const [phone, setPhone] = useState("");
 
-  // Step 2
   const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
   const [hourlyRate, setHourlyRate] = useState("");
   const [availability, setAvailability] = useState<"full-time" | "part-time" | "weekends">("full-time");
   const [experience, setExperience] = useState("");
   const [agreed, setAgreed] = useState(false);
 
-  // Step 3 (optional): identity verification for the tier 2 upgrade.
   const [nin, setNin] = useState("");
   const [dob, setDob] = useState("");
   const [idDocFile, setIdDocFile] = useState<File | null>(null);
@@ -806,9 +772,6 @@ export function TalentRegisterPage() {
       setSession(res.user, res.access_token);
       setTalentAuth(true);
 
-      // Kick off the tier 2 verification right from the signup flow, using
-      // the same NIN + ID-document submission as the settings page. Failures
-      // here never block account creation, they can redo it from Settings.
       let verifiedNow = false;
       if (nin.trim()) {
         try {
@@ -816,7 +779,7 @@ export function TalentRegisterPage() {
           const kyc = await api.submitProfessionalKyc({ nin: nin.trim(), dob, document_url });
           verifiedNow = kyc.kyc_status === "verified";
         } catch {
-          // Non-blocking: the verification tab in Settings covers this.
+
         }
       }
 
@@ -848,7 +811,7 @@ export function TalentRegisterPage() {
         <StepIndicator steps={TALENT_STEPS} current={step} />
 
         <form onSubmit={handleSubmit}>
-          {/* Step 0: Account */}
+
           {step === 0 && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -876,7 +839,7 @@ export function TalentRegisterPage() {
             </div>
           )}
 
-          {/* Step 1: Profile */}
+
           {step === 1 && (
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -919,7 +882,7 @@ export function TalentRegisterPage() {
             </div>
           )}
 
-          {/* Step 2: Skills & Rates */}
+
           {step === 2 && (
             <div className="space-y-5">
               <div className="space-y-2">
@@ -993,7 +956,7 @@ export function TalentRegisterPage() {
             </div>
           )}
 
-          {/* Step 3 (optional): Identity verification for tier 2 */}
+
           {step === 3 && (
             <div className="space-y-4">
               <div className="rounded-lg bg-emerald-50 text-emerald-800 p-3 text-xs flex items-start gap-2">
@@ -1043,7 +1006,6 @@ export function TalentRegisterPage() {
             </div>
           )}
 
-          {/* Nav buttons */}
           <div className="mt-8 flex gap-3">
             {step > 0 && (
               <Button type="button" variant="outline" onClick={() => setStep((s) => s - 1)}>
@@ -1072,7 +1034,6 @@ export function TalentRegisterPage() {
   );
 }
 
-// --- Forgot Password ---------------------------------------------------------
 export function ForgotPasswordPage() {
   const { navigate } = useNav();
   const [email, setEmail] = useState("");
@@ -1125,7 +1086,6 @@ export function ForgotPasswordPage() {
   );
 }
 
-// --- Reset Password ------------------------------------------------------------
 export function ResetPasswordPage() {
   const { navigate } = useNav();
   const searchParams = useSearchParams();
@@ -1174,7 +1134,6 @@ export function ResetPasswordPage() {
   );
 }
 
-// --- Verify Email ---------------------------------------------------------------
 export function VerifyEmailPage() {
   const { navigate } = useNav();
   const searchParams = useSearchParams();

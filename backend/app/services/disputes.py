@@ -8,13 +8,11 @@ from app.models.notification import NotificationType
 from app.models.user import User, UserRole
 from app.schemas.dispute import DisputeDetailOut, DisputeEventOut, DisputeMessageOut, DisputeOut
 
-
 def _user_name(db: Session, user_id: str | None) -> str | None:
     if not user_id:
         return None
     u = db.get(User, user_id)
     return f"{u.first_name} {u.last_name}" if u else None
-
 
 def build_dispute_out(d: Dispute, db: Session) -> DisputeOut:
     out = DisputeOut(
@@ -44,7 +42,6 @@ def build_dispute_out(d: Dispute, db: Session) -> DisputeOut:
 
     return out
 
-
 def build_dispute_detail_out(d: Dispute, db: Session) -> DisputeDetailOut:
     base = build_dispute_out(d, db)
     messages = []
@@ -68,7 +65,6 @@ def build_dispute_detail_out(d: Dispute, db: Session) -> DisputeDetailOut:
         )
     return DisputeDetailOut(**base.model_dump(), messages=messages, events=events)
 
-
 def has_blocking_dispute(db: Session, project_id: str, milestone_id: str | None) -> bool:
     """True if there's an unresolved dispute that should freeze fund movement.
 
@@ -85,7 +81,6 @@ def has_blocking_dispute(db: Session, project_id: str, milestone_id: str | None)
         if d.milestone_id is None or d.milestone_id == milestone_id:
             return True
     return False
-
 
 def has_any_blocking_dispute(db: Session, project_id: str) -> bool:
     """True if there's an unresolved dispute anywhere on the project,
@@ -104,10 +99,8 @@ def has_any_blocking_dispute(db: Session, project_id: str) -> bool:
         is not None
     )
 
-
 class DisputeOutcomeError(Exception):
     pass
-
 
 def apply_dispute_outcome(db: Session, dispute: Dispute, outcome, split_amount: float | None, actor_id: str, source: str) -> str | None:
     """Move real money for a dispute outcome, shared between an admin's
@@ -141,7 +134,6 @@ def apply_dispute_outcome(db: Session, dispute: Dispute, outcome, split_amount: 
         raise DisputeOutcomeError(str(e))
     return None
 
-
 def check_and_expire_proposals(db: Session, disputes: list[Dispute]) -> None:
     """Lazy auto-accept for direct-resolution proposals whose response
     window has passed — same "no scheduler, check on load" pattern as
@@ -158,9 +150,7 @@ def check_and_expire_proposals(db: Session, disputes: list[Dispute]) -> None:
         try:
             fund_note = apply_dispute_outcome(db, d, d.proposed_outcome.value if d.proposed_outcome else None, d.proposed_split_amount, d.proposed_by, source="auto-accepted proposal")
         except DisputeOutcomeError:
-            # Can't safely settle automatically (e.g. milestone state moved
-            # under it) — leave it pending for a human to sort out rather
-            # than silently expiring.
+
             continue
         d.proposal_status = ProposalStatus.accepted
         d.status = DisputeStatus.resolved

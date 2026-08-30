@@ -20,15 +20,11 @@ from app.schemas.profile_extras import (
 
 router = APIRouter(prefix="/professionals/me", tags=["professionals"])
 
-
 def _my_profile(current_user: User, db: Session) -> ProfessionalProfile:
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
-
-
-# ─── Employment history ─────────────────────────────────────────────────────
 
 @router.post("/employment", response_model=EmploymentHistoryOut, status_code=201)
 def add_employment(
@@ -43,7 +39,6 @@ def add_employment(
     db.refresh(item)
     return item
 
-
 @router.delete("/employment/{item_id}", status_code=204)
 def delete_employment(
     item_id: str,
@@ -55,9 +50,6 @@ def delete_employment(
         raise HTTPException(status_code=404, detail="Not found")
     db.delete(item)
     db.commit()
-
-
-# ─── Education ───────────────────────────────────────────────────────────────
 
 @router.post("/education", response_model=EducationOut, status_code=201)
 def add_education(
@@ -72,7 +64,6 @@ def add_education(
     db.refresh(item)
     return item
 
-
 @router.delete("/education/{item_id}", status_code=204)
 def delete_education(
     item_id: str,
@@ -85,9 +76,6 @@ def delete_education(
     db.delete(item)
     db.commit()
 
-
-# ─── Certifications ──────────────────────────────────────────────────────────
-
 @router.post("/certifications", response_model=CertificationOut, status_code=201)
 def add_certification(
     payload: CertificationCreate,
@@ -95,15 +83,12 @@ def add_certification(
     db: Session = Depends(get_db),
 ):
     profile = _my_profile(current_user, db)
-    # Submitting a certification is a request for review, it renders as a
-    # badge on the public profile only once admin-approved (see
-    # app/api/v1/verification.py: review_certification).
+
     item = Certification(profile_id=profile.id, verification_status="pending", **payload.model_dump())
     db.add(item)
     db.commit()
     db.refresh(item)
     return item
-
 
 @router.delete("/certifications/{item_id}", status_code=204)
 def delete_certification(

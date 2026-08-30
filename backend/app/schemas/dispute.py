@@ -5,17 +5,14 @@ from pydantic import BaseModel
 
 from app.models.dispute import DisputeCategory, DisputeOutcome, DisputeStatus, ProposalStatus
 
-
 class ProposeResolution(BaseModel):
     outcome: DisputeOutcome
     split_professional_amount: Optional[float] = None
     note: Optional[str] = None
 
-
 class RespondProposal(BaseModel):
     accept: bool
     note: Optional[str] = None
-
 
 class DisputeCreate(BaseModel):
     project_id: str
@@ -24,23 +21,15 @@ class DisputeCreate(BaseModel):
     reason: str
     evidence_urls: list[str] = []
 
-
 class DisputeMessageCreate(BaseModel):
     body: str
-
 
 class DisputeResolve(BaseModel):
     status: DisputeStatus
     outcome: Optional[DisputeOutcome] = None
     resolution_note: Optional[str] = None
-    # Required when outcome == "partial_split": how much of the milestone
-    # amount (before platform fee) goes to the professional, the rest is
-    # refunded to the client. Without this, "partial split" was previously
-    # decorative, it recorded an outcome but never actually moved money,
-    # letting the professional still claim the full amount via the normal
-    # release endpoint afterward.
-    split_professional_amount: Optional[float] = None
 
+    split_professional_amount: Optional[float] = None
 
 class DisputeMessageOut(BaseModel):
     id: str
@@ -53,7 +42,6 @@ class DisputeMessageOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class DisputeEventOut(BaseModel):
     id: str
     actor_id: Optional[str] = None
@@ -65,7 +53,6 @@ class DisputeEventOut(BaseModel):
 
     class Config:
         from_attributes = True
-
 
 class DisputeOut(BaseModel):
     id: str
@@ -88,7 +75,7 @@ class DisputeOut(BaseModel):
     resolved_by_name: Optional[str] = None
     resolved_at: Optional[datetime] = None
     message_count: int = 0
-    # First-tier direct resolution, before this ever needs admin mediation.
+
     proposal_status: ProposalStatus = ProposalStatus.none
     proposed_outcome: Optional[DisputeOutcome] = None
     proposed_split_amount: Optional[float] = None
@@ -101,7 +88,6 @@ class DisputeOut(BaseModel):
 
     class Config:
         from_attributes = True
-
 
 class DisputeDetailOut(DisputeOut):
     messages: list[DisputeMessageOut] = []

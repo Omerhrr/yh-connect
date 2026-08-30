@@ -7,15 +7,12 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
 
-
 class FavoriteTargetType(str, enum.Enum):
-    professional = "professional"  # target_id = User.id of the professional
-    project = "project"  # target_id = Project.id
-
+    professional = "professional"
+    project = "project"
 
 class Favorite(Base):
     __tablename__ = "favorites"

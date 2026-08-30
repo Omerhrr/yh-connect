@@ -108,7 +108,6 @@ import { ReviewCard } from "@/components/site/shared/ReviewCard";
 import { ProfessionalProfileView, StatsBar, WorkHistoryFeed } from "@/components/site/pages/ProfessionalProfileView";
 import { TierTag, CertificationBadges } from "@/components/site/shared/TalentTier";
 
-// ─── Unread message count chip for project cards/lists ────────────────────────
 function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
@@ -121,7 +120,6 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-// ─── Loading skeleton for card/list panels ────────────────────────────────────
 export function ListSkeleton({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-3">
@@ -139,7 +137,6 @@ export function ListSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
-// ─── Empty state with icon + optional CTA ──────────────────────────────────────
 export function EmptyState({
   icon: Icon = Inbox,
   title,
@@ -163,7 +160,6 @@ export function EmptyState({
   );
 }
 
-// ─── Favorite (save) toggle button ────────────────────────────────────────────
 export function FavoriteButton({
   targetType,
   targetId,
@@ -213,7 +209,6 @@ export function FavoriteButton({
   );
 }
 
-// ─── Wallet transaction receipt download ──────────────────────────────────────
 function ReceiptDownloadButton({ transactionId }: { transactionId: string }) {
   const [downloading, setDownloading] = useState(false);
 
@@ -242,7 +237,6 @@ function ReceiptDownloadButton({ transactionId }: { transactionId: string }) {
   );
 }
 
-// ─── Stat card ───────────────────────────────────────────────────────────────
 function StatCard({ label, value, icon: Icon, change, color = "primary" }: {
   label: string;
   value: string;
@@ -276,7 +270,6 @@ function StatCard({ label, value, icon: Icon, change, color = "primary" }: {
   );
 }
 
-// ─── Shared messaging panel (thread list + chat via ProjectChat) ───────────
 function formatThreadTime(iso: string) {
   const d = new Date(iso);
   const now = new Date();
@@ -297,9 +290,6 @@ function MessagesPanel() {
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const rolePath = user?.role === "professional" ? "talent" : "client";
 
-  // Deep-link support: the project workspace's "Open in Messages" links here
-  // with ?project=&user=&name=&title= so the same conversation is preselected
-  // (and, when no messages exist yet, a placeholder thread is opened anyway).
   const deepLinkRef = useRef<{ projectId: string; otherUserId: string } | null>(null);
 
   useEffect(() => {
@@ -317,7 +307,6 @@ function MessagesPanel() {
       last_message_at: new Date().toISOString(),
       unread_count: 0,
     });
-    // One-shot deep link: strip the params so a later reload lands on normal state.
     window.history.replaceState(null, "", window.location.pathname);
   }, []);
 
@@ -326,8 +315,6 @@ function MessagesPanel() {
       .messageThreads()
       .then((list) => {
         setThreads(list);
-        // If the deep-linked thread exists among real conversations, prefer it
-        // so the title, name and unread count are accurate.
         const dl = deepLinkRef.current;
         if (dl) {
           const match = list.find((t) => t.project_id === dl.projectId && t.other_user_id === dl.otherUserId);
@@ -358,7 +345,7 @@ function MessagesPanel() {
 
   return (
     <div className="grid md:grid-cols-[300px_1fr] gap-4 h-[calc(100vh-220px)] min-h-[420px]">
-      {/* Conversation list — full width on mobile until a thread is opened */}
+      {}
       <div className={`rounded-xl border bg-background flex flex-col min-h-0 overflow-hidden ${active ? "hidden md:flex" : "flex"}`}>
         <div className="p-2 border-b space-y-2 shrink-0">
           <div className="relative">
@@ -444,7 +431,7 @@ function MessagesPanel() {
           })}
         </div>
       </div>
-      {/* Conversation — takes over on mobile when a thread is open */}
+      {}
       <div className={`flex flex-col min-w-0 overflow-hidden ${active ? "flex" : "hidden md:flex"}`}>
         {!active ? (
           <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground rounded-xl border bg-background">Select a conversation</div>
@@ -465,7 +452,6 @@ function MessagesPanel() {
   );
 }
 
-// ─── Shared bid-status display (used wherever a talent can Apply) ──────────
 const BID_STATUS_LABELS: Record<BidStatus, string> = {
   pending: "Applied",
   shortlisted: "Shortlisted",
@@ -475,7 +461,6 @@ const BID_STATUS_LABELS: Record<BidStatus, string> = {
   withdrawn: "Withdrawn",
 };
 
-// ─── Shared "My Disputes" panel (both parties; admin resolves) ──────────────
 export const DISPUTE_STATUS_LABELS: Record<string, string> = {
   open: "Open",
   under_review: "Under review",
@@ -533,7 +518,6 @@ export function MyDisputesPanel() {
   );
 }
 
-// ─── Dispute case detail (shared by client + talent) ─────────────────────────
 export function DisputeCaseView({ disputeId, backHref }: { disputeId: string; backHref: string }) {
   const { user } = useAuth();
   const [dispute, setDispute] = useState<DisputeDetailOut | null>(null);
@@ -551,8 +535,7 @@ export function DisputeCaseView({ disputeId, backHref }: { disputeId: string; ba
   const load = () => {
     api.disputeDetail(disputeId).then(setDispute).catch(() => toast.error("Could not load this dispute")).finally(() => setLoading(false));
   };
-  useEffect(load, [disputeId]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(load, [disputeId]);
   const isRaiser = dispute?.raised_by === user?.id;
   const isClosed = dispute?.status === "resolved" || dispute?.status === "withdrawn";
   const canWithdraw = isRaiser && (dispute?.status === "open" || dispute?.status === "under_review");
@@ -654,7 +637,7 @@ export function DisputeCaseView({ disputeId, backHref }: { disputeId: string; ba
           <div className="flex flex-wrap gap-2">
             {dispute.evidence_urls.map((url) => (
               <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {}
                 <img src={url} alt="Evidence" className="h-16 w-16 rounded-lg object-cover border hover:opacity-80 transition-opacity" />
               </a>
             ))}
@@ -770,9 +753,6 @@ export function DisputeCaseView({ disputeId, backHref }: { disputeId: string; ba
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// CLIENT DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════════
 const STATUS_COLORS = PROJECT_STATUS_COLORS;
 
 const POST_PROJECT_STEPS = ["What you need", "Project details", "Budget", "Skills", "Review & post"];
@@ -780,8 +760,6 @@ const POST_PROJECT_STEPS = ["What you need", "Project details", "Budget", "Skill
 const DEFAULT_PROJECT_TERMS =
   "By posting a project, you confirm the details you've provided are accurate, you intend to genuinely hire for this work, and you agree to fund and pay professionals through YH Connect's escrow system for any work you approve.";
 
-// Draft persistence: everything the wizard needs to resume mid-way lives in
-// localStorage, so closing the dialog (or the browser) never loses progress.
 const POST_DRAFT_KEY = "yh-connect.post-project.draft";
 
 type PostProjectDraft = {
@@ -830,53 +808,36 @@ function isEmptyPostDraft(d: PostProjectDraft): boolean {
   return !d.needText && !d.title && !d.budgetAmount && !d.hourlyMin && !d.hourlyMax && !d.location && d.skills.length === 0;
 }
 
-/**
- * Guided "Post a Project" wizard. Broken into short steps so clients describe
- * their project in their own words, confirm the details, set a budget, pick
- * skills, then review everything before posting (mirroring the onboarding
- * wizard's conversational flow).
- */
 export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<"forward" | "back">("forward");
 
-  // Step 0: what they need, described in their own words.
   const [needText, setNeedText] = useState("");
-  // Step 1: title, location, and the category (auto-inferred from the
-  // description unless the client picks one manually).
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categoryTouched, setCategoryTouched] = useState(false);
-  // Step 2: budget. Fixed projects get a single estimate; hourly projects a rate range.
   const [budgetType, setBudgetType] = useState<"fixed" | "hourly">("fixed");
   const [budgetAmount, setBudgetAmount] = useState("");
   const [hourlyMin, setHourlyMin] = useState("");
   const [hourlyMax, setHourlyMax] = useState("");
-  // Step 3: skills (tap suggestions or add your own).
   const [skills, setSkills] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
   const [timeline, setTimeline] = useState("");
-  // Step 4: review + project posting terms.
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
-  // Optional media, gated by admin settings (images on by default, video off).
   const [mediaSettings, setMediaSettings] = useState<ProjectMediaSettingsOut | null>(null);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const [videoUrl, setVideoUrl] = useState("");
   const [uploadingVideo, setUploadingVideo] = useState(false);
-  // Budget "I don't know yet" — posts budget 0/0, talent sees "Budget Not Set".
   const [budgetUnknown, setBudgetUnknown] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [restoredDraft, setRestoredDraft] = useState(false);
 
-  // On open: restore the saved draft if one exists (so a client who closed
-  // mid-way picks up exactly where they left off), otherwise start blank.
-  // Either way, pull the admin-configurable posting terms.
   useEffect(() => {
     if (!open) return;
     const draft = loadPostDraft();
@@ -926,16 +887,12 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       .catch(() => setMediaSettings(null));
   }, [open]);
 
-  // Persist the draft as the client types AND broadcast to other tabs via
-  // BroadcastChannel so a second tab picks up the same draft in real time.
   const draftChannelRef = useRef<BroadcastChannel | null>(null);
   useEffect(() => {
     draftChannelRef.current = new BroadcastChannel("yh-connect.post-project");
     return () => { draftChannelRef.current?.close(); draftChannelRef.current = null; };
   }, []);
 
-  // Listen for draft changes from other tabs (so opening tab B while tab A
-  // has a draft picks it up without a page reload).
   useEffect(() => {
     const ch = draftChannelRef.current;
     if (!ch) return;
@@ -984,9 +941,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     } else {
       localStorage.setItem(POST_DRAFT_KEY, JSON.stringify(draft));
     }
-    // Broadcast to other tabs so they pick up the latest draft in real time.
     draftChannelRef.current?.postMessage(draft);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, step, needText, title, location, categoryId, categoryTouched, budgetType, budgetAmount, hourlyMin, hourlyMax, skills, timeline, termsAgreed]);
 
   const inferredCategoryId = inferCategoryId(needText);
@@ -996,7 +951,6 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
 
   const onNeedChange = (text: string) => {
     setNeedText(text);
-    // Follow the live inference until the client picks a category by hand.
     if (!categoryTouched) setCategoryId(inferCategoryId(text));
   };
 
@@ -1007,7 +961,6 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     setCustomSkill("");
   };
 
-  // Rank skill suggestions so ones tied to the inferred category surface first.
   const suggestedSkills = [...SKILLS].sort((a, b) => {
     const catWord = inferredCategoryId.split("-")[0];
     const relevance = (s: (typeof SKILLS)[number]) =>
@@ -1095,7 +1048,6 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
 
   if (!open) return null;
 
-  // Success screen: stay in the dialog and let the client decide where to go next.
   if (createdId) {
     return (
       <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
@@ -1174,7 +1126,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
           </button>
         </div>
 
-        {/* Step progress */}
+
         <div className="my-5">
           <div className="flex items-center gap-1.5">
             {POST_PROJECT_STEPS.map((_, i) => (
@@ -1197,7 +1149,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
 
         <form onSubmit={step === POST_PROJECT_STEPS.length - 1 ? handleSubmit : (e) => e.preventDefault()}>
           <div key={step} className={animationClass}>
-            {/* Step 0: What you need */}
+
             {step === 0 && (
               <div className="space-y-1.5">
                 <label className="text-sm font-medium" htmlFor="pp-need">Describe the work you need *</label>
@@ -1217,7 +1169,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
               </div>
             )}
 
-            {/* Step 1: Project details */}
+            {}
             {step === 1 && (
               <div className="space-y-4">
                 <div className="space-y-1.5">
@@ -1246,7 +1198,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
               </div>
             )}
 
-            {/* Step 2: Budget */}
+            {}
             {step === 2 && (
               <div className="space-y-4">
                 <label className="flex items-start gap-2 cursor-pointer rounded-lg border p-3">
@@ -1300,7 +1252,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
               </div>
             )}
 
-            {/* Step 3: Skills */}
+
             {step === 3 && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">Tap the skills your professional should have, or add your own.</p>
@@ -1364,7 +1316,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                         <div className="flex flex-wrap gap-2">
                           {imageUrls.map((url) => (
                             <div key={url} className="relative h-16 w-16 rounded-md overflow-hidden border">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
+
                               <img src={url} alt="" className="h-full w-full object-cover" />
                               <button
                                 type="button"
@@ -1432,7 +1384,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
               </div>
             )}
 
-            {/* Step 4: Review & post */}
+
             {step === 4 && (
               <div className="space-y-4">
                 <div className="rounded-xl border divide-y text-sm">
@@ -1464,7 +1416,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
             )}
           </div>
 
-          {/* Nav buttons */}
+
           <div className="mt-7 flex gap-3">
             {step > 0 && (
               <Button type="button" variant="outline" onClick={goBack}>
@@ -1509,12 +1461,10 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
   const reviewCount = projects.filter((p) => p.status === "review").length;
   const openProjects = projects.filter((p) => p.status === "open");
   const bidsWaiting = openProjects.reduce((sum, p) => sum + p.bid_count, 0);
-  // Nothing is actually committed until funds hit escrow; this is the
-  // combined budget range the client has advertised across their projects.
+
   const totalBudget = projects.reduce((sum, p) => sum + p.budget_max, 0);
   const totalBids = projects.reduce((sum, p) => sum + p.bid_count, 0);
 
-  // ─── Account readiness / "hire with confidence" checklist ───────────────────
   const checklist = [
     { key: "email", label: "Verify your email address", done: !!user?.email_verified, href: "/client/dashboard/settings" },
     { key: "kyc", label: "Verify your identity", done: user?.kyc_status === "verified", href: "/client/dashboard/settings?tab=verification" },
@@ -1524,7 +1474,6 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
   ] as const;
   const readiness = Math.round((checklist.filter((c) => c.done).length / checklist.length) * 100);
 
-  // One clear next action, driven by the highest-leverage gap.
   const kyc = user?.kyc_status;
   const heroAction: { text: string; label: string; href: string | null } = !user?.email_verified
     ? { text: "Verify your email to secure your account", label: "Verify Email", href: "/client/dashboard/settings" }
@@ -1542,7 +1491,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
 
   return (
     <div className="space-y-6">
-      {/* Hero: greeting + the one thing worth doing next + account readiness */}
+
       <div className="rounded-2xl border bg-gradient-to-br from-primary to-primary/80 text-primary-foreground p-6 md:p-7">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
@@ -1572,7 +1521,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
         </div>
       </div>
 
-      {/* Meaningful numbers: work in motion, incoming bids, and money */}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Active Projects" value={String(activeCount)} icon={Briefcase} color="emerald" />
         <StatCard label="Bids Received" value={String(totalBids)} icon={FileText} color="blue" />
@@ -1580,7 +1529,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
         <StatCard label="Total Budget" value={fmtNaira(totalBudget)} icon={DollarSign} />
       </div>
 
-      {/* Wallet + open pipeline */}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link
           href="/client/dashboard/payments"
@@ -1622,7 +1571,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 items-start">
-        {/* Recent projects take the main column */}
+
         <div className="lg:col-span-2 rounded-xl border bg-background">
           <div className="flex items-center justify-between p-5 border-b">
             <h2 className="font-semibold">Recent Projects</h2>
@@ -1672,7 +1621,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
           </div>
         </div>
 
-        {/* The path to a smooth hire */}
+
         <div className="rounded-xl border bg-background">
           <div className="p-5 border-b">
             <h2 className="font-semibold flex items-center gap-2">
@@ -1706,7 +1655,7 @@ export function ClientOverview({ onPostProject }: { onPostProject: () => void })
         </div>
       </div>
 
-      {/* Recommended professionals */}
+
       <div className="rounded-xl border bg-background">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="font-semibold">Recommended Professionals</h2>
@@ -1761,8 +1710,7 @@ export function ClientProjects({ onPostProject, refreshKey }: { onPostProject: (
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const { unreadByProject } = useProjectUnread();
-  // A saved Post-a-Project draft (localStorage, written by PostProjectDialog)
-  // gets a "continue where you left off" card at the top of the page.
+
   const [draft, setDraft] = useState<PostProjectDraft | null>(null);
   const [draftDismissed, setDraftDismissed] = useState(false);
 
@@ -1773,8 +1721,6 @@ export function ClientProjects({ onPostProject, refreshKey }: { onPostProject: (
 
   useEffect(load, [refreshKey]);
 
-  // Re-read the draft on mount and after every refresh (e.g. right after a
-  // project is posted, when the draft has been cleared).
   useEffect(() => {
     const d = loadPostDraft();
     setDraft(d && !isEmptyPostDraft(d) ? d : null);
@@ -1999,14 +1945,11 @@ export function ClientFindProfessionals() {
       });
   };
 
-  useEffect(() => { load(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(true); }, []);
   useEffect(() => {
     api.favorites().then((favs) => setSavedIds(new Set(favs.filter((f) => f.target_type === "professional").map((f) => f.target_id)))).catch(() => {});
   }, []);
 
-  // Apply filters immediately with the values passed in, so changing a
-  // dropdown reloads without an explicit Apply click (and without reading
-  // stale state from inside the previous render's closure).
   const applyFilters = (next: { category?: string; rating?: string; sort?: string; location?: string }) => {
     const cat = next.category !== undefined ? next.category : categoryId;
     const rat = next.rating !== undefined ? next.rating : minRating;
@@ -2211,11 +2154,6 @@ export function ClientSavedProfessionals() {
   );
 }
 
-/**
- * Full public-style profile view for a single professional, bio, skills,
- * portfolio, and their full reviews list, reached by clicking a card in
- * Find Professionals. Lets a client evaluate someone before inviting.
- */
 export function ProfessionalPreview({ profileId }: { profileId: string; backHref?: string }) {
   const [pro, setPro] = useState<ProfessionalOut | null>(null);
   const [reviews, setReviews] = useState<ReviewOut[]>([]);
@@ -2272,7 +2210,6 @@ const TXN_TYPE_LABELS: Record<string, { label: string; sign: "+" | "-"; classNam
   adjustment: { label: "Admin adjustment", sign: "+", className: "text-slate-600" },
 };
 
-// ─── Fund Wallet dialog ────────────────────────────────────────────────────
 function FundWalletDialog({ onClose, onFunded }: { onClose: () => void; onFunded: () => void }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -2286,15 +2223,10 @@ function FundWalletDialog({ onClose, onFunded }: { onClose: () => void; onFunded
     try {
       const result = await api.topupWallet(n, window.location.href);
       if (result.checkout_url) {
-        // Live Monnify keys: the wallet isn't credited yet, the transaction
-        // is pending until the customer actually pays on Monnify's checkout
-        // and the webhook confirms it. Send them there instead of claiming
-        // success early.
+
         window.location.href = result.checkout_url;
         return;
       }
-      // No checkout_url means simulated mode (no live keys yet), where the
-      // backend credits the wallet immediately so the flow can be tested.
       toast.success(`₦${n.toLocaleString()} added to your wallet`);
       onFunded();
     } catch (err) {
@@ -2334,7 +2266,6 @@ function FundWalletDialog({ onClose, onFunded }: { onClose: () => void; onFunded
   );
 }
 
-// ─── Date-range filter helpers (shared by ClientPayments & TalentEarnings) ──
 type DatePreset = "all" | "month" | "3months" | "6months" | "year";
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
@@ -2408,14 +2339,6 @@ export function ClientPayments() {
   useEffect(load, []);
 
   const filtered = filterByDateRange(txs, datePreset, dateFrom, dateTo);
-  // What the client has actually put into project milestones, net of any
-  // refunds. This intentionally does NOT try to split "still in escrow" vs
-  // "released to the professional" — the `release` transaction amount is the
-  // professional's net payout (platform fee already subtracted), so it can
-  // never sum back up to the gross amount the client funded, which made a
-  // fully-settled milestone look like it still had money stuck in escrow.
-  // A single "money paid to milestones" figure is the number the client
-  // actually cares about and it's always correct.
   const totalPaid = Math.max(
     filtered.filter((t) => t.type === "funding" && t.status === "successful").reduce((s, t) => s + t.amount, 0)
       - filtered.filter((t) => t.type === "refund" && t.status === "successful").reduce((s, t) => s + t.amount, 0),
@@ -2593,7 +2516,6 @@ function ClientKycCard() {
   );
 }
 
-// ─── Username field: live availability check + suggestions, shared by client & talent settings ───
 function UsernameField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const [status, setStatus] = useState<"idle" | "checking" | "available" | "taken" | "invalid" | "current">("idle");
   const [reason, setReason] = useState<string | null>(null);
@@ -2792,7 +2714,6 @@ function ClientCompanyTab() {
         <label className="text-sm">Logo</label>
         <div className="flex items-center gap-3">
           {logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={logoUrl} alt="Company logo" className="h-12 w-12 rounded-lg object-cover border" />
           )}
           <input
@@ -2934,7 +2855,7 @@ function ClientPreferencesTab() {
 
   return (
     <div className="space-y-5">
-      {/* Preferred Categories */}
+      {}
       <div className="rounded-xl border bg-background p-6 space-y-3">
         <h2 className="font-semibold">Preferred Categories</h2>
         <p className="text-xs text-muted-foreground">Select the kind of work you typically hire for, this shows on your profile.</p>
@@ -2952,7 +2873,7 @@ function ClientPreferencesTab() {
         <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save Changes"}</Button>
       </div>
 
-      {/* Notifications */}
+      {}
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <h2 className="font-semibold">Notifications</h2>
         <div className="flex items-center justify-between gap-4">
@@ -2988,7 +2909,7 @@ function ClientPreferencesTab() {
         </div>
       </div>
 
-      {/* Communication preferences */}
+      {}
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <h2 className="font-semibold">Communication</h2>
         <p className="text-xs text-muted-foreground">Control how professionals can reach you.</p>
@@ -3012,8 +2933,6 @@ function ClientPreferencesTab() {
 }
 
 export function ClientSettings() {
-  // Deep-linkable: ?tab=verification etc. so the dashboard's "hire with
-  // confidence" checklist can jump straight to the right settings tab.
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<"profile" | "company" | "preferences" | "verification" | "security">(() => {
     const t = searchParams.get("tab");
@@ -3049,7 +2968,6 @@ function fmtMemberSince(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-// ─── Client's own profile: the same trust signals a professional would see ───
 export function ClientProfile() {
   const { user } = useAuth();
   const [pub, setPub] = useState<ClientPublicOut | null>(null);
@@ -3091,7 +3009,6 @@ export function ClientProfile() {
       <div className="rounded-xl border bg-background p-6 space-y-5">
         <div className="flex items-start gap-4">
           {pub.company_logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={pub.company_logo_url} alt={pub.company_name || "Company logo"} className="h-16 w-16 rounded-full object-cover border" />
           ) : (
             <UserAvatar avatarUrl={user.avatar_url} name={`${pub.first_name} ${pub.last_name}`} className="h-16 w-16" />
@@ -3228,9 +3145,6 @@ export function ClientProfile() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// TALENT DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════════
 const PROP_STATUS_COLORS = BID_STATUS_COLORS;
 
 export function TalentOverview() {
@@ -3254,7 +3168,6 @@ export function TalentOverview() {
 
   const activeJobs = projects.filter((p) => p.status === "in_progress" || p.status === "review");
 
-  // ─── Profile strength / "get hired faster" checklist ───────────────────────
   const checklist = [
     { key: "photo", label: "Add a profile photo", done: !!user?.avatar_url, href: "/talent/dashboard/settings?tab=profile#photo" },
     { key: "titleBio", label: "Add a title and bio", done: !!(profile?.title && profile?.bio), href: "/talent/dashboard/settings?tab=professional#bio" },
@@ -3270,7 +3183,6 @@ export function TalentOverview() {
   const profileContentDone = ["photo", "titleBio", "skills", "portfolio"].every((key) => checklist.find((c) => c.key === key)!.done);
   const needsVerification = !!profile && ((profile.tier || 1) < 2 || profile.address_verification_status !== "verified");
 
-  // One clear next action, driven by the highest-leverage gap.
   const heroAction = needsVerification
     ? { text: "Verify your identity and address to unlock more bids", label: "Verify Now", href: "/talent/dashboard/settings?tab=verification" }
     : profile && !profile.has_payout_details
@@ -3291,7 +3203,7 @@ export function TalentOverview() {
 
   return (
     <div className="space-y-6">
-      {/* Hero: greeting + the one thing worth doing next + profile strength */}
+
       <div className="rounded-2xl border bg-gradient-to-br from-emerald-600 to-emerald-500 text-white p-6 md:p-7">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
@@ -3320,7 +3232,7 @@ export function TalentOverview() {
         </div>
       </div>
 
-      {/* Wallet + tier */}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link href="/talent/dashboard/earnings" className="rounded-xl border bg-background p-5 hover:shadow-sm transition-shadow flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -3353,7 +3265,7 @@ export function TalentOverview() {
         </div>
       </div>
 
-      {/* Meaningful numbers: work in progress, pipeline, and proven track record */}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Active Jobs" value={String(activeJobs.length)} icon={Briefcase} color="emerald" />
         <StatCard label="Bids Sent" value={String(bids.length)} icon={FileText} color="blue" />
@@ -3367,7 +3279,7 @@ export function TalentOverview() {
       </div>
 
       <div className="grid lg:grid-cols-3 gap-4 items-start">
-        {/* Active jobs take the main column */}
+
         <div className="lg:col-span-2 rounded-xl border bg-background">
           <div className="flex items-center justify-between p-5 border-b">
             <h2 className="font-semibold">Active Jobs</h2>
@@ -3427,7 +3339,7 @@ export function TalentOverview() {
           </div>
         </div>
 
-        {/* The path to more work */}
+
         <div className="rounded-xl border bg-background">
           <div className="p-5 border-b">
             <h2 className="font-semibold flex items-center gap-2">
@@ -3464,7 +3376,7 @@ export function TalentOverview() {
         </div>
       </div>
 
-      {/* Recent bids */}
+
       <div className="rounded-xl border bg-background">
         <div className="flex items-center justify-between p-5 border-b">
           <h2 className="font-semibold">Recent Bids</h2>
@@ -3667,7 +3579,7 @@ export function TalentFindWork() {
   const load = () => fetchPage(0, false);
   const loadMore = () => fetchPage(offset, true);
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, []);
 
   return (
     <div className="space-y-5">
@@ -3739,7 +3651,7 @@ export function TalentFindWork() {
             />
             {proj.image_urls?.length > 0 && (
               <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block h-36 w-full overflow-hidden bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+
                 <img src={proj.image_urls[0]} alt={proj.title} className="h-full w-full object-cover" />
               </Link>
             )}
@@ -3837,7 +3749,7 @@ export function TalentSavedProjects() {
             <FavoriteButton targetType="project" targetId={proj.id} saved onToggle={() => unsave(proj.id)} className="absolute top-3 right-3 z-10" />
             {proj.image_urls?.length > 0 && (
               <Link href={`/talent/dashboard/find-work/${proj.id}`} className="block h-36 w-full overflow-hidden bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+
                 <img src={proj.image_urls[0]} alt={proj.title} className="h-full w-full object-cover" />
               </Link>
             )}
@@ -4107,7 +4019,6 @@ function AddPortfolioItemForm({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-// ─── Employment history editor ────────────────────────────────────────────
 function AddEmploymentForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -4155,7 +4066,6 @@ function AddEmploymentForm({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-// ─── Education editor ──────────────────────────────────────────────────────
 function AddEducationForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [school, setSchool] = useState("");
@@ -4207,7 +4117,6 @@ function AddEducationForm({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-// ─── Certification editor ──────────────────────────────────────────────────
 function AddCertificationForm({ onAdded }: { onAdded: () => void }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
@@ -4264,7 +4173,6 @@ function AddCertificationForm({ onAdded }: { onAdded: () => void }) {
   );
 }
 
-// ─── Languages editor (stored as a comma-list on the profile) ──────────────
 function LanguagesEditor({ languages, onSaved }: { languages: LanguageEntry[]; onSaved: () => void }) {
   const [editing, setEditing] = useState(false);
   const [rows, setRows] = useState<LanguageEntry[]>(languages.length ? languages : [{ name: "", level: "Conversational" }]);
@@ -4346,7 +4254,6 @@ export function TalentProfile() {
   };
   useEffect(load, []);
 
-  // Jump to e.g. #portfolio when arriving from the "get hired faster" checklist.
   useEffect(() => {
     if (loading) return;
     const hash = window.location.hash.replace("#", "");
@@ -4423,7 +4330,7 @@ export function TalentProfile() {
           {profile.portfolio_items.map((item) => (
             <div key={item.id} className="rounded-lg border overflow-hidden">
               {item.image_urls[0] && (
-                // eslint-disable-next-line @next/next/no-img-element
+
                 <img src={item.image_urls[0]} alt={item.title} className="h-32 w-full object-cover" />
               )}
               <div className="p-3">
@@ -4680,7 +4587,6 @@ function fmtFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ─── Verification document dropzone: click-to-browse card with a chosen-file state ───
 function FileUploadField({
   label,
   description,
@@ -4760,13 +4666,11 @@ function VerificationForm() {
   const [profile, setProfile] = useState<ProfessionalOut | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Tier 2: NIN + ID document (instant check, admin review fallback)
   const [nin, setNin] = useState("");
   const [dob, setDob] = useState("");
   const [idFile, setIdFile] = useState<File | null>(null);
   const [submittingId, setSubmittingId] = useState(false);
 
-  // Tier 3: proof of address
   const [addressFile, setAddressFile] = useState<File | null>(null);
   const [submittingAddress, setSubmittingAddress] = useState(false);
 
@@ -4828,7 +4732,7 @@ function VerificationForm() {
 
   return (
     <div className="space-y-6">
-      {/* Tier 2: identity */}
+
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
@@ -4882,7 +4786,7 @@ function VerificationForm() {
         )}
       </div>
 
-      {/* Tier 3: proof of address */}
+
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold">Proof of Address &amp; Tier 3</h3>
@@ -4917,7 +4821,7 @@ function VerificationForm() {
         )}
       </div>
 
-      {/* Credential badges */}
+
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className="font-semibold flex items-center gap-1.5"><Award className="h-4 w-4 text-amber-600" /> Credential Badges</h3>
@@ -5163,16 +5067,13 @@ function TalentProfessionalTab() {
 }
 
 export function TalentSettings() {
-  // Deep-linkable: ?tab=verification etc. so the dashboard's "get hired
-  // faster" checklist can jump straight to the right settings tab.
+
   const searchParams = useSearchParams();
   const [tab, setTab] = useState<"profile" | "professional" | "verification" | "payout" | "security">(() => {
     const t = searchParams.get("tab");
     return t === "profile" || t === "professional" || t === "verification" || t === "payout" || t === "security" ? t : "profile";
   });
 
-  // Jump to a specific field within the active tab once its content has
-  // rendered (e.g. #photo, #bio, #skills from the "get hired faster" checklist).
   useEffect(() => {
     const hash = window.location.hash.replace("#", "");
     if (!hash) return;
@@ -5551,9 +5452,6 @@ export function TalentActiveJobs() {
   );
 }
 
-// ─── Talent's own completed work history — the mirror of what a client sees
-// on the professional's public profile (stats + per-project work history
-// feed), but scoped to the logged-in talent's own record. ─────────────────
 export function TalentWorkHistory() {
   const [profile, setProfile] = useState<ProfessionalOut | null>(null);
   const [projects, setProjects] = useState<ProjectOut[]>([]);
@@ -5618,4 +5516,3 @@ export function TalentMessages() {
     </div>
   );
 }
-

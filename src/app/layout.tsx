@@ -45,9 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Applies the persisted theme before first paint to avoid a
-            light-mode flash on load. Must stay in sync with the zustand
-            persist storage key/shape in src/store/theme.ts. */}
+        {}
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var raw=localStorage.getItem("yhc-theme");if(raw){var theme=JSON.parse(raw).state.theme;if(theme==="dark")document.documentElement.classList.add("dark");}}catch(e){}})();`,

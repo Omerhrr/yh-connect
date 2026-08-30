@@ -6,10 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class EmploymentHistory(Base):
     """A past (or current) job a professional lists on their profile, shown
@@ -20,10 +18,10 @@ class EmploymentHistory(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     profile_id: Mapped[str] = mapped_column(String, ForeignKey("professional_profiles.id"), nullable=False)
-    title: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "Site Engineer"
-    employer: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "Julius Berger Nigeria"
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    employer: Mapped[str] = mapped_column(String, nullable=False)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
-    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # null = present
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

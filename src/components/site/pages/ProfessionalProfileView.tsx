@@ -27,7 +27,6 @@ function fmtMemberSince(d: string) {
   return new Date(d).toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
-// ─── Stats bar: real platform-derived numbers, not placeholders ──────────────
 export function StatsBar({ pro }: { pro: ProfessionalOut }) {
   const stats = pro.stats;
   if (!stats) return null;
@@ -65,7 +64,6 @@ export function StatsBar({ pro }: { pro: ProfessionalOut }) {
   );
 }
 
-// ─── Work history: real completed/active YH Connect projects with this pro ───
 export function WorkHistoryFeed({ profileId, emptyState }: { profileId: string; emptyState?: ReactNode }) {
   const [items, setItems] = useState<WorkHistoryItem[] | null>(null);
 
@@ -102,11 +100,6 @@ export function WorkHistoryFeed({ profileId, emptyState }: { profileId: string; 
   );
 }
 
-/**
- * Full richer profile view shared by the public (unauthenticated) professional
- * profile page and the client-dashboard preview, so both stay in sync. Only
- * the hire/contact action differs between the two call sites.
- */
 export function ProfessionalProfileView({
   pro,
   reviews,

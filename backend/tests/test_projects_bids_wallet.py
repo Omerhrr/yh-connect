@@ -1,6 +1,5 @@
 from tests.conftest import auth_headers
 
-
 def _post_project(client, client_user):
     resp = client.post(
         "/api/v1/projects",
@@ -17,12 +16,10 @@ def _post_project(client, client_user):
     assert resp.status_code == 201, resp.text
     return resp.json()
 
-
 def test_client_can_post_project(client, client_user):
     project = _post_project(client, client_user)
     assert project["status"] == "open"
     assert project["title"] == "Build a bungalow"
-
 
 def test_professional_cannot_post_project(client, professional_user):
     resp = client.post(
@@ -38,7 +35,6 @@ def test_professional_cannot_post_project(client, professional_user):
     )
     assert resp.status_code == 403
 
-
 def test_bid_flow_and_notification(client, client_user, professional_user):
     project = _post_project(client, client_user)
 
@@ -50,12 +46,10 @@ def test_bid_flow_and_notification(client, client_user, professional_user):
     assert resp.status_code == 201, resp.text
     bid = resp.json()
 
-    # Client should have a bid-received notification.
     resp = client.get("/api/v1/notifications", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200
     assert any(n["type"] == "bid_received" for n in resp.json())
 
-    # Professional can't bid twice on the same project.
     resp = client.post(
         f"/api/v1/projects/{project['id']}/bids",
         json={"amount": 800000, "cover_letter": "again", "estimated_days": 20},
@@ -63,7 +57,6 @@ def test_bid_flow_and_notification(client, client_user, professional_user):
     )
     assert resp.status_code == 409
 
-    # Client accepts the bid.
     resp = client.patch(
         f"/api/v1/bids/{bid['id']}",
         json={"status": "accepted"},
@@ -74,7 +67,6 @@ def test_bid_flow_and_notification(client, client_user, professional_user):
 
     resp = client.get("/api/v1/notifications", headers=auth_headers(professional_user["access_token"]))
     assert any(n["type"] == "bid_accepted" for n in resp.json())
-
 
 def test_webhook_rejects_bad_signature_when_configured(client, monkeypatch):
     """In simulated mode (no live Monnify keys) the webhook accepts payloads

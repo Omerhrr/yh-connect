@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.platform_setting import PlatformSetting
 
-
 def get_platform_fee_percent(db: Session) -> float:
     row = db.get(PlatformSetting, "platform_fee_percent")
     if row and row.value:
@@ -22,7 +21,6 @@ def get_platform_fee_percent(db: Session) -> float:
         except ValueError:
             pass
     return settings.PLATFORM_FEE_PERCENT
-
 
 def get_milestone_auto_release_days(db: Session) -> float:
     row = db.get(PlatformSetting, "milestone_auto_release_days")
@@ -33,7 +31,6 @@ def get_milestone_auto_release_days(db: Session) -> float:
             pass
     return settings.MILESTONE_AUTO_RELEASE_DAYS
 
-
 def get_dispute_direct_resolution_hours(db: Session) -> float:
     row = db.get(PlatformSetting, "dispute_direct_resolution_hours")
     if row and row.value:
@@ -42,7 +39,6 @@ def get_dispute_direct_resolution_hours(db: Session) -> float:
         except ValueError:
             pass
     return settings.DISPUTE_DIRECT_RESOLUTION_HOURS
-
 
 def get_profile_name_change_cooldown_hours(db: Session) -> float:
     row = db.get(PlatformSetting, "profile_name_change_cooldown_hours")
@@ -53,7 +49,6 @@ def get_profile_name_change_cooldown_hours(db: Session) -> float:
             pass
     return settings.PROFILE_NAME_CHANGE_COOLDOWN_HOURS
 
-
 def get_payment_withholding_percent(db: Session) -> float:
     row = db.get(PlatformSetting, "payment_withholding_percent")
     if row and row.value:
@@ -62,7 +57,6 @@ def get_payment_withholding_percent(db: Session) -> float:
         except ValueError:
             pass
     return settings.PAYMENT_WITHHOLDING_PERCENT
-
 
 def get_payment_withholding_release_days(db: Session) -> float:
     row = db.get(PlatformSetting, "payment_withholding_release_days")
@@ -73,16 +67,13 @@ def get_payment_withholding_release_days(db: Session) -> float:
             pass
     return settings.PAYMENT_WITHHOLDING_RELEASE_DAYS
 
-
 def get_featured_category_ids(db: Session) -> list[str]:
     row = db.get(PlatformSetting, "featured_category_ids")
     if not row or not row.value:
         return []
     return [c.strip() for c in row.value.split(",") if c.strip()]
 
-
 RECEIPT_SETTINGS_KEY = "receipt_settings"
-
 
 def get_receipt_settings(db: Session) -> dict:
     """Admin-configured PDF receipt branding (template, theme colors, font,
@@ -99,12 +90,10 @@ def get_receipt_settings(db: Session) -> dict:
         data = json.loads(row.value)
     except ValueError:
         return ReceiptSettingsOut().model_dump()
-    # Merge over defaults so a partially-saved/older blob (e.g. before a new
-    # field was added) doesn't crash template rendering with a KeyError.
+
     defaults = ReceiptSettingsOut().model_dump()
     defaults.update({k: v for k, v in data.items() if v is not None})
     return defaults
-
 
 def save_receipt_settings(db: Session, updates: dict) -> dict:
     current = get_receipt_settings(db)
@@ -119,9 +108,7 @@ def save_receipt_settings(db: Session, updates: dict) -> dict:
     db.commit()
     return current
 
-
 PROJECT_MEDIA_SETTINGS_KEY = "project_media_settings"
-
 
 def get_project_media_settings(db: Session) -> dict:
     """Admin control over the optional image/video attachments a client can
@@ -139,7 +126,6 @@ def get_project_media_settings(db: Session) -> dict:
         return defaults
     defaults.update({k: v for k, v in data.items() if v is not None})
     return defaults
-
 
 def save_project_media_settings(db: Session, updates: dict) -> dict:
     current = get_project_media_settings(db)

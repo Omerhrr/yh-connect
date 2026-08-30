@@ -26,15 +26,11 @@ from app.services.tiers import TIER_LABELS, get_tier
 
 router = APIRouter(tags=["verification"])
 
-
 def _my_profile(current_user: User, db: Session) -> ProfessionalProfile:
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return profile
-
-
-# ─── General verification bundle (id/license/insurance docs) ───────────────
 
 @router.post("/professionals/me/verification")
 def submit_verification(
@@ -54,7 +50,6 @@ def submit_verification(
     profile.verification_status = "pending"
     db.commit()
     return {"verification_status": profile.verification_status}
-
 
 @router.get("/admin/verifications")
 def list_pending_verifications(
@@ -76,8 +71,7 @@ def list_pending_verifications(
             "years_experience": p.years_experience,
             "license_number": p.license_number,
             "skills": p.skills_list,
-            # For tier 2 review: the claimed NIN and the automated check's
-            # outcome (if any), so the admin can cross-check the document.
+
             "nin": p.user.nin,
             "kyc_status": p.user.kyc_status,
             "id_document_url": p.id_document_url,
@@ -86,7 +80,6 @@ def list_pending_verifications(
         }
         for p in profiles
     ]
-
 
 @router.patch("/admin/verifications/{profile_id}")
 def review_verification(
@@ -122,12 +115,6 @@ def review_verification(
     db.commit()
     return {"verification_status": profile.verification_status}
 
-
-# ─── Tier 2: NIN identity verification (professional-side) ─────────────────
-# Same instant/automated flow as client KYC (app/api/v1/clients.py), just
-# exposed to professionals too. Reaching tier 2 lifts the proposal/project
-# caps a fresh tier 1 account starts with, see app/services/tiers.py.
-
 @router.get("/professionals/me/kyc", response_model=KycOut)
 def get_my_professional_kyc(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
     return KycOut(
@@ -135,7 +122,6 @@ def get_my_professional_kyc(current_user: User = Depends(require_role(UserRole.p
         kyc_note=current_user.kyc_note,
         kyc_verified_at=current_user.kyc_verified_at,
     )
-
 
 @router.post("/professionals/me/kyc", response_model=KycOut)
 @limiter.limit("10/hour")
@@ -151,8 +137,6 @@ def submit_my_professional_kyc(
     if profile.verification_status == "verified":
         raise HTTPException(status_code=400, detail="Your identity is already verified")
 
-    # Keep the submitted scan (NIN slip, national ID, voters card, passport)
-    # on the profile either way, so an admin can review it if needed.
     if payload.document_url:
         profile.id_document_url = payload.document_url
 
@@ -168,8 +152,7 @@ def submit_my_professional_kyc(
 
     current_user.nin = payload.nin
     if result["verified"]:
-        # Instant tier 2: the NIN matches, no admin needed. The uploaded
-        # document (if any) stays on file for records.
+
         current_user.kyc_status = KycStatus.verified
         current_user.kyc_verified_at = datetime.utcnow()
         current_user.kyc_note = None
@@ -180,9 +163,7 @@ def submit_my_professional_kyc(
             link="/talent/dashboard/settings", email_also=True,
         )
     elif payload.document_url:
-        # NIN check failed but a physical document was uploaded: hand it to
-        # the admin for review. Approval grants tier 2 via
-        # ProfessionalProfile.verification_status (see app/services/tiers.py).
+
         profile.verification_status = "pending"
         profile.verification_note = (
             "Your identity document was submitted for admin review. "
@@ -195,8 +176,7 @@ def submit_my_professional_kyc(
             link="/talent/dashboard/settings",
         )
     else:
-        # No document to fall back on: record the failed automated check so
-        # the professional sees the reason and can retry (or upload a doc).
+
         current_user.kyc_status = KycStatus.rejected
         current_user.kyc_note = result["reason"]
 
@@ -207,9 +187,6 @@ def submit_my_professional_kyc(
         kyc_note=current_user.kyc_note,
         kyc_verified_at=current_user.kyc_verified_at,
     )
-
-
-# ─── Tier 3: proof of address (admin-reviewed, not automated) ──────────────
 
 @router.post("/professionals/me/address-verification")
 def submit_address_verification(
@@ -228,7 +205,6 @@ def submit_address_verification(
     db.commit()
     return {"address_verification_status": profile.address_verification_status}
 
-
 @router.get("/admin/address-verifications")
 def list_pending_address_verifications(
     current_user: User = Depends(require_role(UserRole.admin)),
@@ -246,15 +222,12 @@ def list_pending_address_verifications(
             "category": p.category.label if p.category else None,
             "location": p.location,
             "bio": p.bio,
-            # Address review only unlocks after tier 2 (NIN) is verified, so
-            # this is always confirmed by the time it's here, useful context
-            # for the admin to see it front and center rather than dig for it.
+
             "kyc_status": p.user.kyc_status,
             "address_document_url": p.address_document_url,
         }
         for p in profiles
     ]
-
 
 @router.patch("/admin/address-verifications/{profile_id}")
 def review_address_verification(
@@ -290,11 +263,6 @@ def review_address_verification(
         )
     return {"address_verification_status": profile.address_verification_status}
 
-
-# ─── Badges: admin review of self-submitted certifications ─────────────────
-# A certification only renders as a badge on the public profile once
-# approved here, see ProfessionalOut.certifications / CertificationOut.
-
 @router.get("/admin/certifications")
 def list_pending_certifications(
     current_user: User = Depends(require_role(UserRole.admin)),
@@ -320,7 +288,6 @@ def list_pending_certifications(
         }
         for c in certs
     ]
-
 
 @router.patch("/admin/certifications/{certification_id}")
 def review_certification(
@@ -358,12 +325,6 @@ def review_certification(
         )
     return {"verification_status": cert.verification_status}
 
-
-# ─── Business verification (CAC): client-side, admin-reviewed ─────────────
-# Distinct from is_verified_business itself — that flag only flips once an
-# admin approves what's submitted here. Mirrors the certification/address
-# review shape: submit -> pending -> admin approves/rejects -> badge shows.
-
 @router.post("/clients/me/business-verification")
 def submit_business_verification(
     payload: BusinessVerificationSubmit,
@@ -380,7 +341,6 @@ def submit_business_verification(
     current_user.business_verification_note = None
     db.commit()
     return {"business_verification_status": current_user.business_verification_status}
-
 
 @router.get("/admin/business-verifications")
 def list_pending_business_verifications(
@@ -401,7 +361,6 @@ def list_pending_business_verifications(
         }
         for u in users
     ]
-
 
 @router.patch("/admin/business-verifications/{user_id}")
 def review_business_verification(

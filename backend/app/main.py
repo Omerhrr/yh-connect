@@ -14,12 +14,10 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.run_migrations import run_migrations
 from app.seed import run as seed_categories
-import app.models  # noqa: F401 ensures all models are registered on Base
+import app.models
 
 logger = logging.getLogger("app.startup")
 
-# Interactive docs/schema are useful in dev but are minor information
-# disclosure of the whole API surface in production, gate them behind ENV.
 _docs_enabled = not settings.is_production
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -33,17 +31,12 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    # In dev the frontend sometimes lands on a different port than 3000
-    # (e.g. when something else is already squatting on it), accept any
-    # localhost/127.0.0.1 port so that doesn't silently turn into a CORS
-    # block. Static allow_origins above still applies for anything else
-    # (e.g. a deployed frontend origin from BACKEND_CORS_ORIGINS).
+
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 def _check_production_config():
     """Fail loudly (or at least loudly warn) instead of silently running a
@@ -52,10 +45,7 @@ def _check_production_config():
     if not settings.is_production:
         return
     if settings.SECRET_KEY == "dev-secret-change-me":
-        # JWTs (including admin tokens) are signed with this well-known
-        # string, forgeable by anyone. There's no legitimate reason for this
-        # to still be the default in production, and Render's blueprint
-        # already auto-generates a real one, so refuse to boot.
+
         raise RuntimeError(
             "SECRET_KEY is still the default dev value in a production "
             "environment (ENV=production). Set a real SECRET_KEY before "
@@ -69,10 +59,7 @@ def _check_production_config():
             "and any syntactically valid NIN will auto-verify identity "
             "(Tier 2) with no real check taking place."
         )
-    # NIN identity verification now goes through Monnify (see above) rather
-    # than a separate VerifyMe contract, so there's no second credential to
-    # check here — the monnify_configured warning above covers both payments
-    # and NIN verification going unconfigured.
+
     if not settings.email_configured:
         logger.warning(
             "PRODUCTION WARNING: No email provider configured (RESEND_API_KEY "
@@ -81,14 +68,9 @@ def _check_production_config():
             "sent."
         )
 
-
 @app.on_event("startup")
 def on_startup():
-    # Startup failures on Render have been showing up as a bare "Exited with
-    # status 3" with no visible traceback (likely stdout buffering combined
-    # with how Uvicorn's lifespan handler surfaces the error). Wrap each
-    # step individually, force-flush, and re-raise so the failure is both
-    # loud in the logs AND still fails the deploy/health check as it should.
+
     try:
         logger.info("startup: checking production config...")
         _check_production_config()
@@ -107,15 +89,12 @@ def on_startup():
         logger.exception("startup failed")
         raise
 
-
 @app.get("/")
 def root():
     return {"name": settings.PROJECT_NAME, "status": "ok", "docs": "/docs" if _docs_enabled else None}
 
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)

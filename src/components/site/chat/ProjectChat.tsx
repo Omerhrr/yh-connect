@@ -27,7 +27,6 @@ import { api, ApiError, resolveAssetUrl, type MessageOut } from "@/lib/api";
 import { toast } from "sonner";
 import { useMessageSocket } from "@/hooks/useMessageSocket";
 
-// ─── Messaging helpers ────────────────────────────────────────────────────
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EMOJI_PALETTE = [
   "😀", "😁", "😂", "🤣", "😊", "😇", "🙂", "😉", "😍", "🥰",
@@ -62,7 +61,6 @@ function formatDuration(totalSeconds: number) {
   return `${mm}:${ss.toString().padStart(2, "0")}`;
 }
 
-// ─── Emoji picker popover, used for both composing and reacting ────────────
 function EmojiPopover({ onPick, onClose, emojis = EMOJI_PALETTE, align = "left" }: {
   onPick: (emoji: string) => void;
   onClose: () => void;
@@ -100,12 +98,10 @@ function EmojiPopover({ onPick, onClose, emojis = EMOJI_PALETTE, align = "left" 
   );
 }
 
-// ─── Voice note player bubble ────────────────────────────────────────────
 function VoicePlayer({ url, duration, mine }: { url: string; duration?: number | null; mine: boolean }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0); // 0..1
-  const [total, setTotal] = useState(duration || 0);
+  const [progress, setProgress] = useState(0);  const [total, setTotal] = useState(duration || 0);
 
   const toggle = () => {
     const audio = audioRef.current;
@@ -163,7 +159,6 @@ function VoicePlayer({ url, duration, mine }: { url: string; duration?: number |
   );
 }
 
-// ─── Quoted reply preview, shown inside a bubble or the composer ──────────
 function ReplyQuote({ reply, onClick }: { reply: { sender_name?: string | null; body: string; message_type: string; is_deleted?: boolean }; onClick?: () => void }) {
   const label = reply.is_deleted
     ? "This message was deleted"
@@ -186,13 +181,6 @@ function ReplyQuote({ reply, onClick }: { reply: { sender_name?: string | null; 
   );
 }
 
-/**
- * The full-featured project conversation: replies, emoji reactions,
- * edit/delete, image and file attachments, voice notes, typing indicators,
- * date separators, and read receipts. Single shared implementation used by
- * both the Messages app (thread list + this) and the project workspace, so
- * the two surfaces can never drift apart again.
- */
 export function ProjectChat({
   projectId,
   otherUserId,
@@ -212,22 +200,17 @@ export function ProjectChat({
   otherUserName: string;
   onClose?: () => void;
   subtitle?: string | null;
-  /** When set (an approved site-inspection request), shows a live map
-      preview banner at the top of the chat for the shared visit address. */
+
   mapAddress?: string | null;
   mapDetails?: { phone?: string | null; details?: string | null };
-  /** When set (Messages app), renders a back button in the header so a
-      mobile user can return to the conversation list. */
+
   onBack?: () => void;
-  /** Called when the thread's read/unread state changes (e.g. new message),
-      so a surrounding thread list can refresh its unread counts. */
+
   onActivity?: () => void;
   className?: string;
-  /** When set (Messages app), the project title in the header links back to
-      the project workspace so a conversation keeps its project context. */
+
   projectHref?: string;
-  /** When set (project workspace), a header action jumps into the full
-      Messages app, deep-linking to this same thread. */
+
   messagesHref?: string;
 }) {
   const { user } = useAuth();
@@ -244,8 +227,6 @@ export function ProjectChat({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  // When true, the composer posts a tagged "Project Update" instead of a
-  // plain chat message — same input box, no separate popup.
   const [composingUpdate, setComposingUpdate] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -264,15 +245,12 @@ export function ProjectChat({
   useEffect(() => {
     loadMessages();
     api.markThreadRead(projectId, otherUserId).then(onActivity).catch(() => {});
-    // Long-interval fallback in case the WebSocket connection can't be established.
     const interval = setInterval(loadMessages, 30000);
     return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, otherUserId]);
 
   const { sendTyping } = useMessageSocket(projectId, (e) => {
     if (!("id" in e)) {
-      // Typing indicator ping from the other participant.
       if (e.user_id !== otherUserId) return;
       setOtherTyping(true);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -288,8 +266,6 @@ export function ProjectChat({
     }
   });
 
-  // Auto-scroll only when already near the bottom, so reading history isn't
-  // yanked down by incoming messages; a floating button covers the rest.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -485,7 +461,6 @@ export function ProjectChat({
     }
   };
 
-  // Group messages with a date separator whenever the calendar day changes.
   const rows: Array<{ type: "date"; label: string } | { type: "message"; message: MessageOut }> = [];
   let lastDay = "";
   for (const m of messages) {
@@ -499,7 +474,7 @@ export function ProjectChat({
 
   return (
     <div className={`flex flex-col overflow-hidden rounded-xl border bg-background ${className}`}>
-      {/* Header */}
+      {}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b bg-muted/30 shrink-0">
         {onBack && (
           <button
@@ -547,8 +522,7 @@ export function ProjectChat({
         </div>
       </div>
 
-      {/* Site-inspection map preview, shown once the client approves and
-          shares an address. */}
+      {}
       {mapAddress && (
         <div className="border-b shrink-0">
           <iframe
@@ -565,7 +539,7 @@ export function ProjectChat({
         </div>
       )}
 
-      {/* Messages */}
+      {}
       <div className="relative flex-1 min-h-0">
       <div ref={scrollRef} onScroll={onMessagesScroll} className="absolute inset-0 overflow-y-auto p-3 space-y-1 bg-muted/10">
         {rows.length === 0 && (
@@ -584,9 +558,6 @@ export function ProjectChat({
           const menuOpen = openMenuFor === m.id;
           const editing = editingId === m.id;
 
-          // System log entries (milestone funded/approved/released, change
-          // orders, etc.) — a running record of what happened, not a chat
-          // bubble from either party. No reply/react/edit affordances.
           if (m.message_type === "system") {
             return (
               <div key={m.id} className="flex justify-center py-1">
@@ -666,7 +637,7 @@ export function ProjectChat({
                     {m.message_type !== "voice" && m.attachment_url && (
                       isImageUrl(m.attachment_url) ? (
                         <a href={resolveAssetUrl(m.attachment_url)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+
                           <img src={resolveAssetUrl(m.attachment_url)} alt="Attachment" className="rounded-md max-h-48 max-w-full object-cover" />
                         </a>
                       ) : (
@@ -792,7 +763,7 @@ export function ProjectChat({
       )}
       </div>
 
-      {/* Reply-to bar */}
+
       {replyTo && (
         <div className="flex items-center gap-2 px-3 pt-2 border-t bg-muted/30">
           <div className="flex-1">
@@ -804,7 +775,7 @@ export function ProjectChat({
         </div>
       )}
 
-      {/* Composer */}
+
       {composingUpdate && (
         <div className="flex items-center gap-2 px-3 py-1.5 border-t bg-primary/5 text-xs">
           <ClipboardList className="h-3.5 w-3.5 text-primary shrink-0" />

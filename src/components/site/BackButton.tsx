@@ -3,12 +3,6 @@
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
-/**
- * Shared back button dropped into dashboard sub-page headers. Uses real
- * browser history (`router.back()`) so it works with the browser/gesture
- * back button too, falls back to `fallbackHref` when there's no history to
- * pop to (e.g. someone lands directly on a deep link).
- */
 export function BackButton({
   fallbackHref,
   label = "Back",

@@ -23,7 +23,6 @@ from app.services.tiers import (
 
 router = APIRouter(tags=["bids"])
 
-
 def _to_out(bid: Bid, db: Session, viewer: Optional[User] = None) -> BidOut:
     out = BidOut.model_validate(bid)
     out.project_title = bid.project.title if bid.project else None
@@ -32,8 +31,7 @@ def _to_out(bid: Bid, db: Session, viewer: Optional[User] = None) -> BidOut:
     if profile:
         out.professional_profile_id = profile.id
         out.professional_verification_status = profile.verification_status
-        # Tier is personal to the talent, never shown to the client reviewing
-        # proposals (admins and the professional themselves still see it).
+
         if viewer is None or viewer.role != UserRole.client:
             out.professional_tier = get_tier(bid.professional, profile)
         out.professional_rating = profile.rating
@@ -41,7 +39,6 @@ def _to_out(bid: Bid, db: Session, viewer: Optional[User] = None) -> BidOut:
         out.professional_portfolio_count = len(profile.portfolio_items)
         out.professional_hourly_rate = profile.hourly_rate
     return out
-
 
 @router.post("/projects/{project_id}/bids", response_model=BidOut, status_code=201)
 def create_bid(
@@ -65,8 +62,7 @@ def create_bid(
     if existing and existing.status != BidStatus.withdrawn:
         raise HTTPException(status_code=409, detail="You already submitted a proposal for this project")
     if existing:
-        # A withdrawn proposal can be re-submitted (the previous record is
-        # replaced so there's still exactly one live proposal per professional).
+
         db.delete(existing)
         db.flush()
 
@@ -121,7 +117,6 @@ def create_bid(
     db.refresh(bid)
     return _to_out(bid, db, current_user)
 
-
 @router.get("/projects/{project_id}/bids", response_model=list[BidOut])
 def list_project_bids(project_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
@@ -131,22 +126,17 @@ def list_project_bids(project_id: str, current_user: User = Depends(get_current_
         raise HTTPException(status_code=403, detail="Not authorized to view these proposals")
     return [_to_out(b, db, current_user) for b in project.bids]
 
-
 @router.get("/bids/mine", response_model=list[BidOut])
 def my_bids(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
     bids = db.query(Bid).filter(Bid.professional_id == current_user.id).order_by(Bid.created_at.desc()).all()
     return [_to_out(b, db, current_user) for b in bids]
-
 
 def _finalize_acceptance(db: Session, bid: Bid, project: Project, final_amount: float | None = None):
     """Shared by a direct accept and a confirmed offer: lock in the hire,
     reject the rest, notify the professional. `final_amount` overrides the
     bid's original amount if an offer changed it."""
     if project.assigned_professional_id and project.assigned_professional_id != bid.professional_id:
-        # A project can only have one hired professional; accepting a
-        # second proposal after someone is already assigned would silently
-        # displace them (and send later milestone payouts to the wrong
-        # person), so refuse instead.
+
         raise HTTPException(status_code=400, detail="This project already has an accepted proposal")
     if final_amount is not None:
         bid.amount = final_amount
@@ -162,7 +152,6 @@ def _finalize_acceptance(db: Session, bid: Bid, project: Project, final_amount: 
         body=f"Agreed amount: ₦{bid.amount:,.2f}. You can now propose milestones for the client's approval and get started.",
         link=f"/talent/dashboard/find-work/{project.id}", email_also=True,
     )
-
 
 @router.patch("/bids/{bid_id}", response_model=BidOut)
 def update_bid(bid_id: str, payload: BidUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -184,11 +173,7 @@ def update_bid(bid_id: str, payload: BidUpdate, current_user: User = Depends(get
         )
     if payload.status == BidStatus.accepted:
         if payload.offered_amount is not None and round(payload.offered_amount, 2) != round(bid.amount, 2):
-            # Different final terms than the original proposal — this is an
-            # offer, not a done deal. The professional has to explicitly
-            # accept those terms before the project locks in, the same way
-            # Upwork's "send offer" is a distinct step from just picking a
-            # freelancer.
+
             if payload.offered_amount <= 0:
                 raise HTTPException(status_code=400, detail="Offer amount must be greater than zero")
             bid.status = BidStatus.offered
@@ -225,7 +210,6 @@ def update_bid(bid_id: str, payload: BidUpdate, current_user: User = Depends(get
     db.refresh(bid)
     return _to_out(bid, db, current_user)
 
-
 @router.post("/bids/{bid_id}/confirm-offer", response_model=BidOut)
 def confirm_offer(
     bid_id: str,
@@ -247,7 +231,6 @@ def confirm_offer(
     db.commit()
     db.refresh(bid)
     return _to_out(bid, db, current_user)
-
 
 @router.post("/bids/{bid_id}/decline-offer", response_model=BidOut)
 def decline_offer(
@@ -278,7 +261,6 @@ def decline_offer(
     db.commit()
     db.refresh(bid)
     return _to_out(bid, db, current_user)
-
 
 @router.delete("/bids/{bid_id}", response_model=BidOut)
 def withdraw_bid(

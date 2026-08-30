@@ -144,8 +144,7 @@ export default function AdminOverviewPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, []);
   const refresh = () => {
     setRefreshing(true);
     load();

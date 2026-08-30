@@ -1,6 +1,5 @@
 from tests.conftest import auth_headers
 
-
 def _post_project(client, client_user):
     resp = client.post(
         "/api/v1/projects",
@@ -16,7 +15,6 @@ def _post_project(client, client_user):
     )
     assert resp.status_code == 201, resp.text
     return resp.json()
-
 
 def _hire_and_fund(client, client_user, professional_user):
     """Post a project, accept a bid, create+fund a milestone. Returns (project, milestone_id)."""
@@ -42,8 +40,6 @@ def _hire_and_fund(client, client_user, professional_user):
     assert resp.status_code == 201, resp.text
     milestone = resp.json()
 
-    # Funding draws from the client's prepaid wallet balance, top it up first
-    # (Monnify runs in simulated mode in tests, so this credits instantly).
     resp = client.post(
         "/api/v1/wallet/topup", json={"amount": 200000}, headers=auth_headers(client_user["access_token"])
     )
@@ -56,11 +52,9 @@ def _hire_and_fund(client, client_user, professional_user):
 
     return project, milestone["id"]
 
-
 def test_dispute_blocks_release_until_resolved(client, client_user, professional_user, admin_user, db_session_factory):
     project, milestone_id = _hire_and_fund(client, client_user, professional_user)
 
-    # Professional sets up payout details so a release would otherwise succeed.
     from app.models.profile import ProfessionalProfile
     db = db_session_factory()
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == professional_user["user"]["id"]).first()
@@ -88,7 +82,6 @@ def test_dispute_blocks_release_until_resolved(client, client_user, professional
     assert dispute["evidence_urls"] == ["https://example.com/evidence1.jpg"]
     assert dispute["other_party_name"]
 
-    # Can't open a second dispute on the same milestone while one is active.
     resp = client.post(
         "/api/v1/disputes",
         json={"project_id": project["id"], "milestone_id": milestone_id, "reason": "duplicate"},
@@ -96,14 +89,12 @@ def test_dispute_blocks_release_until_resolved(client, client_user, professional
     )
     assert resp.status_code == 400
 
-    # Release is blocked while the dispute is open.
     resp = client.post(
         f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"])
     )
     assert resp.status_code == 400
     assert "dispute" in resp.json()["detail"].lower()
 
-    # Other party can post a message on the case.
     resp = client.post(
         f"/api/v1/disputes/{dispute['id']}/messages",
         json={"body": "I believe the work matches the agreed spec."},
@@ -111,14 +102,12 @@ def test_dispute_blocks_release_until_resolved(client, client_user, professional
     )
     assert resp.status_code == 201, resp.text
 
-    # Both parties can fetch the full case detail with the message thread.
     resp = client.get(f"/api/v1/disputes/{dispute['id']}", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200
     detail = resp.json()
     assert len(detail["messages"]) == 1
-    assert len(detail["events"]) == 1  # the "filed" event
+    assert len(detail["events"]) == 1
 
-    # Admin resolves in favor of releasing to the professional -> real payout happens.
     resp = client.patch(
         f"/api/v1/disputes/{dispute['id']}",
         json={"status": "resolved", "outcome": "release_professional", "resolution_note": "Work verified against spec"},
@@ -131,20 +120,17 @@ def test_dispute_blocks_release_until_resolved(client, client_user, professional
     assert resolved["resolved_by_name"]
     assert any(e["to_status"] == "resolved" for e in resolved["events"])
 
-    # Milestone was actually paid out via the shared escrow helper.
     resp = client.get("/api/v1/wallet/transactions", headers=auth_headers(professional_user["access_token"]))
     assert resp.status_code == 200
     txs = resp.json()
     assert any(t["type"] == "release" and t["status"] == "successful" for t in txs)
 
-    # Once resolved, no more messages can be added.
     resp = client.post(
         f"/api/v1/disputes/{dispute['id']}/messages",
         json={"body": "too late"},
         headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 400
-
 
 def test_raiser_can_withdraw_dispute(client, client_user, professional_user):
     project, milestone_id = _hire_and_fund(client, client_user, professional_user)
@@ -156,7 +142,6 @@ def test_raiser_can_withdraw_dispute(client, client_user, professional_user):
     )
     dispute = resp.json()
 
-    # Professional (not the raiser) cannot withdraw it.
     resp = client.post(
         f"/api/v1/disputes/{dispute['id']}/withdraw", headers=auth_headers(professional_user["access_token"])
     )
@@ -168,28 +153,19 @@ def test_raiser_can_withdraw_dispute(client, client_user, professional_user):
     assert resp.status_code == 200
     assert resp.json()["status"] == "withdrawn"
 
-    # Fund release is no longer blocked once withdrawn. Release itself only
-    # needs the milestone funded, it credits the professional's internal
-    # wallet balance, bank payout details aren't required until they
-    # actually withdraw to their bank, so this succeeds even though the
-    # professional never set up payout details in this test.
     resp = client.post(
         f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"])
     )
     assert resp.status_code == 200, resp.text
 
-    # Withdrawal to their bank, on the other hand, does require payout
-    # details, and correctly fails without them.
     resp = client.post(
         "/api/v1/wallet/withdraw",
-        # Below the 100000 milestone amount, the platform fee is deducted on
-        # release, so the professional's wallet holds less than that.
+
         json={"amount": 90000},
         headers=auth_headers(professional_user["access_token"]),
     )
     assert resp.status_code == 400
     assert "payout" in resp.json()["detail"].lower()
-
 
 def test_resolve_dispute_release_professional_pays_out(client, client_user, professional_user, admin_user):
     """Regression coverage for docs/AUDIT_2026-08-20.md finding #5: resolving
@@ -218,7 +194,6 @@ def test_resolve_dispute_release_professional_pays_out(client, client_user, prof
     milestone = next(m for m in resp.json() if m["id"] == milestone_id)
     assert milestone["status"] == "paid"
 
-
 def test_resolve_dispute_refund_client(client, client_user, professional_user, admin_user):
     project, milestone_id = _hire_and_fund(client, client_user, professional_user)
     resp = client.post(
@@ -239,7 +214,6 @@ def test_resolve_dispute_refund_client(client, client_user, professional_user, a
     txs = resp.json()
     assert any(t["type"] == "refund" and t["status"] == "successful" for t in txs)
 
-
 def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, professional_user, admin_user):
     """Regression coverage for the "partial split" fix: it must actually
     divide the milestone amount between both parties, not just record the
@@ -252,7 +226,6 @@ def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, pr
     )
     dispute = resp.json()
 
-    # Missing the split amount is rejected.
     resp = client.patch(
         f"/api/v1/disputes/{dispute['id']}",
         json={"status": "resolved", "outcome": "partial_split"},
@@ -260,8 +233,6 @@ def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, pr
     )
     assert resp.status_code == 400
 
-    # Milestone amount is 100000; split 60000 to the professional, 40000 back
-    # to the client.
     resp = client.patch(
         f"/api/v1/disputes/{dispute['id']}",
         json={"status": "resolved", "outcome": "partial_split", "split_professional_amount": 60000},
@@ -272,8 +243,7 @@ def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, pr
     resp = client.get("/api/v1/wallet/transactions", headers=auth_headers(professional_user["access_token"]))
     pro_txs = resp.json()
     release_tx = next(t for t in pro_txs if t["type"] == "release" and t["status"] == "successful")
-    # 5% platform fee on the professional's 60000 share, per the default
-    # PLATFORM_FEE_PERCENT.
+
     assert release_tx["amount"] == 57000.0
 
     resp = client.get("/api/v1/wallet/transactions", headers=auth_headers(client_user["access_token"]))
@@ -281,11 +251,8 @@ def test_resolve_dispute_partial_split_moves_both_shares(client, client_user, pr
     refund_tx = next(t for t in client_txs if t["type"] == "refund" and t["status"] == "successful")
     assert refund_tx["amount"] == 40000.0
 
-    # The milestone is fully settled now, releasing/refunding it again
-    # through the normal endpoints should no longer be possible.
     resp = client.post(f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 400
-
 
 def test_resolve_dispute_no_action_blocked_when_milestone_linked(client, client_user, professional_user, admin_user):
     """Regression coverage for finding #5's second half: "no action" can't be
@@ -306,8 +273,6 @@ def test_resolve_dispute_no_action_blocked_when_milestone_linked(client, client_
     )
     assert resp.status_code == 400
 
-    # A project-general dispute (no milestone) can still use no_action, there's
-    # no money riding on it.
     resp = client.post(
         "/api/v1/disputes",
         json={"project_id": project["id"], "reason": "General communication issue"},
@@ -321,20 +286,12 @@ def test_resolve_dispute_no_action_blocked_when_milestone_linked(client, client_
     )
     assert resp.status_code == 200, resp.text
 
-
 def test_project_completion_blocked_by_milestone_scoped_dispute(client, client_user, professional_user, admin_user):
     """Regression coverage for docs/AUDIT_2026-08-20.md finding #2: a dispute
     scoped to a specific (even already-paid) milestone must still block
     project completion, not just project-general disputes."""
     project, milestone_id = _hire_and_fund(client, client_user, professional_user)
 
-    # Release the milestone normally so it's paid. Milestones no longer
-    # auto-advance the project to "review" on their own (that used to fire
-    # as soon as every *currently existing* milestone was closed out, which
-    # incorrectly locked out adding further milestones for a normal
-    # multi-milestone plan) — the client still has to explicitly move to
-    # final review. Open a milestone-scoped dispute about the now-paid work
-    # before they do.
     resp = client.post(f"/api/v1/milestones/{milestone_id}/approve", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
 
@@ -348,12 +305,9 @@ def test_project_completion_blocked_by_milestone_scoped_dispute(client, client_u
     )
     assert resp.status_code == 201, resp.text
 
-    # The dispute blocks even moving into final review, not just the final
-    # confirm step.
     resp = client.post(f"/api/v1/projects/{project['id']}/complete", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 400
     assert "dispute" in resp.json()["detail"].lower()
-
 
 def test_admin_wallet_adjustment(client, client_user, admin_user):
     resp = client.get("/api/v1/auth/me", headers=auth_headers(client_user["access_token"]))
@@ -370,7 +324,6 @@ def test_admin_wallet_adjustment(client, client_user, admin_user):
     resp = client.get("/api/v1/auth/me", headers=auth_headers(client_user["access_token"]))
     assert resp.json()["wallet_balance"] == starting_balance + 5000
 
-    # Zero amount rejected.
     resp = client.post(
         f"/api/v1/admin/users/{client_user['user']['id']}/wallet",
         json={"amount": 0},
@@ -378,7 +331,6 @@ def test_admin_wallet_adjustment(client, client_user, admin_user):
     )
     assert resp.status_code == 400
 
-    # A debit larger than the current balance is rejected, can't go negative.
     resp = client.post(
         f"/api/v1/admin/users/{client_user['user']['id']}/wallet",
         json={"amount": -999999999},

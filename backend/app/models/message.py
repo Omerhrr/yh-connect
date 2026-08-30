@@ -6,10 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class Message(Base):
     __tablename__ = "messages"
@@ -20,9 +18,9 @@ class Message(Base):
     recipient_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     attachment_url: Mapped[str | None] = mapped_column(String, nullable=True)
-    # "text" | "image" | "voice" | "file" — drives how the frontend renders the bubble.
+
     message_type: Mapped[str] = mapped_column(String, default="text", server_default="text")
-    # Set for voice notes, playback duration in whole seconds.
+
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reply_to_id: Mapped[str | None] = mapped_column(String, ForeignKey("messages.id"), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -36,7 +34,6 @@ class Message(Base):
     reactions: Mapped[list["MessageReaction"]] = relationship(
         "MessageReaction", back_populates="message", cascade="all, delete-orphan"
     )
-
 
 class MessageReaction(Base):
     __tablename__ = "message_reactions"

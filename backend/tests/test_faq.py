@@ -1,6 +1,5 @@
 from tests.conftest import auth_headers
 
-
 def test_public_faq_only_shows_active(client, admin_user):
     headers = auth_headers(admin_user["access_token"])
 
@@ -25,7 +24,6 @@ def test_public_faq_only_shows_active(client, admin_user):
     ids = [i["id"] for i in resp.json()]
     assert active_item["id"] in ids
     assert hidden_item["id"] not in ids
-
 
 def test_admin_faq_crud_and_auth(client, admin_user, client_user):
     headers = auth_headers(admin_user["access_token"])
@@ -58,7 +56,6 @@ def test_admin_faq_crud_and_auth(client, admin_user, client_user):
     resp = client.get("/api/v1/admin/content/faq", headers=headers)
     assert all(i["id"] != item["id"] for i in resp.json())
 
-    # Non-admin cannot write.
     client_headers = auth_headers(client_user["access_token"])
     resp = client.post(
         "/api/v1/admin/content/faq",

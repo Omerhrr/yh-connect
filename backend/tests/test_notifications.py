@@ -1,7 +1,6 @@
 from tests.conftest import auth_headers
 from tests.test_disputes import _post_project
 
-
 def test_notification_delete_and_clear(client, client_user, professional_user):
     project = _post_project(client, client_user)
     resp = client.post(
@@ -11,14 +10,12 @@ def test_notification_delete_and_clear(client, client_user, professional_user):
     )
     assert resp.status_code == 201, resp.text
 
-    # The client got a "new proposal" notification from the bid above.
     resp = client.get("/api/v1/notifications", headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
     notifs = resp.json()
     assert len(notifs) >= 1
     notif_id = notifs[0]["id"]
 
-    # Deleting someone else's notification (or a bogus id) 404s.
     resp = client.delete(f"/api/v1/notifications/{notif_id}", headers=auth_headers(professional_user["access_token"]))
     assert resp.status_code == 404
 
@@ -27,7 +24,6 @@ def test_notification_delete_and_clear(client, client_user, professional_user):
 
     resp = client.get("/api/v1/notifications", headers=auth_headers(client_user["access_token"]))
     assert notif_id not in [n["id"] for n in resp.json()]
-
 
 def test_notification_mark_all_and_clear_all(client, client_user, professional_user):
     project = _post_project(client, client_user)

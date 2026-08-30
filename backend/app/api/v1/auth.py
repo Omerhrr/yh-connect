@@ -41,23 +41,18 @@ from app.services.username import is_username_taken, is_valid_username, normaliz
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-
 def _issue_token(user: User) -> Token:
     token = create_access_token(user.id, {"role": user.role.value, "tv": user.token_version})
     return Token(access_token=token, user=UserOut.from_user(user))
 
-
 def _start_email_verification(user: User, db: Session) -> None:
     token = generate_token()
-    # Store a one-way hash at rest, same convention as password reset
-    # tokens, so a database read alone can't be used to verify someone's
-    # email; the raw token only ever exists in the emailed link.
+
     user.email_verification_token = hash_token(token)
     user.email_verification_sent_at = datetime.utcnow()
     db.commit()
     verify_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/verify-email?token={token}"
     send_verification_email(user.email, user.first_name, verify_url)
-
 
 @router.post("/register/client", response_model=Token, status_code=201)
 @limiter.limit("10/hour")
@@ -80,7 +75,6 @@ def register_client(request: Request, payload: ClientRegister, db: Session = Dep
     _start_email_verification(user, db)
     send_welcome_email(user.email, user.first_name)
     return _issue_token(user)
-
 
 @router.post("/register/professional", response_model=Token, status_code=201)
 @limiter.limit("10/hour")
@@ -118,7 +112,6 @@ def register_professional(request: Request, payload: ProfessionalRegister, db: S
     send_welcome_email(user.email, user.first_name)
     return _issue_token(user)
 
-
 @router.post("/login", response_model=Token)
 @limiter.limit("10/minute")
 def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
@@ -128,9 +121,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if user.is_deleted:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_active:
-        # Lazy expiry, same "check on the read that matters" pattern used
-        # everywhere else in this app (no scheduler) — a time-bound
-        # suspension whose window has passed just quietly lifts itself here.
+
         if user.suspended_until and datetime.utcnow() >= user.suspended_until:
             user.is_active = True
             user.suspended_at = None
@@ -149,11 +140,9 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             )
     return _issue_token(user)
 
-
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user)):
     return UserOut.from_user(current_user)
-
 
 @router.patch("/me", response_model=UserOut)
 def update_me(
@@ -198,11 +187,9 @@ def update_me(
     db.refresh(current_user)
     return UserOut.from_user(current_user)
 
-
 @router.get("/username/suggestions", response_model=UsernameSuggestionsOut)
 def username_suggestions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     return UsernameSuggestionsOut(suggestions=suggest_usernames(db, current_user.first_name, current_user.last_name))
-
 
 @router.get("/username/check", response_model=UsernameAvailabilityOut)
 def check_username(username: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -215,7 +202,6 @@ def check_username(username: str, current_user: User = Depends(get_current_user)
     if is_username_taken(db, normalized, exclude_user_id=current_user.id):
         return UsernameAvailabilityOut(username=normalized, available=False, reason="Username taken")
     return UsernameAvailabilityOut(username=normalized, available=True)
-
 
 @router.get("/users/search", response_model=list[UserSearchResult])
 def search_users(q: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -245,7 +231,6 @@ def search_users(q: str, current_user: User = Depends(get_current_user), db: Ses
         for u in matches
     ]
 
-
 @router.post("/switch-role", response_model=Token)
 def switch_role(
     payload: SwitchRoleRequest,
@@ -269,7 +254,6 @@ def switch_role(
     db.commit()
     db.refresh(current_user)
     return _issue_token(current_user)
-
 
 @router.post("/become-talent", response_model=Token, status_code=201)
 def become_talent(
@@ -304,13 +288,11 @@ def become_talent(
     db.refresh(current_user)
     return _issue_token(current_user)
 
-
 @router.post("/forgot-password")
 @limiter.limit("5/hour")
 def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email.ilike(payload.email)).first()
-    # Always return the same response whether or not the account exists, so
-    # this endpoint can't be used to enumerate registered email addresses.
+
     if user:
         raw_token = generate_token()
         reset = PasswordResetToken(
@@ -323,7 +305,6 @@ def forgot_password(request: Request, payload: ForgotPasswordRequest, db: Sessio
         reset_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={raw_token}"
         send_password_reset_email(user.email, user.first_name, reset_url)
     return {"message": "If an account with that email exists, a reset link has been sent."}
-
 
 @router.post("/reset-password")
 @limiter.limit("10/hour")
@@ -342,11 +323,10 @@ def reset_password(request: Request, payload: ResetPasswordRequest, db: Session 
         raise HTTPException(status_code=400, detail="This reset link is invalid or has expired")
 
     user.hashed_password = hash_password(payload.new_password)
-    user.token_version += 1  # invalidate any tokens issued before the reset
+    user.token_version += 1
     reset.used_at = datetime.utcnow()
     db.commit()
     return {"message": "Password reset successfully. Please log in with your new password."}
-
 
 @router.post("/change-password")
 @limiter.limit("10/hour")
@@ -363,16 +343,13 @@ def change_password(
     db.commit()
     return _issue_token(current_user)
 
-
 @router.post("/logout-everywhere")
 def logout_everywhere(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     current_user.token_version += 1
     db.commit()
     return _issue_token(current_user)
 
-
 EMAIL_VERIFICATION_TOKEN_TTL_HOURS = 24
-
 
 @router.post("/verify-email")
 @limiter.limit("20/hour")
@@ -389,7 +366,6 @@ def verify_email(request: Request, payload: VerifyEmailRequest, db: Session = De
     user.email_verification_token = None
     db.commit()
     return {"message": "Email verified."}
-
 
 @router.post("/resend-verification")
 @limiter.limit("5/hour")

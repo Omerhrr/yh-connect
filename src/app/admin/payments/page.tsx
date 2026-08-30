@@ -97,9 +97,6 @@ export default function AdminPaymentsPage() {
   const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [hydrated, setHydrated] = useState(false);
 
-  // Draft copies for free-text fields so typing doesn't fire requests; they
-  // commit into `filters` (and the URL) on Enter/Apply. Dropdowns commit
-  // immediately since there's no debounce concern.
   const [projectDraft, setProjectDraft] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [fromDraft, setFromDraft] = useState("");
@@ -116,9 +113,6 @@ export default function AdminPaymentsPage() {
   const txsLenRef = useRef(0);
   txsLenRef.current = txs.length;
 
-  // Read the initial filter state from the URL once on mount (covers the
-  // ?user=<id> deep link from a user's wallet card and any bookmarked/shared
-  // filtered view).
   useEffect(() => {
     const f = readFiltersFromUrl();
     setFilters(f);
@@ -127,7 +121,6 @@ export default function AdminPaymentsPage() {
     setFromDraft(f.from);
     setToDraft(f.to);
     setHydrated(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const syncUrl = (f: FilterState) => {
@@ -160,7 +153,6 @@ export default function AdminPaymentsPage() {
     }
   }, []);
 
-  // Reload whenever the committed filters change.
   useEffect(() => {
     if (!hydrated) return;
     setTxs([]);
@@ -170,7 +162,6 @@ export default function AdminPaymentsPage() {
     } else {
       setUserName("");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, filters.type, filters.status, filters.project, filters.user, filters.from, filters.to, filters.q]);
 
   const commit = (patch: Partial<FilterState>) => {

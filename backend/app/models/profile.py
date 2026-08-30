@@ -6,10 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class ProfessionalProfile(Base):
     __tablename__ = "professional_profiles"
@@ -17,38 +15,33 @@ class ProfessionalProfile(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=gen_uuid)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), unique=True, nullable=False)
 
-    title: Mapped[str] = mapped_column(String, nullable=False)  # e.g. "Structural Engineer"
+    title: Mapped[str] = mapped_column(String, nullable=False)
     category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=False)
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     location: Mapped[str | None] = mapped_column(String, nullable=True)
     hourly_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     years_experience: Mapped[str | None] = mapped_column(String, nullable=True)
-    availability: Mapped[str] = mapped_column(String, default="available")  # available | busy | offline
-    skills: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
-    license_number: Mapped[str | None] = mapped_column(String, nullable=True)  # e.g. COREN/ARCON reg no.
-    # Comma-separated "Name:Level" pairs, e.g. "English:Native,Yoruba:Fluent"
+    availability: Mapped[str] = mapped_column(String, default="available")
+    skills: Mapped[str | None] = mapped_column(Text, nullable=True)
+    license_number: Mapped[str | None] = mapped_column(String, nullable=True)
+
     languages: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_verified: Mapped[bool] = mapped_column(default=False)
     rating: Mapped[float] = mapped_column(Float, default=0.0)
     review_count: Mapped[int] = mapped_column(default=0)
-    service_locations: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+    service_locations: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Verification (Phase 1)
-    verification_status: Mapped[str] = mapped_column(String, default="unverified")  # unverified|pending|verified|rejected
+    verification_status: Mapped[str] = mapped_column(String, default="unverified")
     id_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     license_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     insurance_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     verification_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Tier 3 gate: proof of address (utility bill, bank statement, etc.),
-    # separate from the tier 2 NIN identity check on User.kyc_status and from
-    # the general verification bundle above. Admin-reviewed, not automated.
-    address_verification_status: Mapped[str] = mapped_column(String, default="unverified", server_default="unverified")  # unverified|pending|verified|rejected
+    address_verification_status: Mapped[str] = mapped_column(String, default="unverified", server_default="unverified")
     address_document_url: Mapped[str | None] = mapped_column(String, nullable=True)
     address_verification_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     address_verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # Payout details (Phase 7, Monnify disbursement)
     bank_code: Mapped[str | None] = mapped_column(String, nullable=True)
     bank_account_number: Mapped[str | None] = mapped_column(String, nullable=True)
     bank_account_name: Mapped[str | None] = mapped_column(String, nullable=True)

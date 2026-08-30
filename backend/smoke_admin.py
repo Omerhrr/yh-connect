@@ -12,15 +12,14 @@ os.environ["DATABASE_URL"] = "sqlite:////tmp/smoke_admin.db"
 if os.path.exists("/tmp/smoke_admin.db"):
     os.remove("/tmp/smoke_admin.db")
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from app.main import app  # noqa: E402
-from app.core.security import hash_password  # noqa: E402
-from app.db.session import SessionLocal  # noqa: E402
-from app.models.user import User, UserRole  # noqa: E402
+from app.main import app
+from app.core.security import hash_password
+from app.db.session import SessionLocal
+from app.models.user import User, UserRole
 
 client = None
-
 
 def seed_admin():
     db = SessionLocal()
@@ -36,16 +35,13 @@ def seed_admin():
     db.commit()
     db.close()
 
-
 def login(email, password):
     res = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert res.status_code == 200, res.text
     return res.json()["access_token"]
 
-
 def auth(token):
     return {"Authorization": f"Bearer {token}"}
-
 
 def main():
     global client
@@ -53,12 +49,10 @@ def main():
         client = c
         run()
 
-
 def run():
     seed_admin()
     admin_token = login("admin@yhconnect.ng", "adminpass123")
 
-    # Register a client + professional to have data to look at.
     client_res = client.post(
         "/api/v1/auth/register/client",
         json={"email": "client@x.com", "password": "password123", "first_name": "Cara", "last_name": "Client"},
@@ -76,32 +70,27 @@ def run():
             "category_id": "civil-structural-engineering",
         },
     )
-    # category_id may not exist pre-seed; ignore failure detail, just check it responds
+
     assert pro_res.status_code in (201, 400, 404), pro_res.text
 
-    # Admin: list users
     res = client.get("/api/v1/admin/users", headers=auth(admin_token))
     assert res.status_code == 200, res.text
     assert len(res.json()) >= 2
     print("admin users list OK:", len(res.json()), "users")
 
-    # Admin: suspend the client
     client_id = next(u["id"] for u in res.json() if u["email"] == "client@x.com")
     res = client.patch(f"/api/v1/admin/users/{client_id}", json={"is_active": False}, headers=auth(admin_token))
     assert res.status_code == 200 and res.json()["is_active"] is False, res.text
     print("admin suspend user OK")
 
-    # Admin: projects list (empty is fine)
     res = client.get("/api/v1/admin/projects", headers=auth(admin_token))
     assert res.status_code == 200, res.text
     print("admin projects list OK")
 
-    # Admin: disputes list (empty is fine)
     res = client.get("/api/v1/admin/disputes", headers=auth(admin_token))
     assert res.status_code == 200, res.text
     print("admin disputes list OK")
 
-    # Admin: settings get/patch
     res = client.get("/api/v1/admin/settings", headers=auth(admin_token))
     assert res.status_code == 200, res.text
     res = client.patch(
@@ -113,13 +102,11 @@ def run():
     assert any(s["key"] == "platform_fee_percent" and s["value"] == "7.5" for s in res.json())
     print("admin settings get/patch OK")
 
-    # Admin: analytics overview
     res = client.get("/api/v1/admin/analytics/overview", headers=auth(admin_token))
     assert res.status_code == 200, res.text
     assert "gmv" in res.json()
     print("admin analytics overview OK:", res.json())
 
-    # Admin: register a second admin
     res = client.post(
         "/api/v1/admin/register",
         json={"email": "admin2@yhconnect.ng", "password": "password123", "first_name": "Second", "last_name": "Admin"},
@@ -128,7 +115,6 @@ def run():
     assert res.status_code == 201, res.text
     print("admin register second admin OK")
 
-    # CMS: create + publish + read a content page
     res = client.post(
         "/api/v1/admin/content/pages",
         json={"slug": "privacy", "title": "Privacy Policy", "body": "We respect your data."},
@@ -139,7 +125,6 @@ def run():
     assert res.status_code == 200 and res.json()["title"] == "Privacy Policy", res.text
     print("CMS content page OK")
 
-    # CMS: blog post create + publish + public read
     res = client.post(
         "/api/v1/admin/content/blog",
         json={"slug": "hello-world", "title": "Hello World", "body": "First post", "published": True},
@@ -150,7 +135,6 @@ def run():
     assert res.status_code == 200 and len(res.json()) == 1, res.text
     print("CMS blog post OK")
 
-    # CMS: highlight create + public read
     res = client.post(
         "/api/v1/admin/content/highlights",
         json={"type": "stat", "title": "500+ verified pros", "sort_order": 1},
@@ -161,7 +145,6 @@ def run():
     assert res.status_code == 200 and len(res.json()) == 1, res.text
     print("CMS highlight OK")
 
-    # CMS: category admin CRUD
     res = client.post(
         "/api/v1/admin/categories",
         json={"id": "test-category", "label": "Test Category"},
@@ -173,7 +156,6 @@ def run():
     print("CMS category admin CRUD OK")
 
     print("\nAll admin/CMS smoke checks passed.")
-
 
 if __name__ == "__main__":
     main()

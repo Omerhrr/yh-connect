@@ -5,20 +5,16 @@ from pydantic import BaseModel
 
 from app.models.project_access_request import AccessRequestType, AccessRequestStatus
 
-
 class AccessRequestCreate(BaseModel):
     request_type: AccessRequestType
     note: Optional[str] = None
 
-
 class AccessRequestRespond(BaseModel):
     status: AccessRequestStatus
-    # Only used (and only meaningful) when approving an inspection request —
-    # the client supplies where/how the professional can reach the site.
+
     address: Optional[str] = None
     phone: Optional[str] = None
     details: Optional[str] = None
-
 
 class AccessRequestOut(BaseModel):
     id: str

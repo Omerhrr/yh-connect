@@ -1,6 +1,5 @@
 from tests.conftest import auth_headers
 
-
 def test_add_payout_account_resolves_and_flags_name_mismatch(client, professional_user):
     """Local/simulated Monnify mode always resolves to 'Simulated Account
     Holder', which won't match the professional's real name (Paul Pro) — so
@@ -15,8 +14,7 @@ def test_add_payout_account_resolves_and_flags_name_mismatch(client, professiona
     body = resp.json()
     assert body["account_name"] == "Simulated Account Holder"
     assert body["name_match"] is False
-    assert body["is_default"] is True  # first account is default automatically
-
+    assert body["is_default"] is True
 
 def test_cannot_add_duplicate_account(client, professional_user):
     payload = {"bank_code": "058", "bank_name": "GTBank", "account_number": "0123456789"}
@@ -24,7 +22,6 @@ def test_cannot_add_duplicate_account(client, professional_user):
     assert resp.status_code == 201, resp.text
     resp = client.post("/api/v1/professionals/me/payout-accounts", json=payload, headers=auth_headers(professional_user["access_token"]))
     assert resp.status_code == 400, resp.text
-
 
 def test_withdraw_blocked_when_default_account_name_mismatch(client, professional_user, db_session_factory):
     from app.models.user import User
@@ -45,7 +42,6 @@ def test_withdraw_blocked_when_default_account_name_mismatch(client, professiona
     resp = client.post("/api/v1/wallet/withdraw", json={"amount": 5000}, headers=auth_headers(professional_user["access_token"]))
     assert resp.status_code == 400, resp.text
     assert "doesn't match your profile name" in resp.json()["detail"]
-
 
 def test_withdraw_succeeds_when_name_matches(client, professional_user, db_session_factory):
     from app.models.user import User
@@ -69,7 +65,6 @@ def test_withdraw_succeeds_when_name_matches(client, professional_user, db_sessi
     resp = client.post("/api/v1/wallet/withdraw", json={"amount": 5000}, headers=auth_headers(professional_user["access_token"]))
     assert resp.status_code == 200, resp.text
     assert resp.json()["wallet_balance"] == 95000
-
 
 def test_multiple_accounts_and_set_default(client, professional_user):
     headers = auth_headers(professional_user["access_token"])
@@ -96,7 +91,6 @@ def test_multiple_accounts_and_set_default(client, professional_user):
     assert accounts[resp1.json()["id"]]["is_default"] is False
     assert accounts[resp2.json()["id"]]["is_default"] is True
 
-
 def test_name_change_cooldown_blocks_rapid_second_change(client, professional_user):
     headers = auth_headers(professional_user["access_token"])
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulo"}, headers=headers)
@@ -106,7 +100,6 @@ def test_name_change_cooldown_blocks_rapid_second_change(client, professional_us
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulinho"}, headers=headers)
     assert resp.status_code == 400, resp.text
     assert "recently" in resp.json()["detail"].lower()
-
 
 def test_name_change_cooldown_configurable_via_admin_settings(client, professional_user, admin_user):
     resp = client.patch(
@@ -120,8 +113,7 @@ def test_name_change_cooldown_configurable_via_admin_settings(client, profession
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulo"}, headers=headers)
     assert resp.status_code == 200, resp.text
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulinho"}, headers=headers)
-    assert resp.status_code == 200, resp.text  # cooldown disabled, immediate second change allowed
-
+    assert resp.status_code == 200, resp.text
 
 def test_non_name_field_updates_unaffected_by_cooldown(client, professional_user):
     headers = auth_headers(professional_user["access_token"])

@@ -22,14 +22,13 @@ from app.db.base import Base
 
 logger = logging.getLogger(__name__)
 
-
 def sync_missing_columns(engine: Engine) -> None:
     inspector = inspect(engine)
     existing_tables = set(inspector.get_table_names())
 
     for table in Base.metadata.sorted_tables:
         if table.name not in existing_tables:
-            # Brand-new table, already created by create_all().
+
             continue
 
         existing_cols = {c["name"] for c in inspector.get_columns(table.name)}

@@ -1,19 +1,7 @@
-// API client for the YH Connect FastAPI backend.
-// Configure the backend URL via NEXT_PUBLIC_API_URL (defaults to local dev server).
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000/api/v1";
 
-// Uploaded files (chat attachments, portfolio images, KYC docs, ...) are
-// stored with a full absolute URL baked in at upload time, built from
-// whatever PUBLIC_BASE_URL the backend had *then*. If the backend's
-// host/port ever changes after that (e.g. moving dev off a conflicting
-// port, or promoting to a new deployment), every previously-sent file
-// silently 404s forever even though the file itself still exists — the
-// stored URL just points at a server that no longer answers there. This
-// rewrites any /uploads/... URL's host to match whatever backend origin
-// the app is *currently* configured to talk to, so old attachments keep
-// working across host/port changes instead of breaking permanently.
 function backendOrigin(): string {
   return API_BASE.replace(/\/api\/v1\/?$/, "");
 }
@@ -51,14 +39,6 @@ export class ApiError extends Error {
   }
 }
 
-// Different components on the same page frequently request the same GET
-// endpoint independently on mount (e.g. the dashboard shell and the page
-// body both asking for the current user's project list). Each of those is a
-// full round trip to the backend, which is the single biggest contributor to
-// pages "feeling slow" to open — de-dupe concurrent identical in-flight GETs
-// so simultaneous callers share one network request instead of each paying
-// for their own. This never serves stale data: once a request settles the
-// entry is removed, so the next call always goes to the network fresh.
 const inFlightGets = new Map<string, Promise<unknown>>();
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -77,11 +57,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    // Next.js patches the global `fetch` and, depending on version/config,
-    // can silently cache GET responses (App Router's default fetch caching
-    // behavior bleeding into client-side calls). Every request here reflects
-    // live backend state (wallet balances, milestone status, bid status,
-    // dispute status, ...), so caching is never correct, explicitly opt out.
     const res = await fetch(`${API_BASE}${path}`, { ...options, headers, cache: "no-store" });
 
     if (!res.ok) {
@@ -90,7 +65,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         const data = await res.json();
         message = data.detail || message;
       } catch {
-        // ignore
       }
       throw new ApiError(res.status, message);
     }
@@ -106,7 +80,6 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   return promise;
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────
 export type UserRole = "client" | "professional" | "admin";
 
 export type UserOut = {
@@ -625,7 +598,6 @@ export type DisputeDetailOut = DisputeOut & {
   events: DisputeEventOut[];
 };
 
-// ─── Admin / CMS ─────────────────────────────────────────────────────────
 export type AdminUserOut = {
   id: string;
   email: string;
@@ -903,9 +875,7 @@ export type FaqItemOut = {
   updated_at: string;
 };
 
-// ─── Auth ────────────────────────────────────────────────────────────────
 export const api = {
-  // Admin
   adminUsers: (params?: { role?: UserRole; q?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== "") as [string, string][]
@@ -1012,7 +982,6 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  // Site content blocks (header/footer/homepage CMS)
   siteContent: () => request<Record<string, unknown>>("/site-content"),
   adminSiteContent: () => request<{ key: string; data: Record<string, unknown>; updated_at: string }[]>("/admin/site-content"),
   updateSiteContentBlock: (key: string, data: Record<string, unknown>) =>
@@ -1022,13 +991,11 @@ export const api = {
     }),
   resetSiteContentBlock: (key: string) => request<void>(`/admin/site-content/${key}`, { method: "DELETE" }),
 
-  // CMS, public reads
   contentPage: (slug: string) => request<ContentPageOut>(`/content/pages/${slug}`),
   publishedBlogPosts: () => request<BlogPostOut[]>("/content/blog"),
   blogPost: (slug: string) => request<BlogPostOut>(`/content/blog/${slug}`),
   activeHighlights: () => request<HighlightOut[]>("/content/highlights"),
 
-  // CMS, admin
   adminContentPages: () => request<ContentPageOut[]>("/admin/content/pages"),
   upsertContentPage: (payload: { slug: string; title: string; body: string }) =>
     request<ContentPageOut>("/admin/content/pages", { method: "POST", body: JSON.stringify(payload) }),
@@ -1132,10 +1099,8 @@ export const api = {
   deleteNotification: (id: string) => request<{ message: string }>(`/notifications/${id}`, { method: "DELETE" }),
   clearNotifications: () => request<{ message: string }>("/notifications", { method: "DELETE" }),
 
-  // Categories
   categories: () => request<CategoryOut[]>("/categories"),
 
-  // Professionals
   professionals: (params?: { category_id?: string; location?: string; q?: string; min_rating?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => [k, String(v)])
@@ -1171,7 +1136,6 @@ export const api = {
     request<CertificationOut>("/professionals/me/certifications", { method: "POST", body: JSON.stringify(payload) }),
   deleteCertification: (id: string) => request<void>(`/professionals/me/certifications/${id}`, { method: "DELETE" }),
 
-  // Projects
   projects: (params?: { category_id?: string; client_id?: string; status_filter?: string; q?: string; location?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {})
@@ -1221,7 +1185,6 @@ export const api = {
     video_url?: string | null;
   }) => request<ProjectOut>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  // Bids
   createBid: (projectId: string, payload: { amount: number; cover_letter?: string; estimated_days?: number }) =>
     request<BidOut>(`/projects/${projectId}/bids`, { method: "POST", body: JSON.stringify(payload) }),
   projectBids: (projectId: string) => request<BidOut[]>(`/projects/${projectId}/bids`),
@@ -1234,7 +1197,6 @@ export const api = {
   declineOffer: (bidId: string, note?: string) =>
     request<BidOut>(`/bids/${bidId}/decline-offer`, { method: "POST", body: JSON.stringify({ note }) }),
 
-  // Invites (direct hire)
   createInvite: (projectId: string, payload: { professional_id: string; proposed_amount?: number; message?: string }) =>
     request<InviteOut>(`/projects/${projectId}/invite`, { method: "POST", body: JSON.stringify(payload) }),
   projectInvites: (projectId: string) => request<InviteOut[]>(`/projects/${projectId}/invites`),
@@ -1242,8 +1204,6 @@ export const api = {
   respondToInvite: (inviteId: string, status: "accepted" | "declined") =>
     request<InviteOut>(`/invites/${inviteId}`, { method: "PATCH", body: JSON.stringify({ status }) }),
 
-  // Access requests: professional asks to inspect the site or start a chat,
-  // client must approve before the pair can message on the project.
   createAccessRequest: (projectId: string, payload: { request_type: AccessRequestType; note?: string }) =>
     request<AccessRequestOut>(`/projects/${projectId}/access-requests`, { method: "POST", body: JSON.stringify(payload) }),
   projectAccessRequests: (projectId: string) => request<AccessRequestOut[]>(`/projects/${projectId}/access-requests`),
@@ -1253,7 +1213,6 @@ export const api = {
     payload: { status: "approved" | "rejected"; address?: string; phone?: string; details?: string }
   ) => request<AccessRequestOut>(`/access-requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
-  // Milestones
   milestones: (projectId: string) => request<MilestoneOut[]>(`/projects/${projectId}/milestones`),
   createMilestone: (projectId: string, payload: { title: string; description?: string; amount: number; due_date?: string }) =>
     request<MilestoneOut>(`/projects/${projectId}/milestones`, { method: "POST", body: JSON.stringify(payload) }),
@@ -1264,14 +1223,12 @@ export const api = {
   rejectMilestone: (milestoneId: string, note: string) =>
     request<MilestoneOut>(`/milestones/${milestoneId}/reject`, { method: "POST", body: JSON.stringify({ note }) }),
 
-  // Change orders
   changeOrders: (projectId: string) => request<ChangeOrderOut[]>(`/projects/${projectId}/change-orders`),
   createChangeOrder: (projectId: string, payload: { description: string; amount_delta: number }) =>
     request<ChangeOrderOut>(`/projects/${projectId}/change-orders`, { method: "POST", body: JSON.stringify(payload) }),
   updateChangeOrder: (changeOrderId: string, status: "approved" | "rejected") =>
     request<ChangeOrderOut>(`/change-orders/${changeOrderId}?status=${status}`, { method: "PATCH" }),
 
-  // Wallet / payments (Monnify)
   topupWallet: (amount: number, redirectUrl?: string) =>
     request<{ transaction_id: string; monnify_reference: string; checkout_url?: string | null; reserved_account?: unknown; amount: number; wallet_balance: number }>(
       "/wallet/topup",
@@ -1298,12 +1255,9 @@ export const api = {
   deletePayoutAccount: (accountId: string) =>
     request<void>(`/professionals/me/payout-accounts/${accountId}`, { method: "DELETE" }),
 
-  // Verification
   submitVerification: (payload: { id_document_url?: string; license_document_url?: string; insurance_document_url?: string }) =>
     request<{ verification_status: string }>("/professionals/me/verification", { method: "POST", body: JSON.stringify(payload) }),
 
-  // Talent tiers: NIN + ID document (tier 2, instant or admin-reviewed) +
-  // proof of address (tier 3, admin-reviewed)
   myProfessionalKyc: () => request<KycOut>("/professionals/me/kyc"),
   submitProfessionalKyc: (payload: { nin: string; dob: string; document_url?: string }) =>
     request<KycOut>("/professionals/me/kyc", { method: "POST", body: JSON.stringify(payload) }),
@@ -1337,12 +1291,10 @@ export const api = {
       body: JSON.stringify({ status, note }),
     }),
 
-  // Portfolio
   addPortfolioItem: (payload: { title: string; description?: string; image_urls?: string[]; completed_date?: string }) =>
     request<PortfolioItemOut>("/professionals/me/portfolio", { method: "POST", body: JSON.stringify(payload) }),
   deletePortfolioItem: (itemId: string) => request<void>(`/professionals/me/portfolio/${itemId}`, { method: "DELETE" }),
 
-  // Disputes
   createDispute: (payload: { project_id: string; milestone_id?: string; category: DisputeCategory; reason: string; evidence_urls?: string[] }) =>
     request<DisputeOut>("/disputes", { method: "POST", body: JSON.stringify(payload) }),
   myDisputes: () => request<DisputeOut[]>("/disputes/mine"),
@@ -1355,7 +1307,6 @@ export const api = {
   respondProposal: (id: string, accept: boolean, note?: string) =>
     request<DisputeDetailOut>(`/disputes/${id}/respond-proposal`, { method: "POST", body: JSON.stringify({ accept, note }) }),
 
-  // Messaging (REST polling)
   messageThreads: () => request<ThreadOut[]>("/messages/threads"),
   unreadMessageCount: () => request<{ count: number }>("/messages/unread-count"),
   projectMessages: (projectId: string, otherUserId?: string, after?: string) => {
@@ -1387,14 +1338,12 @@ export const api = {
   postProjectUpdate: (projectId: string, note: string) =>
     request<MessageOut>(`/projects/${projectId}/updates`, { method: "POST", body: JSON.stringify({ note }) }),
 
-  // Reviews
   createReview: (payload: { project_id: string; reviewee_id: string; rating: number; comment?: string }) =>
     request<ReviewOut>("/reviews", { method: "POST", body: JSON.stringify(payload) }),
   reviewsForUser: (userId: string) => request<ReviewOut[]>(`/reviews/for/${userId}`),
   respondToReview: (reviewId: string, responseBody: string) =>
     request<ReviewOut>(`/reviews/${reviewId}/respond`, { method: "PATCH", body: JSON.stringify({ response_body: responseBody }) }),
 
-  // Favorites
   favorites: () => request<FavoriteOut[]>("/favorites"),
   addFavorite: (targetType: FavoriteTargetType, targetId: string) =>
     request<FavoriteOut>("/favorites", { method: "POST", body: JSON.stringify({ target_type: targetType, target_id: targetId }) }),
@@ -1403,7 +1352,6 @@ export const api = {
   favoriteProfessionals: () => request<ProfessionalOut[]>("/favorites/professionals"),
   favoriteProjects: () => request<ProjectOut[]>("/favorites/projects"),
 
-  // Client profile
   updateClientProfile: (payload: {
     first_name?: string;
     last_name?: string;
@@ -1422,7 +1370,6 @@ export const api = {
   submitKyc: (payload: { nin: string; dob: string }) =>
     request<KycOut>("/clients/me/kyc", { method: "POST", body: JSON.stringify(payload) }),
 
-  // File upload, returns a public URL for the uploaded file
   uploadFile: async (file: File, purpose?: "project_image" | "project_video"): Promise<{ url: string }> => {
     const token = getToken();
     const form = new FormData();
@@ -1439,7 +1386,6 @@ export const api = {
         const data = await res.json();
         message = data.detail || message;
       } catch {
-        // ignore
       }
       throw new ApiError(res.status, message);
     }
@@ -1464,7 +1410,6 @@ export const api = {
   },
 };
 
-// Common Nigerian bank codes for the payout details form (Monnify uses NIBSS bank codes).
 export const NIGERIAN_BANKS = [
   { code: "044", name: "Access Bank" },
   { code: "023", name: "Citibank Nigeria" },

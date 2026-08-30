@@ -76,10 +76,6 @@ const ICON_MAP: Record<string, React.ElementType> = {
   HeadphonesIcon,
 };
 
-// Blurred, slowly cross-fading background photos behind the hero content.
-// Renders nothing if no images are configured, so the hero looks exactly as
-// it always has until an admin uploads at least one photo in CMS. With 2+
-// images it rotates between them for a subtle animated feel.
 function HeroBackgroundSlideshow({ images }: { images: string[] }) {
   const [index, setIndex] = useState(0);
 
@@ -94,7 +90,6 @@ function HeroBackgroundSlideshow({ images }: { images: string[] }) {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden">
       {images.map((src, i) => (
-        // eslint-disable-next-line @next/next/no-img-element
         <img
           key={src + i}
           src={src}
@@ -104,13 +99,12 @@ function HeroBackgroundSlideshow({ images }: { images: string[] }) {
           style={{ opacity: i === index ? 0.45 : 0 }}
         />
       ))}
-      {/* keep text legible over any photo, and blend edges into the gradient */}
+      {}
       <div className="absolute inset-0 bg-gradient-to-br from-background/55 via-background/45 to-background/55" />
     </div>
   );
 }
 
-// ─── Hero ───────────────────────────────────────────────────────────────────
 function Hero() {
   const { navigate } = useNav();
   const [search, setSearch] = useState("");
@@ -123,7 +117,7 @@ function Hero() {
   return (
     <section className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-primary/10 py-20 md:py-32">
       <HeroBackgroundSlideshow images={hero.background_images ?? []} />
-      {/* decorative blobs */}
+      {}
       <div className="pointer-events-none absolute -top-32 -right-32 h-[500px] w-[500px] rounded-full bg-primary/5 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 -left-32 h-[400px] w-[400px] rounded-full bg-primary/5 blur-3xl" />
 
@@ -137,7 +131,7 @@ function Hero() {
             {hero.subheading}
           </p>
 
-          {/* Search bar */}
+          {}
           <div className="mt-10 flex flex-col sm:flex-row gap-3 max-w-lg mx-auto">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -182,7 +176,6 @@ function Hero() {
   );
 }
 
-// ─── Highlights (admin CMS-managed stats/testimonials/banners) ──────────────
 function Highlights() {
   const [highlights, setHighlights] = useState<HighlightOut[] | null>(null);
   const [categoryCount, setCategoryCount] = useState<number | null>(null);
@@ -201,8 +194,6 @@ function Highlights() {
   const testimonials = highlights.filter((h) => h.type === "testimonial").sort((a, b) => a.sort_order - b.sort_order);
   const banners = highlights.filter((h) => h.type === "banner").sort((a, b) => a.sort_order - b.sort_order);
 
-  // When the CMS hasn't been configured with stats yet, show honest product
-  // facts so the trust band never renders empty.
   const fallbackStats =
     stats.length === 0
       ? [
@@ -259,7 +250,6 @@ function Highlights() {
   );
 }
 
-// ─── Categories ─────────────────────────────────────────────────────────────
 function Categories() {
   const { navigate } = useNav();
   const [categories, setCategories] = useState<CategoryOut[] | null>(null);
@@ -303,7 +293,6 @@ function Categories() {
   );
 }
 
-// ─── How It Works ───────────────────────────────────────────────────────────
 const HOW_IT_WORKS_ICONS = ["FileText", "Users", "ShieldCheck"];
 
 function HowItWorks() {
@@ -321,7 +310,7 @@ function HowItWorks() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 relative">
-          {/* connecting line on desktop */}
+          {}
           <div className="hidden md:block absolute top-12 left-[16.67%] right-[16.67%] h-px bg-border" />
 
           {content.steps.map((step, i) => {
@@ -358,7 +347,6 @@ function HowItWorks() {
   );
 }
 
-// ─── Featured Talent ────────────────────────────────────────────────────────
 function FeaturedTalent() {
   const { navigate } = useNav();
   const [pros, setPros] = useState<ProfessionalOut[] | null>(null);
@@ -438,7 +426,6 @@ function FeaturedTalent() {
   );
 }
 
-// ─── Recent Projects ────────────────────────────────────────────────────────
 function RecentProjects() {
   const { navigate } = useNav();
   const [projects, setProjects] = useState<ProjectOut[] | null>(null);
@@ -519,7 +506,6 @@ function RecentProjects() {
   );
 }
 
-// ─── Why Choose ─────────────────────────────────────────────────────────────
 const WHY_CHOOSE_ICONS = ["BadgeCheck", "Lock", "HardHat", "HeadphonesIcon"];
 
 function WhyChoose() {
@@ -553,14 +539,13 @@ function WhyChoose() {
   );
 }
 
-// ─── For Clients / For Talents split ────────────────────────────────────────
 function ForWho() {
   const { navigate } = useNav();
   return (
     <section className="py-20">
       <div className="container mx-auto px-4">
         <div className="grid md:grid-cols-2 gap-8">
-          {/* For Clients */}
+          {}
           <div className="rounded-2xl border bg-gradient-to-br from-primary/5 to-primary/10 p-8">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground mb-5">
               <Briefcase className="h-6 w-6" />
@@ -588,7 +573,7 @@ function ForWho() {
             </div>
           </div>
 
-          {/* For Talents */}
+
           <div className="rounded-2xl border bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-8">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-600 text-white mb-5">
               <Users className="h-6 w-6" />
@@ -624,7 +609,6 @@ function ForWho() {
   );
 }
 
-// ─── For Clients / For Talents audience landing pages ──────────────────────
 function AudienceHero({ eyebrow, title, subtitle, primaryCta, primaryAction, secondaryCta, secondaryAction }: {
   eyebrow: string;
   title: React.ReactNode;
@@ -734,7 +718,6 @@ export function ForTalentsPage() {
   return <AudienceLanding variant="talent" />;
 }
 
-// ─── CTA Banner ─────────────────────────────────────────────────────────────
 function CTABanner() {
   const { navigate } = useNav();
   const content = useSiteContent("homepage.cta_banner");
@@ -770,7 +753,6 @@ function CTABanner() {
   );
 }
 
-// ─── Find Talent page ────────────────────────────────────────────────────────
 const PAGE_SIZE = 20;
 
 export function FindTalentPage() {
@@ -796,9 +778,7 @@ export function FindTalentPage() {
       })
       .catch(() => setPros(null));
   };
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, []);  useEffect(() => { load(); }, [categoryId]);
   const loadMore = () => {
     if (!pros) return;
     setLoadingMore(true);
@@ -811,7 +791,6 @@ export function FindTalentPage() {
       .catch(() => {})
       .finally(() => setLoadingMore(false));
   };
-
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -907,7 +886,6 @@ export function FindTalentPage() {
   );
 }
 
-// ─── Find Work page ──────────────────────────────────────────────────────────
 export function FindWorkPage() {
   const [projects, setProjects] = useState<ProjectOut[] | null>(null);
   const [search, setSearch] = useState("");
@@ -924,8 +902,7 @@ export function FindWorkPage() {
       })
       .catch(() => setProjects(null));
   };
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, []);
   const loadMore = () => {
     if (!projects) return;
     setLoadingMore(true);
@@ -1007,7 +984,6 @@ export function FindWorkPage() {
   );
 }
 
-// ─── How It Works page ───────────────────────────────────────────────────────
 export function HowItWorksPage() {
   return (
     <CmsPage slug="how-it-works">
@@ -1023,7 +999,6 @@ export function HowItWorksPage() {
   );
 }
 
-// --- Blog / Privacy / Terms - CMS-backed with hardcoded fallback ---
 export function BlogPage() {
   const [posts, setPosts] = useState<BlogPostOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1104,7 +1079,6 @@ export function BlogPostPage({ slug }: { slug: string }) {
         {post.published_at ? new Date(post.published_at).toLocaleDateString() : ""}
       </p>
       {post.cover_image_url && (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={post.cover_image_url} alt={post.title} className="w-full rounded-xl mt-6 object-cover max-h-96" />
       )}
       <div className="prose prose-sm max-w-none mt-6 whitespace-pre-wrap">{post.body}</div>
@@ -1112,7 +1086,6 @@ export function BlogPostPage({ slug }: { slug: string }) {
   );
 }
 
-// ─── FAQ page ─────────────────────────────────────────────────────────────
 function FaqAccordionItem({ item, open, onToggle }: { item: FaqItemOut; open: boolean; onToggle: () => void }) {
   return (
     <div className="rounded-xl border bg-background overflow-hidden">
@@ -1255,7 +1228,6 @@ export function FaqPage() {
   );
 }
 
-// ─── Shared legal page layout (Privacy / Terms) ─────────────────────────────
 interface LegalSection {
   id: string;
   title: string;
@@ -1280,7 +1252,7 @@ function LegalLayout({
 }) {
   return (
     <div>
-      {/* Hero banner */}
+      {}
       <div className="bg-gradient-to-br from-primary to-primary/80 text-primary-foreground">
         <div className="container mx-auto px-4 py-14 max-w-5xl">
           <Badge variant="secondary" className="rounded-full text-xs mb-3 bg-white/15 text-primary-foreground border-0 hover:bg-white/15">
@@ -1293,7 +1265,7 @@ function LegalLayout({
       </div>
 
       <div className="container mx-auto px-4 py-10 max-w-5xl grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
-        {/* Section nav */}
+        {}
         <nav className="lg:sticky lg:top-20 order-2 lg:order-1">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 hidden lg:block">On this page</p>
           <div className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 -mx-4 px-4 lg:mx-0 lg:px-0">
@@ -1313,7 +1285,7 @@ function LegalLayout({
           </div>
         </nav>
 
-        {/* Sections */}
+        {}
         <div className="lg:col-span-3 order-1 lg:order-2 space-y-4">
           {sections.map((s) => {
             const Icon = s.icon;
@@ -1330,7 +1302,7 @@ function LegalLayout({
             );
           })}
 
-          {/* Contact card */}
+          {}
           <section className="rounded-xl border bg-muted/30 p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -1474,7 +1446,6 @@ export function TermsPage() {
   );
 }
 
-// ─── Back to top bubble ──────────────────────────────────────────────────────
 function BackToTop() {
   const [visible, setVisible] = useState(false);
 
@@ -1499,7 +1470,6 @@ function BackToTop() {
   );
 }
 
-// ─── Default export: full home page ─────────────────────────────────────────
 export function HomePage() {
   return (
     <>

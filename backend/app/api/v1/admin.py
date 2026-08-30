@@ -54,8 +54,6 @@ from app.api.v1.projects import _to_out as _project_to_out
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-
-# ─── Disputes ──────────────────────────────────────────────────────────────
 @router.get("/disputes", response_model=list[DisputeOut])
 def list_disputes(
     status_filter: DisputeStatus | None = None,
@@ -81,7 +79,6 @@ def list_disputes(
         ]
     return out
 
-
 @router.get("/disputes/{dispute_id}", response_model=DisputeDetailOut)
 def get_dispute_detail(
     dispute_id: str,
@@ -93,8 +90,6 @@ def get_dispute_detail(
         raise HTTPException(status_code=404, detail="Dispute not found")
     return build_dispute_detail_out(dispute, db)
 
-
-# ─── Users ─────────────────────────────────────────────────────────────────
 @router.get("/users", response_model=list[AdminUserOut])
 def list_users(
     role: UserRole | None = None,
@@ -106,8 +101,7 @@ def list_users(
 ):
     query = db.query(User).filter(User.is_deleted.is_(False))
     if role == UserRole.professional:
-        # Show anyone with a professional profile, not just those currently
-        # in talent mode, since dual-role accounts can be actively client-side.
+
         query = query.filter(
             or_(User.role == UserRole.professional, User.profile.has())
         )
@@ -149,7 +143,6 @@ def list_users(
         for u in rows
     ]
 
-
 @router.get("/users/{user_id}", response_model=AdminUserDetailOut)
 def get_user_detail(
     user_id: str,
@@ -164,9 +157,6 @@ def get_user_detail(
     bids: list = []
     projects: list = []
 
-    # Show both sides of a dual-role account, not just whichever mode is
-    # currently active, so admins see the full picture of what a user does
-    # on the platform.
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == user.id).first()
     if profile:
         professional_profile = _profile_to_out(profile)
@@ -206,7 +196,6 @@ def get_user_detail(
         projects=projects,
     )
 
-
 @router.patch("/users/{user_id}", response_model=AdminUserOut)
 def update_user(
     user_id: str,
@@ -220,12 +209,10 @@ def update_user(
     if payload.is_active is not None:
         user.is_active = payload.is_active
         if not payload.is_active:
-            # Any outstanding tokens for this user stop working immediately
-            # too (deps.py checks token_version), not just future logins.
+
             user.token_version += 1
         else:
-            # Manual unsuspend (or plain reactivate) clears any time-bound
-            # suspension state so login stops showing a stale message.
+
             user.suspended_at = None
             user.suspended_until = None
             user.suspension_reason = None
@@ -244,7 +231,6 @@ def update_user(
     db.refresh(user)
     return user
 
-
 @router.post("/users/{user_id}/suspend", response_model=AdminUserOut)
 def suspend_user(
     user_id: str,
@@ -261,11 +247,7 @@ def suspend_user(
         raise HTTPException(status_code=400, detail="Choose exactly one: a number of days, \"until further notice\", or \"forever\"")
 
     if payload.forever:
-        # "Forever" isn't a suspension state at all — the account is
-        # deleted. We anonymize rather than hard-delete so the rows other
-        # parties still depend on (their shared projects, milestones,
-        # disputes, wallet transactions) keep their referential integrity
-        # and history, but this account can never log in or be found again.
+
         user.is_active = False
         user.is_deleted = True
         user.deleted_at = datetime.utcnow()
@@ -308,7 +290,6 @@ def suspend_user(
     )
     return user
 
-
 @router.post("/users/{user_id}/unsuspend", response_model=AdminUserOut)
 def unsuspend_user(
     user_id: str,
@@ -327,7 +308,6 @@ def unsuspend_user(
     notify(db, user.id, NotificationType.general, "Your account has been reinstated",
            body="Your account is active again — welcome back.", email_also=True)
     return user
-
 
 @router.post("/users/{user_id}/wallet", response_model=AdminWalletTransactionOut)
 def adjust_wallet(
@@ -373,7 +353,6 @@ def adjust_wallet(
     db.refresh(tx)
     return _wallet_tx_to_out(tx, db)
 
-
 @router.post("/announcements", status_code=201)
 def send_announcement(
     payload: AdminAnnouncement,
@@ -395,8 +374,6 @@ def send_announcement(
     db.commit()
     return {"sent": len(users)}
 
-
-# ─── Projects (oversight) ────────────────────────────────────────────────
 def _admin_projects_query(db: Session, status_filter: ProjectStatus | None, q: str | None, has_dispute: bool | None):
     query = db.query(Project)
     if status_filter:
@@ -419,7 +396,6 @@ def _admin_projects_query(db: Session, status_filter: ProjectStatus | None, q: s
         disputed_project_ids = db.query(Dispute.project_id).filter(Dispute.status.in_(BLOCKING_STATUSES))
         query = query.filter(Project.id.in_(disputed_project_ids)) if has_dispute else query.filter(Project.id.notin_(disputed_project_ids))
     return query
-
 
 @router.get("/projects", response_model=list[AdminProjectOut])
 def list_all_projects(
@@ -466,7 +442,6 @@ def list_all_projects(
         )
     return out
 
-
 @router.get("/projects/count")
 def admin_projects_count(
     status_filter: ProjectStatus | None = None,
@@ -478,7 +453,6 @@ def admin_projects_count(
     query = _admin_projects_query(db, status_filter, q, has_dispute)
     total = query.with_entities(func.count(Project.id)).scalar() or 0
     return {"total": total}
-
 
 @router.get("/projects/{project_id}", response_model=AdminProjectDetailOut)
 def get_project_detail(
@@ -543,7 +517,6 @@ def get_project_detail(
         wallet_transactions=[_wallet_tx_to_out(t, db) for t in txs],
     )
 
-
 @router.patch("/projects/{project_id}/cancel", response_model=AdminProjectOut)
 def force_cancel_project(
     project_id: str,
@@ -554,11 +527,6 @@ def force_cancel_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Any escrowed money still sitting in a funded/approved milestone would
-    # otherwise be stranded (still technically fundable/releasable on a
-    # cancelled project via the normal endpoints). Refund it to the client
-    # up front as part of the cancellation, same helper the normal
-    # refund/dispute paths use, so it's a real, tracked wallet transaction.
     refunded_total = 0.0
     for milestone in project.milestones:
         if milestone.status in (MilestoneStatus.funded, MilestoneStatus.approved):
@@ -589,15 +557,12 @@ def force_cancel_project(
     db.refresh(project)
     return project
 
-
-# ─── Platform settings ─────────────────────────────────────────────────────
 @router.get("/settings", response_model=list[PlatformSettingOut])
 def get_settings(
     current_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
     return db.query(PlatformSetting).order_by(PlatformSetting.key).all()
-
 
 @router.patch("/settings", response_model=list[PlatformSettingOut])
 def update_settings(
@@ -614,15 +579,12 @@ def update_settings(
     db.commit()
     return db.query(PlatformSetting).order_by(PlatformSetting.key).all()
 
-
-# ─── Receipt PDF branding ───────────────────────────────────────────────────
 @router.get("/receipt-settings", response_model=ReceiptSettingsOut)
 def get_receipt_settings_endpoint(
     current_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
     return ReceiptSettingsOut(**get_receipt_settings(db))
-
 
 @router.put("/receipt-settings", response_model=ReceiptSettingsOut)
 def update_receipt_settings_endpoint(
@@ -633,14 +595,12 @@ def update_receipt_settings_endpoint(
     updated = save_receipt_settings(db, payload.model_dump(exclude_unset=True))
     return ReceiptSettingsOut(**updated)
 
-
 @router.get("/project-media-settings", response_model=ProjectMediaSettingsOut)
 def get_project_media_settings_endpoint(
     current_user: User = Depends(require_role(UserRole.admin)),
     db: Session = Depends(get_db),
 ):
     return ProjectMediaSettingsOut(**get_project_media_settings(db))
-
 
 @router.put("/project-media-settings", response_model=ProjectMediaSettingsOut)
 def update_project_media_settings_endpoint(
@@ -650,7 +610,6 @@ def update_project_media_settings_endpoint(
 ):
     updated = save_project_media_settings(db, payload.model_dump(exclude_unset=True))
     return ProjectMediaSettingsOut(**updated)
-
 
 @router.get("/receipt-settings/preview")
 def preview_receipt_settings(
@@ -684,8 +643,6 @@ def preview_receipt_settings(
         headers={"Content-Disposition": 'inline; filename="receipt-preview.pdf"'},
     )
 
-
-# ─── Wallet / escrow oversight ─────────────────────────────────────────────
 def _wallet_tx_to_out(tx: WalletTransaction, db: Session) -> AdminWalletTransactionOut:
     client = db.get(User, tx.client_id) if tx.client_id else None
     professional = db.get(User, tx.professional_id) if tx.professional_id else None
@@ -706,7 +663,6 @@ def _wallet_tx_to_out(tx: WalletTransaction, db: Session) -> AdminWalletTransact
         note=tx.note,
         created_at=tx.created_at,
     )
-
 
 @router.get("/wallet/summary", response_model=AdminWalletSummary)
 def wallet_summary(
@@ -747,9 +703,7 @@ def wallet_summary(
         .scalar()
         or 0
     )
-    # Pending Monnify topups/withdrawals that never got a webhook callback
-    # within a reasonable window are effectively stuck and need admin eyes,
-    # distinct from freshly-initiated ones still in flight.
+
     stuck_cutoff = datetime.utcnow() - timedelta(minutes=30)
     stuck_pending_count = (
         db.query(func.count(WalletTransaction.id))
@@ -760,10 +714,7 @@ def wallet_summary(
         .scalar()
         or 0
     )
-    # Money still sitting in escrow on milestones whose dispute is open /
-    # under review / escalated: it's counted in total_in_escrow already, but
-    # callers want to know how much of that is actually frozen vs. just
-    # awaiting normal approval.
+
     held_milestone_ids = [
         d.milestone_id
         for d in db.query(Dispute.milestone_id)
@@ -793,7 +744,6 @@ def wallet_summary(
         stuck_pending_count=stuck_pending_count,
     )
 
-
 def _wallet_query(
     db: Session,
     type_filter: WalletTransactionType | None,
@@ -818,7 +768,7 @@ def _wallet_query(
     if date_from:
         query = query.filter(WalletTransaction.created_at >= date_from)
     if date_to:
-        # Inclusive of the whole end day when only a date (no time) is given.
+
         query = query.filter(WalletTransaction.created_at <= date_to)
     if q:
         like = f"%{q.strip()}%"
@@ -842,7 +792,6 @@ def _wallet_query(
             )
         )
     return query
-
 
 @router.get("/wallet/transactions", response_model=list[AdminWalletTransactionOut])
 def wallet_transactions(
@@ -869,7 +818,6 @@ def wallet_transactions(
     )
     return [_wallet_tx_to_out(t, db) for t in txs]
 
-
 @router.get("/wallet/transactions/count", response_model=AdminWalletTransactionsCount)
 def wallet_transactions_count(
     type_filter: WalletTransactionType | None = None,
@@ -887,7 +835,6 @@ def wallet_transactions_count(
     query = _wallet_query(db, type_filter, status_filter, project_id, user_id, date_from, date_to, q)
     total = query.with_entities(func.count(WalletTransaction.id)).scalar() or 0
     return AdminWalletTransactionsCount(total=total)
-
 
 @router.get("/wallet/transactions/export")
 def wallet_transactions_export(
@@ -939,8 +886,6 @@ def wallet_transactions_export(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
-
-# ─── Analytics ──────────────────────────────────────────────────────────────
 @router.get("/analytics/overview", response_model=AnalyticsOverview)
 def analytics_overview(
     current_user: User = Depends(require_role(UserRole.admin)),
@@ -1009,8 +954,6 @@ def analytics_overview(
         platform_revenue=platform_revenue,
     )
 
-
-# ─── Admin auth ─────────────────────────────────────────────────────────────
 @router.post("/register", response_model=Token, status_code=201)
 def register_admin(
     payload: AdminRegister,
@@ -1030,8 +973,6 @@ def register_admin(
     db.add(user)
     db.commit()
     db.refresh(user)
-    # Include the token_version claim like every other token issuer so the
-    # usual logout-everywhere / password-change invalidation applies, and
-    # use from_user so derived fields (email_verified etc.) are correct.
+
     token = create_access_token(user.id, {"role": user.role.value, "tv": user.token_version})
     return Token(access_token=token, user=UserOut.from_user(user))

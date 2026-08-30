@@ -15,7 +15,6 @@ const TIER_TITLES: Record<1 | 2 | 3, string> = {
   3: "Tier 3: identity and address fully verified",
 };
 
-/** Small pill showing a professional's talent tier (1/2/3). */
 export function TierTag({ tier, className = "" }: { tier: 1 | 2 | 3; className?: string }) {
   return (
     <span
@@ -27,11 +26,6 @@ export function TierTag({ tier, className = "" }: { tier: 1 | 2 | 3; className?:
   );
 }
 
-/**
- * Admin-approved credential badges (COREN, ARCON, etc). Only certifications
- * with verification_status "verified" render, each is its own hoverable
- * badge showing that credential's name (and issuing body, if any) on hover.
- */
 export function CertificationBadges({ certifications, className = "" }: { certifications: CertificationOut[]; className?: string }) {
   const verified = certifications.filter((c) => c.verification_status === "verified");
   if (verified.length === 0) return null;

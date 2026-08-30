@@ -15,7 +15,6 @@ from app.services.username import is_username_taken, is_valid_username, normaliz
 
 router = APIRouter(prefix="/clients", tags=["clients"])
 
-
 @router.patch("/me", response_model=UserOut)
 def update_my_client_profile(
     payload: ClientProfileUpdate,
@@ -37,13 +36,8 @@ def update_my_client_profile(
         setattr(current_user, field, value)
     db.commit()
     db.refresh(current_user)
-    # UserOut.from_user rather than the raw ORM object: the response schema's
-    # email_verified / has_professional_profile fields are derived (from
-    # email_verified_at / profile), and model_validate alone leaves them at
-    # their defaults, which would make the frontend briefly think the client
-    # is unverified after every profile save.
-    return UserOut.from_user(current_user)
 
+    return UserOut.from_user(current_user)
 
 @router.get("/me/kyc", response_model=KycOut)
 def get_my_kyc(current_user: User = Depends(require_role(UserRole.client)), db: Session = Depends(get_db)):
@@ -52,7 +46,6 @@ def get_my_kyc(current_user: User = Depends(require_role(UserRole.client)), db: 
         kyc_note=current_user.kyc_note,
         kyc_verified_at=current_user.kyc_verified_at,
     )
-
 
 @router.post("/me/kyc", response_model=KycOut)
 @limiter.limit("10/hour")
@@ -91,7 +84,6 @@ def submit_my_kyc(
         kyc_note=current_user.kyc_note,
         kyc_verified_at=current_user.kyc_verified_at,
     )
-
 
 def _client_public_out(client: User, db: Session) -> ClientPublicOut:
     completed_count = (
@@ -145,12 +137,10 @@ def _client_public_out(client: User, db: Session) -> ClientPublicOut:
         preferred_categories=client.preferred_categories,
     )
 
-
 @router.get("/{client_id}", response_model=ClientPublicOut)
 def get_client_public(client_id: str, db: Session = Depends(get_db)):
     client = db.get(User, client_id)
-    # Dual-role accounts can be actively in talent mode but still have a
-    # client history, so don't gate strictly on the currently active role.
+
     has_client_history = client and db.query(Project).filter(Project.client_id == client_id).first() is not None
     if not client or (client.role != UserRole.client and not has_client_history):
         raise HTTPException(status_code=404, detail="Client not found")

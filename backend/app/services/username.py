@@ -9,21 +9,17 @@ from app.models.user import User
 
 USERNAME_RE = re.compile(r"^[a-z0-9_]{3,20}$")
 
-
 def normalize_username(raw: str) -> str:
     return raw.strip().lower()
 
-
 def is_valid_username(username: str) -> bool:
     return bool(USERNAME_RE.match(username))
-
 
 def is_username_taken(db: Session, username: str, exclude_user_id: str | None = None) -> bool:
     query = db.query(User).filter(User.username == username)
     if exclude_user_id:
         query = query.filter(User.id != exclude_user_id)
     return query.first() is not None
-
 
 def _base_candidates(first_name: str, last_name: str) -> list[str]:
     first = re.sub(r"[^a-z0-9]", "", first_name.lower())
@@ -35,14 +31,13 @@ def _base_candidates(first_name: str, last_name: str) -> list[str]:
         candidates.append(first)
     if last:
         candidates.append(last)
-    # Dedupe, keep order, drop anything too short/long for the regex.
+
     seen: list[str] = []
     for c in candidates:
         c = c[:20]
         if len(c) >= 3 and c not in seen:
             seen.append(c)
     return seen
-
 
 def suggest_usernames(db: Session, first_name: str, last_name: str, count: int = 5) -> list[str]:
     """Generate available username suggestions from a name. Tries clean

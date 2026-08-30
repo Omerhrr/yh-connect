@@ -41,10 +41,6 @@ export default function AdminDisputesPage() {
         q: query || undefined,
       })
       .then((all) => {
-        // The admin endpoint returns everything; page client-side so we can
-        // keep this page simple without new backend pagination. Active cases
-        // (open / under review / escalated) float to the top so the queue is
-        // always work-first, newest first within each group.
         const rank = (s: string) => (s === "open" || s === "under_review" || s === "escalated" ? 0 : 1);
         const sorted = [...all].sort((a, b) =>
           rank(a.status) - rank(b.status) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -57,8 +53,7 @@ export default function AdminDisputesPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { load(); }, []);
   const openCount = disputes.filter((d) => d.status === "open" || d.status === "under_review" || d.status === "escalated").length;
 
   const statusSelect = (v: string) => {

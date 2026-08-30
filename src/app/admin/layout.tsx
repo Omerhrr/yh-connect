@@ -14,7 +14,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { ready, user } = useAuthGuard("admin", "/admin/login", !isLoginPage);
   const logout = useAuth((s) => s.logout);
 
-  // /admin/login itself is not behind the guard's shell.
   if (isLoginPage) {
     return <>{children}</>;
   }

@@ -1,7 +1,6 @@
 from tests.conftest import auth_headers
 from app.core.config import settings
 
-
 def _post_project_payload():
     return {
         "title": "Renovate kitchen",
@@ -11,10 +10,8 @@ def _post_project_payload():
         "budget_max": 300000,
     }
 
-
 def test_posting_allowed_with_unverified_email_when_email_not_configured(client, client_user):
-    # Default test env: no email provider configured, so the gate is off —
-    # matches current behavior for anyone without RESEND/SMTP set up.
+
     assert not settings.email_configured
     resp = client.post(
         "/api/v1/projects",
@@ -22,7 +19,6 @@ def test_posting_allowed_with_unverified_email_when_email_not_configured(client,
         headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 201, resp.text
-
 
 def test_posting_blocked_with_unverified_email_when_email_configured(client, client_user):
     settings.RESEND_API_KEY = "test-key"
@@ -36,7 +32,6 @@ def test_posting_blocked_with_unverified_email_when_email_configured(client, cli
         assert "verify your email" in resp.json()["detail"].lower()
     finally:
         settings.RESEND_API_KEY = ""
-
 
 def test_posting_allowed_once_email_verified(client, client_user, db_session_factory):
     from datetime import datetime, timezone

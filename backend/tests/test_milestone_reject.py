@@ -1,7 +1,6 @@
 from tests.conftest import auth_headers
 from tests.test_disputes import _post_project
 
-
 def _hire(client, client_user, professional_user, amount=200000):
     project = _post_project(client, client_user)
     resp = client.post(
@@ -14,7 +13,6 @@ def _hire(client, client_user, professional_user, amount=200000):
     assert resp.status_code == 200, resp.text
     return project
 
-
 def test_professional_cannot_create_milestones(client, client_user, professional_user):
     project = _hire(client, client_user, professional_user)
     resp = client.post(
@@ -23,7 +21,6 @@ def test_professional_cannot_create_milestones(client, client_user, professional
         headers=auth_headers(professional_user["access_token"]),
     )
     assert resp.status_code == 403, resp.text
-
 
 def test_client_can_reject_unfunded_milestone_with_note(client, client_user, professional_user):
     project = _hire(client, client_user, professional_user)
@@ -36,7 +33,6 @@ def test_client_can_reject_unfunded_milestone_with_note(client, client_user, pro
     assert resp.status_code == 201, resp.text
     milestone = resp.json()
 
-    # Rejecting without a note is rejected.
     resp = client.post(
         f"/api/v1/milestones/{milestone['id']}/reject",
         json={"note": "   "},
@@ -54,7 +50,6 @@ def test_client_can_reject_unfunded_milestone_with_note(client, client_user, pro
     assert body["status"] == "rejected"
     assert "wasn't agreed" in body["rejection_note"]
     assert body["rejected_at"] is not None
-
 
 def test_rejecting_a_funded_milestone_refunds_the_client(client, client_user, professional_user):
     """Fund-before-work means most rejections now happen on an already-funded
@@ -91,14 +86,12 @@ def test_rejecting_a_funded_milestone_refunds_the_client(client, client_user, pr
     balance_after_refund = client.get("/api/v1/auth/me", headers=auth_headers(client_user["access_token"])).json()["wallet_balance"]
     assert balance_after_refund == balance_after_funding + 50000
 
-    # Already refunded/closed, can't be rejected again.
     resp = client.post(
         f"/api/v1/milestones/{milestone['id']}/reject",
         json={"note": "again"},
         headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 400, resp.text
-
 
 def test_only_client_can_reject(client, client_user, professional_user):
     project = _hire(client, client_user, professional_user)
@@ -116,7 +109,6 @@ def test_only_client_can_reject(client, client_user, professional_user):
         headers=auth_headers(professional_user["access_token"]),
     )
     assert resp.status_code == 403, resp.text
-
 
 def test_project_out_exposes_contract_amount(client, client_user, professional_user):
     project = _hire(client, client_user, professional_user, amount=80000)

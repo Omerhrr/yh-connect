@@ -32,9 +32,6 @@ from app.services.notify import notify
 
 router = APIRouter(prefix="/disputes", tags=["disputes"])
 
-# Admin-driven status transitions allowed from each current status. Keeps a
-# PATCH from jumping e.g. resolved -> escalated with no trail, or resolving
-# something that was already withdrawn by the raiser.
 ADMIN_TRANSITIONS: dict[DisputeStatus, set[DisputeStatus]] = {
     DisputeStatus.open: {DisputeStatus.under_review, DisputeStatus.escalated, DisputeStatus.resolved},
     DisputeStatus.under_review: {DisputeStatus.escalated, DisputeStatus.resolved},
@@ -42,7 +39,6 @@ ADMIN_TRANSITIONS: dict[DisputeStatus, set[DisputeStatus]] = {
     DisputeStatus.resolved: set(),
     DisputeStatus.withdrawn: set(),
 }
-
 
 def _get_party_dispute(dispute_id: str, current_user: User, db: Session) -> Dispute:
     dispute = db.get(Dispute, dispute_id)
@@ -52,7 +48,6 @@ def _get_party_dispute(dispute_id: str, current_user: User, db: Session) -> Disp
     if current_user.role != UserRole.admin and current_user.id not in (project.client_id, project.assigned_professional_id):
         raise HTTPException(status_code=403, detail="Not authorized for this dispute")
     return dispute
-
 
 @router.post("", response_model=DisputeOut, status_code=201)
 def create_dispute(payload: DisputeCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -104,7 +99,6 @@ def create_dispute(payload: DisputeCreate, current_user: User = Depends(get_curr
     db.refresh(dispute)
     return build_dispute_out(dispute, db)
 
-
 @router.get("/mine", response_model=list[DisputeOut])
 def my_disputes(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     disputes = (
@@ -114,18 +108,15 @@ def my_disputes(current_user: User = Depends(get_current_user), db: Session = De
         .order_by(Dispute.created_at.desc())
         .all()
     )
-    # Opportunistic auto-accept check, same lazy-trigger pattern as
-    # milestone auto-release — no scheduler in this app.
+
     check_and_expire_proposals(db, disputes)
     return [build_dispute_out(d, db) for d in disputes]
-
 
 @router.get("/{dispute_id}", response_model=DisputeDetailOut)
 def get_dispute(dispute_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dispute = _get_party_dispute(dispute_id, current_user, db)
     check_and_expire_proposals(db, [dispute])
     return build_dispute_detail_out(dispute, db)
-
 
 @router.post("/{dispute_id}/propose-resolution", response_model=DisputeOut)
 def propose_resolution(
@@ -175,7 +166,6 @@ def propose_resolution(
     db.refresh(dispute)
     return build_dispute_out(dispute, db)
 
-
 @router.post("/{dispute_id}/respond-proposal", response_model=DisputeDetailOut)
 def respond_proposal(
     dispute_id: str,
@@ -223,7 +213,6 @@ def respond_proposal(
     db.refresh(dispute)
     return build_dispute_detail_out(dispute, db)
 
-
 @router.post("/{dispute_id}/messages", response_model=DisputeMessageOut, status_code=201)
 def add_dispute_message(
     dispute_id: str,
@@ -259,7 +248,6 @@ def add_dispute_message(
         is_admin=sender.role == UserRole.admin, body=msg.body, created_at=msg.created_at,
     )
 
-
 @router.post("/{dispute_id}/withdraw", response_model=DisputeOut)
 def withdraw_dispute(dispute_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     dispute = db.get(Dispute, dispute_id)
@@ -289,7 +277,6 @@ def withdraw_dispute(dispute_id: str, current_user: User = Depends(get_current_u
     db.refresh(dispute)
     return build_dispute_out(dispute, db)
 
-
 @router.patch("/{dispute_id}", response_model=DisputeDetailOut)
 def resolve_dispute(
     dispute_id: str,
@@ -307,16 +294,6 @@ def resolve_dispute(
     if payload.status == DisputeStatus.resolved and not payload.outcome:
         raise HTTPException(status_code=400, detail="An outcome is required to resolve a dispute")
 
-    # A milestone-scoped dispute only has real escrowed money riding on the
-    # outcome once that milestone is actually `funded` (money moved into
-    # escrow, awaiting release). "no_action" would previously leave a funded
-    # milestone sitting there with the dispute no longer blocking it, so the
-    # professional could just claim the full amount afterward through the
-    # ordinary release endpoint, silently ignoring whatever "no action" was
-    # supposed to mean — so it's still blocked in that case. But a dispute
-    # tied to a milestone that was never funded (e.g. a second milestone
-    # proposed for an amount that's already accounted for elsewhere) has no
-    # money at stake at all, so "no action" must be available to close it out.
     dispute_milestone = db.get(Milestone, dispute.milestone_id) if dispute.milestone_id else None
     if (
         payload.status == DisputeStatus.resolved
@@ -339,9 +316,7 @@ def resolve_dispute(
     dispute.resolution_note = payload.resolution_note
     dispute.updated_at = datetime.utcnow()
     if dispute.proposal_status == ProposalStatus.pending:
-        # An admin stepping in overrides any pending direct-resolution
-        # proposal — don't leave it dangling to auto-accept later against a
-        # dispute an admin already closed out differently.
+
         dispute.proposal_status = ProposalStatus.expired
 
     fund_note = None

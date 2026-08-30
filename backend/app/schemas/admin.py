@@ -11,7 +11,6 @@ from app.schemas.milestone import MilestoneOut
 from app.schemas.profile import ProfessionalOut
 from app.schemas.project import ProjectOut
 
-
 class AdminUserOut(BaseModel):
     id: str
     email: str
@@ -34,38 +33,27 @@ class AdminUserOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class SuspendUserRequest(BaseModel):
-    # Exactly one of these describes how long the suspension lasts:
-    # - duration_days set -> auto-lifts that many days from now
-    # - until_further_notice=True -> indefinite, admin must manually unsuspend
-    # - forever=True -> account is deleted/anonymized outright, not merely suspended
+
     duration_days: Optional[int] = None
     until_further_notice: bool = False
     forever: bool = False
     reason: Optional[str] = None
 
-
 class AdminUserPatch(BaseModel):
-    # Role is intentionally not editable here: swapping a user's role in
-    # place (e.g. client -> professional) leaves orphaned data behind (a
-    # professional has no ProfessionalProfile, a client's projects/wallet
-    # rows stay tied to the old role) and isn't exposed in the admin UI.
+
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     is_verified_business: Optional[bool] = None
 
-
 class AdminWalletAdjust(BaseModel):
-    amount: float  # positive = credit, negative = debit
+    amount: float
     note: Optional[str] = None
-
 
 class AdminAnnouncement(BaseModel):
     title: str
     body: Optional[str] = None
     link: Optional[str] = None
-
 
 class AdminProjectOut(BaseModel):
     id: str
@@ -85,7 +73,6 @@ class AdminProjectOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class PlatformSettingOut(BaseModel):
     key: str
     value: str
@@ -95,10 +82,8 @@ class PlatformSettingOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class PlatformSettingsPatch(BaseModel):
     settings: dict[str, str]
-
 
 class AnalyticsOverview(BaseModel):
     signups_this_week: int
@@ -114,13 +99,11 @@ class AnalyticsOverview(BaseModel):
     gmv: float
     platform_revenue: float
 
-
 class AdminRegister(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     first_name: str
     last_name: str
-
 
 class AdminUserDetailOut(BaseModel):
     id: str
@@ -146,15 +129,14 @@ class AdminUserDetailOut(BaseModel):
     suspension_reason: Optional[str] = None
     wallet_balance: float = 0.0
     created_at: datetime
-    # Present only for role == professional
+
     professional_profile: Optional[ProfessionalOut] = None
     bids: list[BidOut] = []
-    # Present only for role == client
+
     projects: list[ProjectOut] = []
 
     class Config:
         from_attributes = True
-
 
 class AdminWalletTransactionOut(BaseModel):
     id: str
@@ -176,7 +158,6 @@ class AdminWalletTransactionOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class AdminProjectParty(BaseModel):
     id: str
     name: str
@@ -184,14 +165,12 @@ class AdminProjectParty(BaseModel):
     phone: Optional[str] = None
     is_active: bool = True
 
-
 class AdminProjectFinancials(BaseModel):
     total_funded: float = 0.0
     total_released: float = 0.0
     total_refunded: float = 0.0
     in_escrow: float = 0.0
     platform_fees: float = 0.0
-
 
 class AdminProjectDetailOut(BaseModel):
     project: ProjectOut
@@ -202,7 +181,6 @@ class AdminProjectDetailOut(BaseModel):
     disputes: list[DisputeOut] = []
     financials: AdminProjectFinancials = AdminProjectFinancials()
     wallet_transactions: list[AdminWalletTransactionOut] = []
-
 
 class AdminWalletSummary(BaseModel):
     total_funded: float
@@ -216,7 +194,6 @@ class AdminWalletSummary(BaseModel):
     pending_transaction_count: int
     failed_transaction_count: int
     stuck_pending_count: int = 0
-
 
 class AdminWalletTransactionsCount(BaseModel):
     total: int

@@ -6,10 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class PortfolioItem(Base):
     __tablename__ = "portfolio_items"
@@ -18,7 +16,7 @@ class PortfolioItem(Base):
     profile_id: Mapped[str] = mapped_column(String, ForeignKey("professional_profiles.id"), nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    image_urls: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
+    image_urls: Mapped[str | None] = mapped_column(Text, nullable=True)
     completed_date: Mapped[datetime | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

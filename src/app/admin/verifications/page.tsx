@@ -27,8 +27,6 @@ import {
 import { toast } from "sonner";
 import Link from "next/link";
 
-// ─── Shared bits ─────────────────────────────────────────────────────────
-
 function isImageUrl(url: string) {
   return /\.(png|jpe?g|webp|gif)$/i.test(url);
 }
@@ -37,9 +35,6 @@ function isPdfUrl(url: string) {
   return /\.pdf$/i.test(url);
 }
 
-/** Inline preview of an uploaded document, so an admin can actually look at
- * the evidence without leaving the page or trusting a bare link. Falls back
- * to an "Open document" link for file types that can't be previewed inline. */
 function DocPreview({ label, url }: { label: string; url: string }) {
   return (
     <div className="rounded-lg border overflow-hidden bg-muted/30">
@@ -48,7 +43,6 @@ function DocPreview({ label, url }: { label: string; url: string }) {
         <a href={url} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Open full size</a>
       </div>
       {isImageUrl(url) ? (
-        // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={label} className="max-h-80 w-full object-contain bg-black/5" />
       ) : isPdfUrl(url) ? (
         <iframe src={url} className="w-full h-80" title={label} />
@@ -99,8 +93,6 @@ function RejectDialog({
     </div>
   );
 }
-
-// ─── Generic expandable review list ─────────────────────────────────────
 
 function ReviewList<T>({
   items,
@@ -163,8 +155,6 @@ function ReviewList<T>({
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────
-
 type Tab = "tier2" | "tier3" | "certs" | "business";
 
 const BADGE_SUGGESTIONS = ["COREN", "ARCON", "BSc", "HND", "CERT", "NSE", "PMP"];
@@ -213,8 +203,6 @@ export default function AdminVerificationsPage() {
     loadBusiness();
   }, []);
 
-  // Ask for a reason before rejecting; the note is surfaced to the
-  // professional so they know what to fix before resubmitting.
   const [rejectTarget, setRejectTarget] = useState<{ label: string; run: (note?: string) => void } | null>(null);
 
   const review = async (profileId: string, status: "verified" | "rejected", note?: string) => {

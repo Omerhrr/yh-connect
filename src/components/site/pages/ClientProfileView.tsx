@@ -25,12 +25,6 @@ function Loading() {
   );
 }
 
-/**
- * Read-only client profile view, shown to professionals/talent so they can
- * see who they'd be working with before bidding or accepting a job. Mirrors
- * the trust signals and posted-project history shown on the client's own
- * profile view, minus any self-edit actions.
- */
 export function ClientProfileView({ clientId }: { clientId: string }) {
   const [pub, setPub] = useState<ClientPublicOut | null>(null);
   const [reviews, setReviews] = useState<ReviewOut[]>([]);
@@ -64,7 +58,6 @@ export function ClientProfileView({ clientId }: { clientId: string }) {
       <div className="rounded-xl border bg-background p-6 space-y-5">
         <div className="flex items-start gap-4">
           {pub.company_logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
             <img src={pub.company_logo_url} alt={pub.company_name || "Company logo"} className="h-16 w-16 rounded-full object-cover border" />
           ) : (
             <UserAvatar avatarUrl={null} name={`${pub.first_name} ${pub.last_name}`} className="h-16 w-16" />

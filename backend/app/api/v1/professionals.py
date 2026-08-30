@@ -19,7 +19,6 @@ from app.services.work_history import get_work_history
 
 router = APIRouter(prefix="/professionals", tags=["professionals"])
 
-
 def _portfolio_out(profile: ProfessionalProfile) -> list[PortfolioItemOut]:
     return [
         PortfolioItemOut(
@@ -33,7 +32,6 @@ def _portfolio_out(profile: ProfessionalProfile) -> list[PortfolioItemOut]:
         )
         for item in profile.portfolio_items
     ]
-
 
 def _to_out(
     profile: ProfessionalProfile,
@@ -59,7 +57,7 @@ def _to_out(
         license_number=profile.license_number,
         is_verified=profile.is_verified,
         verification_status=profile.verification_status,
-        # Tier is personal to the professional: only their own view sees it.
+
         tier=get_tier(profile.user, profile) if expose_tier else None,
         address_verification_status=profile.address_verification_status,
         rating=profile.rating,
@@ -69,9 +67,7 @@ def _to_out(
             db is not None
             and db.query(PayoutAccount).filter(PayoutAccount.professional_id == profile.user_id).first() is not None
         ),
-        # bank_code is banking metadata, only the owner's own view should see
-        # it; get_professional (the public single-profile GET) has no auth
-        # requirement at all, so it must never leak here.
+
         bank_code=profile.bank_code if expose_bank_details else None,
         employment_history=[EmploymentHistoryOut.model_validate(e) for e in profile.employment_history],
         education=[EducationOut.model_validate(e) for e in profile.education],
@@ -80,14 +76,13 @@ def _to_out(
         stats=compute_stats(db, profile) if include_stats and db is not None else None,
     )
 
-
 @router.get("", response_model=list[ProfessionalOut])
 def list_professionals(
     category_id: Optional[str] = None,
     location: Optional[str] = None,
     q: Optional[str] = None,
     min_rating: Optional[float] = None,
-    sort_by: Optional[str] = None,  # rating | price_asc | price_desc | newest | reviews
+    sort_by: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -104,10 +99,7 @@ def list_professionals(
         query = query.filter(ProfessionalProfile.rating >= min_rating)
 
     if q:
-        # A "@handle" or exact-username query is a precise lookup, not a
-        # free-text search — skip the NLP category matching and go straight
-        # to it so someone searching a known username gets that person, not
-        # whatever category the NLP matcher thinks the string sounds like.
+
         username_query = q.strip().lstrip("@").lower()
         username_hit = (
             query.join(User, ProfessionalProfile.user_id == User.id)
@@ -118,14 +110,9 @@ def list_professionals(
         )
         if username_hit:
             profiles = [username_hit]
-            sort_by = None  # preserve the single exact match, don't re-sort it away
+            sort_by = None
         else:
-            # Free-text search runs in Python (skills is a comma-joined string
-            # column, not indexable), so filtering/sorting happens in Python too.
-            # Natural-language queries ("my pipes are leaking, I need a
-            # plumber") are understood via a keyword/synonym match against the
-            # category taxonomy first; if nothing matches, we fall back to
-            # plain keyword substring matching on title/name/skills.
+
             matched_categories = match_categories(q)
             all_profiles = query.all()
             if matched_categories:
@@ -163,14 +150,12 @@ def list_professionals(
     profiles = profiles[offset : offset + limit]
     return [_to_out(p) for p in profiles]
 
-
 @router.get("/me", response_model=ProfessionalOut)
 def get_my_profile(current_user: User = Depends(require_role(UserRole.professional)), db: Session = Depends(get_db)):
     profile = db.query(ProfessionalProfile).filter(ProfessionalProfile.user_id == current_user.id).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
     return _to_out(profile, db, include_stats=True, expose_tier=True, expose_bank_details=True)
-
 
 @router.patch("/me", response_model=ProfessionalOut)
 def update_my_profile(
@@ -197,14 +182,12 @@ def update_my_profile(
     db.refresh(profile)
     return _to_out(profile, db, include_stats=True, expose_tier=True, expose_bank_details=True)
 
-
 @router.get("/{profile_id}", response_model=ProfessionalOut)
 def get_professional(profile_id: str, db: Session = Depends(get_db)):
     profile = db.get(ProfessionalProfile, profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="Professional not found")
     return _to_out(profile, db, include_stats=True)
-
 
 @router.get("/{profile_id}/work-history", response_model=list[WorkHistoryItem])
 def professional_work_history(profile_id: str, db: Session = Depends(get_db)):

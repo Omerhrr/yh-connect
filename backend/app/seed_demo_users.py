@@ -94,7 +94,6 @@ EMPLOYERS = [
     "Freelance / Independent Practice", "Lagos State Public Works Agency",
 ]
 
-# category_id -> (titles, skills pool, bio template, license_prefix)
 CATEGORY_PROFILES = {
     "architecture": (
         ["Principal Architect", "Building Architect", "Interior Architect", "Landscape Architect"],
@@ -190,7 +189,6 @@ PORTFOLIO_TEMPLATES = [
     ("{city} Retail Complex", "Delivered structural and finishing work for a retail shopping complex."),
 ]
 
-# category_id -> (project title templates, description template)
 PROJECT_TEMPLATES = {
     "architecture": (
         ["{city} Residential Duplex Design", "{city} Office Building Concept & Working Drawings", "{city} Bungalow Renovation Design"],
@@ -260,20 +258,16 @@ PROJECT_KINDS = [
     "short-let apartment block", "family home renovation",
 ]
 
-
 def rand_phone() -> str:
     return f"+234{random.choice(['80','81','70','90','91'])}{random.randint(10000000, 99999999)}"
-
 
 def pick_name(rng) -> tuple[str, str]:
     first = rng.choice(MALE_FIRST_NAMES + FEMALE_FIRST_NAMES)
     last = rng.choice(LAST_NAMES)
     return first, last
 
-
 def slugify_email(first: str, last: str, n: int, domain: str) -> str:
     return f"{first.lower()}.{last.lower()}{n}@{domain}"
-
 
 def wipe_demo_data(db) -> None:
     """Remove any previously seeded demo accounts and everything hanging off
@@ -373,7 +367,6 @@ def wipe_demo_data(db) -> None:
     db.execute(text(f"DELETE FROM users WHERE {demo_email_filter}"))
     db.commit()
 
-
 def seed_professionals(db, categories: list[Category], rng: random.Random, password_hash: str, per_category: int = 4) -> tuple[list[dict], dict[str, list[User]]]:
     created = []
     pros_by_category: dict[str, list[User]] = {}
@@ -447,7 +440,6 @@ def seed_professionals(db, categories: list[Category], rng: random.Random, passw
             db.add(profile)
             db.flush()
 
-            # 1-2 portfolio items for verified pros
             if verification == "verified":
                 for pt_title, pt_desc in rng.sample(PORTFOLIO_TEMPLATES, k=rng.randint(1, 2)):
                     db.add(PortfolioItem(
@@ -457,7 +449,6 @@ def seed_professionals(db, categories: list[Category], rng: random.Random, passw
                         completed_date=date.today() - timedelta(days=rng.randint(30, 900)),
                     ))
 
-            # Employment history: 1-3 past roles, most recent first, ending at "now"
             n_jobs = rng.randint(1, 3)
             cursor_year_offset = 0
             for j in range(n_jobs):
@@ -476,7 +467,6 @@ def seed_professionals(db, categories: list[Category], rng: random.Random, passw
                 ))
                 cursor_year_offset = start_offset
 
-            # Education: 1 degree, sometimes 2
             for e in range(rng.randint(1, 2)):
                 grad_year = date.today().year - yrs - rng.randint(0, 3)
                 db.add(Education(
@@ -489,7 +479,6 @@ def seed_professionals(db, categories: list[Category], rng: random.Random, passw
                     sort_order=e,
                 ))
 
-            # Certifications: license body cert for verified pros, plus maybe one more
             if verification == "verified":
                 if license_prefix:
                     issued = date.today() - timedelta(days=365 * rng.randint(1, 8))
@@ -522,7 +511,6 @@ def seed_professionals(db, categories: list[Category], rng: random.Random, passw
                 "location": city,
             })
     return created, pros_by_category
-
 
 def seed_clients(db, rng: random.Random, password_hash: str, count: int = 20) -> list[dict]:
     created = []
@@ -569,7 +557,6 @@ def seed_clients(db, rng: random.Random, password_hash: str, count: int = 20) ->
             "location": rng.choice(NIGERIAN_CITIES),
         })
     return created, client_users
-
 
 def seed_projects(db, rng: random.Random, categories: list[Category], client_users: list[User], pros_by_category: dict[str, list[User]]) -> int:
     """Post projects from demo clients, with bids/assignments/reviews so the
@@ -625,7 +612,7 @@ def seed_projects(db, rng: random.Random, categories: list[Category], client_use
                 project.progress = 0
                 db.add(project)
                 db.flush()
-                # a handful of proposals so the job doesn't look untouched
+
                 bidders = rng.sample(candidates, k=min(len(candidates), rng.randint(0, 4)))
                 for pro in bidders:
                     db.add(Bid(
@@ -645,7 +632,7 @@ def seed_projects(db, rng: random.Random, categories: list[Category], client_use
                 db.add(project)
                 db.flush()
             else:
-                # in_progress / review / completed: needs an assigned pro
+
                 if not candidates:
                     project.status = ProjectStatus.open
                     project.progress = 0
@@ -674,7 +661,7 @@ def seed_projects(db, rng: random.Random, categories: list[Category], client_use
                         status=BidStatus.accepted,
                         created_at=project.created_at + timedelta(days=1),
                     ))
-                    # a couple of losing bids for texture
+
                     other_candidates = [p for p in candidates if p.id != pro.id]
                     for other in rng.sample(other_candidates, k=min(len(other_candidates), rng.randint(0, 2))):
                         db.add(Bid(
@@ -704,7 +691,6 @@ def seed_projects(db, rng: random.Random, categories: list[Category], client_use
 
             n_projects += 1
     return n_projects
-
 
 def run(seed: int = 42):
     Base.metadata.create_all(bind=engine)
@@ -740,7 +726,6 @@ def run(seed: int = 42):
         print(f"Credentials written to backend/{out_path}")
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     run()

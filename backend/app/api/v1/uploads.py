@@ -15,15 +15,12 @@ from app.services.platform_settings import get_project_media_settings
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 ALLOWED_EXT = {".png", ".jpg", ".jpeg", ".webp", ".pdf", ".webm", ".ogg", ".mp3", ".wav", ".m4a"}
-MAX_SIZE = 10 * 1024 * 1024  # 10MB — default cap for the generic (non project-media) purpose
+MAX_SIZE = 10 * 1024 * 1024
 
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp"}
 VIDEO_EXT = {".mp4", ".mov", ".webm"}
-# Hard ceiling regardless of what an admin sets, so a misconfigured setting
-# (or a stale one from before this cap existed) can't turn the upload
-# endpoint into an unbounded disk-filling vector.
-VIDEO_HARD_CAP_MB = 500
 
+VIDEO_HARD_CAP_MB = 500
 
 def _sniff_matches_extension(contents: bytes, ext: str) -> bool:
     """Verify the file's actual magic bytes match its claimed extension, a
@@ -38,9 +35,7 @@ def _sniff_matches_extension(contents: bytes, ext: str) -> bool:
     if ext == ".pdf":
         return contents[:5] == b"%PDF-"
     if ext == ".webm":
-        # WebM/Matroska container, what browser MediaRecorder produces by
-        # default — used for both the voice-message feature and, now,
-        # video uploads (browsers commonly record/export video as webm too).
+
         return contents[:4] == b"\x1a\x45\xdf\xa3"
     if ext == ".ogg":
         return contents[:4] == b"OggS"
@@ -49,11 +44,9 @@ def _sniff_matches_extension(contents: bytes, ext: str) -> bool:
     if ext == ".mp3":
         return contents[:3] == b"ID3" or contents[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2")
     if ext in (".m4a", ".mp4", ".mov"):
-        # ISO base media file format ("ftyp" box at byte offset 4) — covers
-        # m4a (Safari/iOS MediaRecorder audio), and mp4/mov video files.
+
         return contents[4:8] == b"ftyp"
     return False
-
 
 @router.post("")
 @limiter.limit("60/hour")

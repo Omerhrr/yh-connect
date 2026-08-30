@@ -1,9 +1,4 @@
-/**
- * Keyword-based category inference for free-text project descriptions, so a
- * client can describe their project in their own words instead of picking
- * from a category list up front. Shared by the client onboarding wizard and
- * the dashboard Post Project wizard.
- */
+
 
 export const CATEGORY_KEYWORDS: Record<string, string[]> = {
   architecture: ["architect", "design", "drawing", "blueprint", "floor plan", "floorplan"],

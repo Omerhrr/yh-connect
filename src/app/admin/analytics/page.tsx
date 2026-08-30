@@ -63,7 +63,7 @@ export default function AdminAnalyticsPage() {
       {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {data && (
         <>
-          {/* Top-level stat cards */}
+          {}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Total Users" value={data.total_users.toLocaleString()} icon={Users} color="bg-primary" sub={`${data.professional_count} professionals · ${data.client_count} clients`} />
             <StatCard label="Active Projects" value={data.active_projects.toLocaleString()} icon={Briefcase} color="bg-emerald-600" sub={`${data.completed_projects} completed · ${data.open_disputes} disputes`} />
@@ -71,9 +71,9 @@ export default function AdminAnalyticsPage() {
             <StatCard label="Pending Reviews" value={data.pending_verifications.toLocaleString()} icon={BadgeCheck} color="bg-violet-600" sub={`${data.open_disputes} open disputes`} />
           </div>
 
-          {/* Visual breakdowns */}
+          {}
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Growth */}
+            {}
             <div className="rounded-xl border bg-background p-6 space-y-4">
               <h2 className="font-semibold">Growth</h2>
               <div className="space-y-3">
@@ -107,7 +107,7 @@ export default function AdminAnalyticsPage() {
               </div>
             </div>
 
-            {/* Projects */}
+            {}
             <div className="rounded-xl border bg-background p-6 space-y-4">
               <h2 className="font-semibold">Projects</h2>
               <div className="space-y-3">
@@ -147,7 +147,7 @@ export default function AdminAnalyticsPage() {
               </div>
             </div>
 
-            {/* Revenue */}
+            {}
             <div className="rounded-xl border bg-background p-6 space-y-4 md:col-span-2">
               <h2 className="font-semibold">Revenue</h2>
               <div className="grid sm:grid-cols-3 gap-4">

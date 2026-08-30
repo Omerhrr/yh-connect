@@ -14,17 +14,13 @@ from app.models.notification import NotificationType
 from app.models.project import Project
 from app.services.notify import notify_online_aware
 
-
 def _other_party(project: Project, actor_id: str) -> str | None:
     if actor_id == project.client_id:
         return project.assigned_professional_id
     if actor_id == project.assigned_professional_id:
         return project.client_id
-    # Fallback for admin-triggered or system-triggered events with no
-    # natural "actor is one of the two parties" — log it to the client,
-    # the one party guaranteed to exist on any project.
-    return project.client_id if actor_id != project.client_id else project.assigned_professional_id
 
+    return project.client_id if actor_id != project.client_id else project.assigned_professional_id
 
 def post_system_message(db: Session, project: Project, actor_id: str, body: str, link_role_path: str | None = None) -> Message | None:
     """Records `body` as a system log entry in the actor's thread with the

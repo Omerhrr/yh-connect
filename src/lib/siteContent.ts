@@ -1,12 +1,5 @@
 "use client";
 
-// Admin-editable structured content for the site header, footer, and
-// homepage sections. Every shape here has a hardcoded DEFAULT matching the
-// original copy exactly, so the site looks identical until an admin
-// actually customizes a section in /admin/content -> Site Content. This
-// mirrors the CmsPage.tsx pattern (override falls back to default), just
-// for structured sections instead of a single title+body page.
-
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -31,10 +24,6 @@ export type HeroContent = {
   search_placeholder: string;
   cta_label: string;
   popular_searches: string[];
-  // Optional background photos, admin-uploaded in CMS. Empty by default, so
-  // the hero renders exactly as it always has (gradient + blobs, no photo)
-  // until an admin adds at least one. With 2+, they cross-fade as a subtle
-  // blurred slideshow behind the existing content.
   background_images: string[];
 };
 
@@ -157,8 +146,6 @@ export const SITE_CONTENT_DEFAULTS = {
 
 export type SiteContentKey = keyof typeof SITE_CONTENT_DEFAULTS;
 
-// Fetch-once, shared across every useSiteContent() caller on the page so N
-// components each editing a different section don't fire N requests.
 let cachePromise: Promise<Record<string, unknown>> | null = null;
 function fetchAll(): Promise<Record<string, unknown>> {
   if (!cachePromise) {
@@ -167,8 +154,6 @@ function fetchAll(): Promise<Record<string, unknown>> {
   return cachePromise;
 }
 
-/** Invalidate the shared cache, call after an admin saves a section so the
- * next mount (e.g. reopening the editor, or a live preview) refetches. */
 export function invalidateSiteContentCache() {
   cachePromise = null;
 }
@@ -189,7 +174,6 @@ export function useSiteContent<K extends SiteContentKey>(key: K): (typeof SITE_C
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   return data;

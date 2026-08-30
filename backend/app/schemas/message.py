@@ -3,20 +3,17 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-
 class ProjectUpdateIn(BaseModel):
     note: str
-
 
 class MessageCreate(BaseModel):
     recipient_id: str
     body: str = ""
     project_id: Optional[str] = None
     attachment_url: Optional[str] = None
-    message_type: str = "text"  # "text" | "image" | "voice" | "file" | "update" | "system"
+    message_type: str = "text"
     duration_seconds: Optional[int] = None
     reply_to_id: Optional[str] = None
-
 
 class ReplyPreview(BaseModel):
     id: str
@@ -30,13 +27,11 @@ class ReplyPreview(BaseModel):
     class Config:
         from_attributes = True
 
-
 class ReactionSummary(BaseModel):
     emoji: str
     count: int
     mine: bool
     user_names: list[str] = []
-
 
 class MessageOut(BaseModel):
     id: str
@@ -58,14 +53,11 @@ class MessageOut(BaseModel):
     class Config:
         from_attributes = True
 
-
 class ReactionCreate(BaseModel):
     emoji: str
 
-
 class MessageEdit(BaseModel):
     body: str
-
 
 class ThreadOut(BaseModel):
     project_id: str

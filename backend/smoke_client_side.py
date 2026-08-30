@@ -6,16 +6,14 @@ sys.path.insert(0, os.path.dirname(__file__))
 os.environ["DATABASE_URL"] = "sqlite:////tmp/yhconnect_client_smoke.db"
 if os.path.exists("/tmp/yhconnect_client_smoke.db"):
     os.remove("/tmp/yhconnect_client_smoke.db")
-# KYC enforcement is off by default while the rest of the platform is still
-# being built (see app/core/config.py). Turn it on here so this smoke test
-# keeps exercising the gate + verification flow end to end.
+
 os.environ["KYC_ENFORCEMENT_ENABLED"] = "true"
 
-from fastapi.testclient import TestClient  # noqa: E402
-from app.main import app  # noqa: E402
+from fastapi.testclient import TestClient
+from app.main import app
 
 with TestClient(app) as c:
-    # --- register client + two professionals ---
+
     r = c.post("/api/v1/auth/register/client", json={
         "email": "client1@test.com", "password": "password123",
         "first_name": "Chidi", "last_name": "Okoro", "company_name": "Okoro Estates",
@@ -47,7 +45,6 @@ with TestClient(app) as c:
     pro2_id = r.json()["user"]["id"]
     pro2_headers = {"Authorization": f"Bearer {pro2_token}"}
 
-    # --- Phase D: client profile update ---
     r = c.patch("/api/v1/clients/me", json={
         "company_description": "Boutique real estate developer in Lagos",
         "company_website": "https://okoroestates.example",
@@ -57,16 +54,14 @@ with TestClient(app) as c:
     assert r.json()["company_description"] == "Boutique real estate developer in Lagos"
     print("client profile update: OK")
 
-    # --- KYC: client must verify identity before contacting professionals ---
     r = c.post("/api/v1/projects/nonexistent/invite", json={"professional_id": pro1_id}, headers=client_headers)
-    assert r.status_code == 403, r.text  # pre-KYC clients are blocked before anything else is checked
+    assert r.status_code == 403, r.text
 
     r = c.post("/api/v1/clients/me/kyc", json={"nin": "12345678901", "dob": "1990-01-01"}, headers=client_headers)
     assert r.status_code == 200, r.text
     assert r.json()["kyc_status"] == "verified", r.text
     print("client KYC verification: OK")
 
-    # --- post a project ---
     r = c.post("/api/v1/projects", json={
         "title": "3-Bedroom Duplex Structural Design", "description": "Full structural design needed",
         "category_id": cat_id, "budget_min": 500000, "budget_max": 900000,
@@ -77,7 +72,6 @@ with TestClient(app) as c:
     assert project["client_company_name"] == "Okoro Estates"
     print("project created with client summary:", project["client_company_name"])
 
-    # --- Phase A: two bids + shortlist + comparison fields ---
     r = c.post(f"/api/v1/projects/{project_id}/bids", json={"amount": 800000, "cover_letter": "I can do this"}, headers=pro1_headers)
     assert r.status_code == 201, r.text
     bid1_id = r.json()["id"]
@@ -99,7 +93,6 @@ with TestClient(app) as c:
     assert r.json()["status"] == "shortlisted"
     print("shortlist: OK")
 
-    # --- Phase A: invite a third professional directly ---
     r = c.post("/api/v1/auth/register/professional", json={
         "email": "pro3@test.com", "password": "password123",
         "first_name": "Femi", "last_name": "Balogun", "title": "Quantity Surveyor",
@@ -130,7 +123,6 @@ with TestClient(app) as c:
     assert bid3["amount"] == 820000
     print("invite auto-created bid: OK, amount =", bid3["amount"])
 
-    # accept pro1's bid
     r = c.patch(f"/api/v1/bids/{bid1_id}", json={"status": "accepted"}, headers=client_headers)
     assert r.status_code == 200, r.text
     assert r.json()["status"] == "accepted"
@@ -140,7 +132,6 @@ with TestClient(app) as c:
     assert r.json()["assigned_professional_id"] == pro1_id
     print("bid accepted, project in_progress: OK")
 
-    # --- Phase B: messaging ---
     r = c.post(f"/api/v1/projects/{project_id}/messages", json={
         "recipient_id": pro1_id, "body": "Welcome aboard! Let's get started.",
     }, headers=client_headers)
@@ -171,7 +162,6 @@ with TestClient(app) as c:
     assert r.json()[0]["unread_count"] == 0
     print("mark thread read: OK")
 
-    # --- Phase C: milestones -> change orders + reviews ---
     r = c.post(f"/api/v1/projects/{project_id}/milestones", json={
         "title": "Foundation design", "amount": 400000,
     }, headers=client_headers)
@@ -190,14 +180,12 @@ with TestClient(app) as c:
     assert r.json()["status"] == "approved"
     print("change order approved: OK")
 
-    # review before completion should fail
     r = c.post("/api/v1/reviews", json={
         "project_id": project_id, "reviewee_id": pro1_id, "rating": 5, "comment": "Great!",
     }, headers=client_headers)
     assert r.status_code == 400, r.text
     print("review blocked before completion: OK")
 
-    # fund + release to complete project
     r = c.post(f"/api/v1/milestones/{milestone_id}/submit", headers=pro1_headers)
     assert r.status_code == 200, r.text
     r = c.post(f"/api/v1/milestones/{milestone_id}/fund", json={}, headers=client_headers)
@@ -217,14 +205,12 @@ with TestClient(app) as c:
     assert r.json()["status"] == "completed", r.json()
     print("project completed: OK")
 
-    # now review should succeed
     r = c.post("/api/v1/reviews", json={
         "project_id": project_id, "reviewee_id": pro1_id, "rating": 5, "comment": "Excellent work!",
     }, headers=client_headers)
     assert r.status_code == 201, r.text
     print("review after completion: OK")
 
-    # duplicate review should fail
     r = c.post("/api/v1/reviews", json={
         "project_id": project_id, "reviewee_id": pro1_id, "rating": 4, "comment": "again",
     }, headers=client_headers)
@@ -235,7 +221,6 @@ with TestClient(app) as c:
     assert r.status_code == 200 and len(r.json()) == 1
     print("reviews for professional: OK")
 
-    # --- Phase D: public client profile ---
     r = c.get(f"/api/v1/clients/{project['client_id']}")
     assert r.status_code == 200, r.text
     pub = r.json()

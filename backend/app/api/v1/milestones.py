@@ -32,7 +32,6 @@ from app.schemas.milestone import (
 
 router = APIRouter(tags=["milestones"])
 
-
 def _update_out(u: MilestoneUpdate) -> MilestoneUpdateOut:
     return MilestoneUpdateOut(
         id=u.id,
@@ -43,7 +42,6 @@ def _update_out(u: MilestoneUpdate) -> MilestoneUpdateOut:
         photo_urls=u.photo_url_list,
         created_at=u.created_at,
     )
-
 
 def _milestone_out(m: Milestone, db: Session) -> MilestoneOut:
     creator_name = None
@@ -79,11 +77,9 @@ def _milestone_out(m: Milestone, db: Session) -> MilestoneOut:
         updates=[_update_out(u) for u in m.updates],
     )
 
-
 def _require_project_party(project: Project, user: User):
     if user.id not in (project.client_id, project.assigned_professional_id) and user.role != UserRole.admin:
         raise HTTPException(status_code=403, detail="Not authorized for this project")
-
 
 @router.get("/projects/{project_id}/milestones", response_model=list[MilestoneOut])
 def list_milestones(project_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -91,13 +87,11 @@ def list_milestones(project_id: str, current_user: User = Depends(get_current_us
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     _require_project_party(project, current_user)
-    # Opportunistic auto-release check, see app/services/auto_release.py —
-    # no scheduler in this app, so this is the load-bearing trigger point.
+
     check_project_auto_release(db, project)
     if project.assigned_professional_id:
         release_due_withholds(db, project.assigned_professional_id)
     return [_milestone_out(m, db) for m in project.milestones]
-
 
 @router.post("/projects/{project_id}/milestones", response_model=MilestoneOut, status_code=201)
 def create_milestone(
@@ -109,11 +103,7 @@ def create_milestone(
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    # Only the client defines and funds milestones now — money (and the
-    # order work happens in) is entirely the client's call. A professional
-    # proposing their own payment terms was removed: fund-before-work is the
-    # whole point of escrow, and letting the doer of the work also set the
-    # price undermines that guarantee.
+
     if project.client_id == current_user.id:
         if project.status in (ProjectStatus.completed, ProjectStatus.cancelled):
             raise HTTPException(status_code=400, detail="This project is closed, milestones can't be added")
@@ -143,7 +133,6 @@ def create_milestone(
     db.refresh(milestone)
     return _milestone_out(milestone, db)
 
-
 @router.post("/milestones/{milestone_id}/updates", response_model=MilestoneUpdateOut, status_code=201)
 def post_milestone_update(
     milestone_id: str,
@@ -155,8 +144,7 @@ def post_milestone_update(
     if not milestone:
         raise HTTPException(status_code=404, detail="Milestone not found")
     _require_project_party(milestone.project, current_user)
-    # Work — and posting progress on it — only starts once money is actually
-    # in escrow, so the professional is never doing unfunded work on faith.
+
     if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.submitted):
         raise HTTPException(status_code=400, detail="This milestone must be funded before work can begin")
     update = MilestoneUpdate(
@@ -166,8 +154,7 @@ def post_milestone_update(
         photo_urls=",".join(payload.photo_urls) if payload.photo_urls else None,
     )
     db.add(update)
-    # Mirror into the project's message thread too — Messages is meant to be
-    # the running log of everything, not just milestone updates tied to money.
+
     project = milestone.project
     photo_note = " (with photos)" if payload.photo_urls else ""
     body = f"📝 Update on milestone \"{milestone.title}\": {payload.note}{photo_note}" if payload.note else f"📝 Progress update on milestone \"{milestone.title}\"{photo_note}."
@@ -176,7 +163,6 @@ def post_milestone_update(
     db.refresh(update)
     return _update_out(update)
 
-
 @router.post("/milestones/{milestone_id}/submit", response_model=MilestoneOut)
 def submit_milestone(milestone_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     milestone = db.get(Milestone, milestone_id)
@@ -184,25 +170,15 @@ def submit_milestone(milestone_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Milestone not found")
     if milestone.project.assigned_professional_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the assigned professional can submit this milestone")
-    # Once the client has signed off (approved) or money has actually moved
-    # (paid/refunded), submitting again would reopen a closed milestone and,
-    # combined with approve/release, could trigger a second payout for the
-    # same work. Only allow it while the milestone is still genuinely active.
+
     if milestone.status in (MilestoneStatus.approved, MilestoneStatus.paid, MilestoneStatus.refunded):
         raise HTTPException(status_code=400, detail="This milestone is already closed out and can't be resubmitted")
-    # Work can't be submitted before it was ever funded — the client funds
-    # first, work happens second, submission is "I finished the funded work".
+
     if milestone.status not in (MilestoneStatus.funded, MilestoneStatus.submitted):
         raise HTTPException(status_code=400, detail="This milestone must be funded before it can be submitted")
-    # Deliberately stay "funded" rather than moving to "submitted" — that's
-    # the one signal approve_milestone relies on to release payment, and
-    # resubmitting shouldn't regress it.
+
     milestone.status = MilestoneStatus.funded
-    # Always refresh this regardless of the status branch above — it's the
-    # one signal ("work was actually delivered on this date") that the
-    # auto-release timer and the client-facing "submitted N days ago" badge
-    # rely on, and it needs to be set even when the milestone was already
-    # funded (so `status` stays "funded" rather than regressing).
+
     milestone.submitted_at = datetime.utcnow()
     milestone.auto_release_reminder_sent = False
     post_system_message(
@@ -212,7 +188,6 @@ def submit_milestone(milestone_id: str, current_user: User = Depends(get_current
     db.commit()
     db.refresh(milestone)
     return _milestone_out(milestone, db)
-
 
 @router.post("/milestones/{milestone_id}/approve", response_model=MilestoneOut)
 def approve_milestone(milestone_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -225,16 +200,14 @@ def approve_milestone(milestone_id: str, current_user: User = Depends(get_curren
     project = milestone.project
     if project.client_id != current_user.id:
         raise HTTPException(status_code=403, detail="Only the client can approve this milestone")
-    # Must actually be funded first — real money bug otherwise (a milestone
-    # could be paid out without the client's wallet ever having been debited).
+
     if milestone.status != MilestoneStatus.funded:
         raise HTTPException(status_code=400, detail="Milestone must be funded before it can be approved")
     if not project.assigned_professional_id:
         raise HTTPException(status_code=400, detail="No professional assigned to this project")
     if has_blocking_dispute(db, project.id, milestone.id):
         raise HTTPException(status_code=400, detail="This milestone is under dispute and its funds are on hold until it's resolved")
-    # Belt-and-braces: require a real, successful escrow funding transaction
-    # to exist for this exact milestone before any money moves out.
+
     funded_tx = (
         db.query(WalletTransaction)
         .filter(
@@ -255,7 +228,6 @@ def approve_milestone(milestone_id: str, current_user: User = Depends(get_curren
     db.commit()
     db.refresh(milestone)
     return _milestone_out(milestone, db)
-
 
 @router.post("/milestones/{milestone_id}/reject", response_model=MilestoneOut)
 def reject_milestone(
@@ -294,8 +266,7 @@ def reject_milestone(
             refund_milestone(db, milestone, project, current_user.id, note=f"Rejected: {note}")
         except EscrowActionError as e:
             raise HTTPException(status_code=400, detail=str(e))
-        # refund_milestone already sets status to "refunded" — record the
-        # reason on top of that so the professional sees exactly why.
+
     else:
         milestone.status = MilestoneStatus.rejected
 
@@ -308,7 +279,6 @@ def reject_milestone(
     db.commit()
     db.refresh(milestone)
     return _milestone_out(milestone, db)
-
 
 @router.post("/projects/{project_id}/change-orders", response_model=ChangeOrderOut, status_code=201)
 def create_change_order(
@@ -332,7 +302,6 @@ def create_change_order(
     db.refresh(co)
     return co
 
-
 @router.get("/projects/{project_id}/change-orders", response_model=list[ChangeOrderOut])
 def list_change_orders(project_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
@@ -340,7 +309,6 @@ def list_change_orders(project_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Project not found")
     _require_project_party(project, current_user)
     return project.change_orders
-
 
 @router.patch("/change-orders/{change_order_id}", response_model=ChangeOrderOut)
 def update_change_order(
@@ -352,11 +320,7 @@ def update_change_order(
     co = db.get(ChangeOrder, change_order_id)
     if not co:
         raise HTTPException(status_code=404, detail="Change order not found")
-    # Whoever *didn't* propose it has to be the one who approves/rejects —
-    # not always the client. A change order the client proposed (e.g. a
-    # scope cut) still needs the professional's sign-off before it takes
-    # effect, otherwise a client could unilaterally shrink the agreed price
-    # without the professional ever agreeing to the new terms.
+
     approver_id = (
         co.project.assigned_professional_id if co.proposed_by == co.project.client_id else co.project.client_id
     )
@@ -369,12 +333,6 @@ def update_change_order(
     co.status = status
     project = co.project
 
-    # Approving extra paid work creates the milestone for it immediately —
-    # written scope and cost move together, the way construction change
-    # orders are supposed to work, instead of leaving the client and
-    # professional to separately remember to add a milestone for it later
-    # (or, worse, the professional starting work on an "approved" change
-    # order that was never actually backed by fundable money).
     if status == ChangeOrderStatus.approved and co.amount_delta > 0:
         milestone = Milestone(
             project_id=project.id,

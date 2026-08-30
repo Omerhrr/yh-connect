@@ -1,8 +1,7 @@
 from tests.conftest import auth_headers
 
-
 def test_admin_wallet_transactions_count_and_filters(client, client_user, admin_user):
-    # Simulated Monnify credits the wallet instantly in tests.
+
     resp = client.post(
         "/api/v1/wallet/topup", json={"amount": 50000}, headers=auth_headers(client_user["access_token"])
     )
@@ -18,13 +17,11 @@ def test_admin_wallet_transactions_count_and_filters(client, client_user, admin_
     assert resp.status_code == 200
     assert all(t["type"] == "topup" for t in resp.json())
 
-    # Search by the client's first name should surface the transaction.
     q = client_user["user"]["first_name"]
     resp = client.get(f"/api/v1/admin/wallet/transactions?q={q}", headers=headers)
     assert resp.status_code == 200
     assert len(resp.json()) >= 1
 
-    # A date range that excludes "now" should return nothing.
     resp = client.get(
         "/api/v1/admin/wallet/transactions?date_from=2000-01-01T00:00:00&date_to=2000-01-02T00:00:00",
         headers=headers,
@@ -39,7 +36,6 @@ def test_admin_wallet_transactions_count_and_filters(client, client_user, admin_
     assert "total_held_in_disputes" in summary
     assert "stuck_pending_count" in summary
 
-
 def test_admin_wallet_transactions_export_is_csv(client, client_user, admin_user):
     resp = client.post(
         "/api/v1/wallet/topup", json={"amount": 10000}, headers=auth_headers(client_user["access_token"])
@@ -53,7 +49,6 @@ def test_admin_wallet_transactions_export_is_csv(client, client_user, admin_user
     body = resp.text
     assert "Date,Type,Status,Amount" in body.splitlines()[0]
     assert "topup" in body
-
 
 def test_admin_wallet_endpoints_require_admin(client, client_user):
     headers = auth_headers(client_user["access_token"])

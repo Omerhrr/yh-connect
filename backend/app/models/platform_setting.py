@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
-
 class PlatformSetting(Base):
     """Simple admin-editable key/value store (platform fee, featured categories, ...)."""
 
@@ -13,5 +12,5 @@ class PlatformSetting(Base):
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    value_type: Mapped[str] = mapped_column(String, default="string")  # string | number | bool | json
+    value_type: Mapped[str] = mapped_column(String, default="string")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

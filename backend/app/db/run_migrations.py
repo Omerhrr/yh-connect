@@ -33,16 +33,13 @@ from app.db.session import engine
 
 logger = logging.getLogger(__name__)
 
-# backend/app/db/run_migrations.py -> backend/
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 def _build_config() -> Config:
     ini_path = os.path.join(_BACKEND_DIR, "alembic.ini")
     cfg = Config(ini_path)
     cfg.set_main_option("script_location", os.path.join(_BACKEND_DIR, "migrations"))
     return cfg
-
 
 def run_migrations() -> None:
     ini_path = os.path.join(_BACKEND_DIR, "alembic.ini")
@@ -55,9 +52,7 @@ def run_migrations() -> None:
     existing_tables = set(inspector.get_table_names())
 
     if "alembic_version" not in existing_tables and "users" in existing_tables:
-        # Pre-Alembic database (created via the old create_all/sync-columns
-        # path), its schema already matches the baseline migration, so mark
-        # it caught-up instead of trying to re-create existing tables.
+
         logger.info("Existing pre-Alembic database detected, stamping at head instead of upgrading.")
         command.stamp(cfg, "head")
         return

@@ -30,11 +30,9 @@ from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
-
 def _check_secret(secret: str) -> None:
     if not settings.SEED_SECRET or not hmac.compare_digest(secret, settings.SEED_SECRET):
         raise HTTPException(status_code=404, detail="Not found")
-
 
 @router.get("/seed")
 def bootstrap_seed(
@@ -50,10 +48,6 @@ def bootstrap_seed(
     _check_secret(secret)
     results: dict[str, str] = {}
 
-    # Deliberately catching everything and returning it in the response body
-    # (rather than letting it 500 into a bare "Internal Server Error") so the
-    # real error is visible right in the browser, this has been hard to get
-    # out of Render's log viewer for whatever reason.
     try:
         db = SessionLocal()
         try:
@@ -61,7 +55,7 @@ def bootstrap_seed(
             if existing and reset_password:
                 existing.hashed_password = hash_password(admin_password)
                 existing.is_active = True
-                existing.token_version += 1  # log out any stale sessions/tokens
+                existing.token_version += 1
                 db.commit()
                 results["admin"] = f"password reset for existing {existing.role.value} account: {admin_email} / {admin_password}"
             elif existing:

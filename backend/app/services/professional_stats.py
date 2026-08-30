@@ -12,9 +12,7 @@ from app.models.profile import ProfessionalProfile
 from app.models.project import Project, ProjectStatus
 from app.schemas.profile_extras import ProfessionalStats
 
-# Outcomes that count as a mark against the professional for job-success purposes.
 _AGAINST_PRO_OUTCOMES = (DisputeOutcome.refund_client, DisputeOutcome.partial_split)
-
 
 def compute_stats(db: Session, profile: ProfessionalProfile) -> ProfessionalStats:
     user_id = profile.user_id
@@ -45,7 +43,6 @@ def compute_stats(db: Session, profile: ProfessionalProfile) -> ProfessionalStat
         member_since=profile.user.created_at,
         response_time_label=response_time_label,
     )
-
 
 def _response_time_label(db: Session, user_id: str) -> str:
     received = (

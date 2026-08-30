@@ -14,9 +14,6 @@ still behaves like a normal search.
 """
 import re
 
-# Filler words stripped before falling back to plain keyword matching, so
-# "I need someone to fix my leaking pipe" reduces to meaningful terms like
-# "fix", "leaking", "pipe" instead of matching on "someone"/"need"/"the".
 _STOPWORDS = {
     "i", "a", "an", "the", "is", "are", "am", "was", "were", "my", "me", "mine",
     "need", "needs", "needed", "want", "wants", "wanted", "looking", "look",
@@ -28,8 +25,6 @@ _STOPWORDS = {
     "am", "there", "here", "job", "work", "project", "please", "am",
 }
 
-# category_id -> trigger phrases (checked as substrings of the normalized
-# query, so both single words and multi-word phrases work).
 CATEGORY_KEYWORDS: dict[str, list[str]] = {
     "architecture": [
         "architect", "architecture", "building design", "house plan",
@@ -101,20 +96,15 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     ],
 }
 
-
 def _normalize(text: str) -> str:
     return re.sub(r"[^a-z0-9\s]", " ", text.lower())
-
 
 def _trigger_hits(trigger: str, q: str, q_words: set[str]) -> bool:
     if trigger in q:
         return True
-    # Multi-word triggers also match when all of their words appear
-    # somewhere in the query, even out of order or non-adjacent, so
-    # "my roof is leaking" still hits the "roof leaking" trigger.
+
     parts = trigger.split()
     return len(parts) > 1 and all(p in q_words for p in parts)
-
 
 def match_categories(query: str) -> list[str]:
     """Category ids whose trigger phrases appear in the query, ranked by how
@@ -128,7 +118,6 @@ def match_categories(query: str) -> list[str]:
         if hits:
             scored[cat_id] = hits
     return sorted(scored, key=lambda c: -scored[c])
-
 
 def extract_keywords(query: str) -> list[str]:
     """Meaningful standalone words (3+ letters, filler words stripped) for

@@ -33,7 +33,6 @@ from app.services.ws_manager import manager
 router = APIRouter(tags=["messages"])
 legacy_router = APIRouter(prefix="/messages", tags=["messages"])
 
-
 def _reaction_summaries(message: Message, current_user_id: str) -> list[ReactionSummary]:
     by_emoji: dict[str, list[MessageReaction]] = {}
     for r in message.reactions:
@@ -51,13 +50,8 @@ def _reaction_summaries(message: Message, current_user_id: str) -> list[Reaction
     summaries.sort(key=lambda s: s.emoji)
     return summaries
 
-
 def _to_out(message: Message, current_user_id: Optional[str] = None) -> MessageOut:
-    # Built field-by-field rather than MessageOut.model_validate(message):
-    # from_attributes validation would also try to auto-validate the raw
-    # `reactions`/`reply_to` ORM relationships against the response schema,
-    # and MessageReaction rows don't have a count/mine/user_names shape,
-    # that's computed below instead, so blanket validation blows up.
+
     out = MessageOut(
         id=message.id,
         project_id=message.project_id,
@@ -88,7 +82,6 @@ def _to_out(message: Message, current_user_id: Optional[str] = None) -> MessageO
     out.reactions = _reaction_summaries(message, current_user_id or "")
     return out
 
-
 def _require_sender_kyc_if_client(user: User) -> None:
     """A client starting/continuing direct contact with a professional must
     be KYC-verified first, mirrors the gate on invites and bid acceptance."""
@@ -99,7 +92,6 @@ def _require_sender_kyc_if_client(user: User) -> None:
             status_code=403,
             detail="Please verify your identity (NIN) before messaging professionals.",
         )
-
 
 def _is_project_messaging_party(db: Session, project: Project, user: User) -> bool:
     """Who is allowed to take part in a project's message thread: the client,
@@ -130,14 +122,12 @@ def _is_project_messaging_party(db: Session, project: Project, user: User) -> bo
         return True
     return False
 
-
 def _require_project_messaging_party(db: Session, project: Project, user: User) -> None:
     if not _is_project_messaging_party(db, project, user):
         raise HTTPException(
             status_code=403,
             detail="You're not a participant on this project's conversation",
         )
-
 
 def _user_is_project_participant(db: Session, project: Project, user_id: str) -> bool:
     """Same membership as _is_project_messaging_party but keyed by user id,
@@ -164,7 +154,6 @@ def _user_is_project_participant(db: Session, project: Project, user_id: str) ->
         return True
     return False
 
-
 def _require_recipient_is_project_participant(db: Session, project: Project, recipient_id: str, sender: User) -> None:
     """A message may be addressed to the client, the assigned professional,
     or (only when the sender is the client) a bidder/invitee being vetted.
@@ -181,7 +170,6 @@ def _require_recipient_is_project_participant(db: Session, project: Project, rec
         detail="You can only message the client or the assigned professional on this project",
     )
 
-
 @legacy_router.get("", response_model=list[MessageOut])
 def list_messages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     messages = (
@@ -192,16 +180,12 @@ def list_messages(current_user: User = Depends(get_current_user), db: Session = 
     )
     return [_to_out(m, current_user.id) for m in messages]
 
-
 @legacy_router.post("", response_model=MessageOut, status_code=201)
 def send_message(payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     _require_sender_kyc_if_client(current_user)
     if not payload.body.strip() and not payload.attachment_url:
         raise HTTPException(status_code=400, detail="Message can't be empty")
-    # project_id is required, not optional: without it there's no way to
-    # verify the sender/recipient are actually parties to a shared project,
-    # which would let any authenticated user message any other user
-    # directly. See docs/AUDIT_2026-08-20.md finding #1.
+
     if not payload.project_id:
         raise HTTPException(status_code=400, detail="project_id is required")
     project = db.get(Project, payload.project_id)
@@ -224,7 +208,6 @@ def send_message(payload: MessageCreate, current_user: User = Depends(get_curren
     db.refresh(message)
     return _to_out(message, current_user.id)
 
-
 @legacy_router.post("/{message_id}/read", response_model=MessageOut)
 def mark_read(message_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     message = db.get(Message, message_id)
@@ -237,7 +220,6 @@ def mark_read(message_id: str, current_user: User = Depends(get_current_user), d
         db.commit()
         db.refresh(message)
     return _to_out(message, current_user.id)
-
 
 @legacy_router.get("/unread-count")
 def unread_message_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -254,7 +236,6 @@ def unread_message_count(current_user: User = Depends(get_current_user), db: Ses
         .count()
     )
     return {"count": count}
-
 
 @legacy_router.get("/threads", response_model=list[ThreadOut])
 def list_threads(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -299,7 +280,6 @@ def list_threads(current_user: User = Depends(get_current_user), db: Session = D
     out.sort(key=lambda t: t.last_message_at, reverse=True)
     return out
 
-
 @router.get("/projects/{project_id}/messages", response_model=list[MessageOut])
 def project_thread(
     project_id: str,
@@ -331,7 +311,6 @@ def project_thread(
         query = query.filter(Message.created_at > after)
     messages = query.order_by(Message.created_at.asc()).all()
     return [_to_out(m, current_user.id) for m in messages]
-
 
 @router.post("/projects/{project_id}/messages", response_model=MessageOut, status_code=201)
 async def send_project_message(
@@ -373,8 +352,7 @@ async def send_project_message(
     notify_body = payload.body[:140] if payload.body else (
         "Sent a voice note" if payload.message_type == "voice" else "Sent an attachment"
     )
-    # Only email if they're not actively watching the thread right now — see
-    # notify_online_aware / ws_manager.is_online.
+
     notify_online_aware(
         db, payload.recipient_id, NotificationType.message_received,
         f"New message from {current_user.first_name}",
@@ -387,7 +365,6 @@ async def send_project_message(
     await manager.send_to(project_id, payload.recipient_id, out.model_dump(mode="json"))
     await manager.send_to(project_id, current_user.id, out.model_dump(mode="json"))
     return out
-
 
 @router.post("/projects/{project_id}/updates", response_model=MessageOut, status_code=201)
 async def post_project_update(
@@ -436,7 +413,6 @@ async def post_project_update(
     await manager.send_to(project_id, current_user.id, out.model_dump(mode="json"))
     return out
 
-
 @router.post("/messages/{message_id}/react", response_model=MessageOut)
 async def react_to_message(
     message_id: str,
@@ -475,7 +451,6 @@ async def react_to_message(
         await manager.send_to(message.project_id, current_user.id, event)
     return out
 
-
 async def _broadcast_message_update(db: Session, message: Message, current_user_id: str) -> MessageOut:
     out = _to_out(message, current_user_id)
     if message.project_id:
@@ -484,7 +459,6 @@ async def _broadcast_message_update(db: Session, message: Message, current_user_
         await manager.send_to(message.project_id, other_id, event)
         await manager.send_to(message.project_id, current_user_id, event)
     return out
-
 
 @router.patch("/messages/{message_id}", response_model=MessageOut)
 async def edit_message(
@@ -511,7 +485,6 @@ async def edit_message(
     db.refresh(message)
     return await _broadcast_message_update(db, message, current_user.id)
 
-
 @router.delete("/messages/{message_id}", response_model=MessageOut)
 async def delete_message(
     message_id: str,
@@ -535,7 +508,6 @@ async def delete_message(
     db.commit()
     db.refresh(message)
     return await _broadcast_message_update(db, message, current_user.id)
-
 
 @router.websocket("/ws/projects/{project_id}/messages")
 async def messages_websocket(websocket: WebSocket, project_id: str, token: str = Query(...)):
@@ -565,10 +537,7 @@ async def messages_websocket(websocket: WebSocket, project_id: str, token: str =
     try:
         while True:
             raw = await websocket.receive_text()
-            # The only inbound message we act on is a typing indicator ping,
-            # e.g. {"type": "typing"}; relay it to the other participant so
-            # their UI can show "X is typing…". Anything else (keepalive
-            # pings, malformed frames) is ignored.
+
             try:
                 data = json.loads(raw)
             except Exception:
@@ -589,7 +558,6 @@ async def messages_websocket(websocket: WebSocket, project_id: str, token: str =
                     db2.close()
     except WebSocketDisconnect:
         manager.disconnect(project_id, user_id, websocket)
-
 
 @router.post("/projects/{project_id}/messages/read")
 def mark_thread_read(

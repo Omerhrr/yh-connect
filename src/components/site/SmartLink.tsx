@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 
-/** Renders an admin-editable href correctly whether it's an internal route
- * or an external URL, since CMS-edited links can point anywhere. */
 export function SmartLink({
   href,
   className,

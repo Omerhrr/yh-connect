@@ -22,7 +22,7 @@ export type DashboardNavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  /** Include this item in the mobile bottom tab bar (max ~4 per role). */
+
   mobile?: boolean;
 };
 

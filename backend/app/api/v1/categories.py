@@ -10,7 +10,6 @@ from app.services.platform_settings import get_featured_category_ids
 
 router = APIRouter(prefix="/categories", tags=["categories"])
 
-
 @router.get("", response_model=list[CategoryOut])
 def list_categories(db: Session = Depends(get_db)):
     categories = db.query(Category).order_by(Category.label).all()
@@ -31,7 +30,6 @@ def list_categories(db: Session = Depends(get_db)):
         )
         for c in categories
     ]
-    # Admin-featured categories (set in Platform Settings) sort first, so the
-    # setting actually has a visible effect on the homepage.
+
     out.sort(key=lambda c: (c.id not in featured_ids, c.label))
     return out

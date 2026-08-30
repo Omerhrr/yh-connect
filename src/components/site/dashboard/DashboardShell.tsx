@@ -59,14 +59,10 @@ export function DashboardShell({
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [resendingVerification, setResendingVerification] = useState(false);
-  // Per-project unread totals, so the My Projects / Active Jobs nav items can
-  // carry the same count the dashboard cards show.
   const { unreadByProject } = useProjectUnread();
   const projectsHref = role === "client" ? "/client/dashboard/projects" : role === "talent" ? "/talent/dashboard/active" : "";
   const projectUnreadTotal = Object.values(unreadByProject).reduce((a, b) => a + b, 0);
 
-  /** Unread badge count for a nav item: Messages shows the total unread
-      messages; the projects/jobs item shows the sum across all projects. */
   const navBadgeCount = (item: DashboardNavItem) => {
     if (item.href === messagesHref) return unreadMessages;
     if (projectsHref && item.href === projectsHref) return projectUnreadTotal;
@@ -100,7 +96,6 @@ export function DashboardShell({
         await api.markNotificationRead(n.id);
         setUnreadCount((c) => Math.max(0, c - 1));
       } catch {
-        // non-critical
       }
     }
     setNotifOpen(false);
@@ -161,7 +156,7 @@ export function DashboardShell({
 
   return (
     <div className="min-h-screen flex bg-muted/20">
-      {/* Sidebar, desktop only */}
+      {}
       <aside className={`hidden md:flex ${sidebarOpen ? "w-60" : "w-16"} transition-all duration-200 bg-background border-r flex-col shrink-0`}>
         <div className="h-16 flex items-center px-4 border-b gap-2">
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${accentClass}`}>
@@ -218,7 +213,7 @@ export function DashboardShell({
         </div>
       </aside>
 
-      {/* Mobile slide-out drawer */}
+      {}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
@@ -280,9 +275,9 @@ export function DashboardShell({
         </div>
       )}
 
-      {/* Main content */}
+      {}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Topbar */}
+        {}
         <header className="h-14 md:h-16 border-b bg-background flex items-center justify-between px-4 md:px-6 gap-3 md:gap-4">
           <button onClick={() => setSidebarOpen((o) => !o)} className="hidden md:block text-muted-foreground hover:text-foreground">
             <ChevronRight className={`h-5 w-5 transition-transform ${sidebarOpen ? "rotate-180" : ""}`} />
@@ -426,7 +421,7 @@ export function DashboardShell({
           {children}
         </main>
 
-        {/* Mobile bottom tab bar */}
+        {}
         <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-background border-t flex items-stretch h-16 pb-[env(safe-area-inset-bottom)]">
           {bottomNavItems.map((item) => {
             const active = isNavItemActive(pathname, item, rootHref);

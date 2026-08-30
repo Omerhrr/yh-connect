@@ -7,21 +7,17 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class AccessRequestType(str, enum.Enum):
     inspection = "inspection"
     chat = "chat"
 
-
 class AccessRequestStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
-
 
 class ProjectAccessRequest(Base):
     """A professional's request to either visit a project's site in person
@@ -42,10 +38,8 @@ class ProjectAccessRequest(Base):
     request_type: Mapped[AccessRequestType] = mapped_column(Enum(AccessRequestType), nullable=False)
     status: Mapped[AccessRequestStatus] = mapped_column(Enum(AccessRequestStatus), default=AccessRequestStatus.pending)
 
-    # Optional note from the professional when asking.
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Filled in by the client only when approving an inspection request.
     address: Mapped[str | None] = mapped_column(String, nullable=True)
     phone: Mapped[str | None] = mapped_column(String, nullable=True)
     details: Mapped[str | None] = mapped_column(Text, nullable=True)

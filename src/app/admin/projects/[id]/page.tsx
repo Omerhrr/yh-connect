@@ -64,8 +64,7 @@ export default function AdminProjectDetailPage() {
     api.adminProjectDetail(id).then(setData).catch(() => toast.error("Could not load project")).finally(() => setLoading(false));
   };
 
-  useEffect(load, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(load, [id]);
   const cancelProject = async () => {
     if (!confirm("Force-cancel this project? Any escrowed milestone funds are refunded to the client automatically.")) return;
     setCancelling(true);

@@ -7,10 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
-
 def gen_uuid() -> str:
     return str(uuid.uuid4())
-
 
 class ProjectStatus(str, enum.Enum):
     open = "open"
@@ -19,11 +17,9 @@ class ProjectStatus(str, enum.Enum):
     completed = "completed"
     cancelled = "cancelled"
 
-
 class BudgetType(str, enum.Enum):
     fixed = "fixed"
     hourly = "hourly"
-
 
 class Project(Base):
     __tablename__ = "projects"
@@ -39,24 +35,14 @@ class Project(Base):
     budget_min: Mapped[float] = mapped_column(Float, nullable=False)
     budget_max: Mapped[float] = mapped_column(Float, nullable=False)
     budget_type: Mapped[BudgetType] = mapped_column(Enum(BudgetType), default=BudgetType.fixed)
-    skills: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated
-    # Client's stated desired timeline for the project (free text, e.g.
-    # "2-3 weeks" or "By end of March"), shown to professionals before they
-    # bid so their estimated_days and cover message can account for it.
-    # Purely informational — not enforced against milestone due_dates.
+    skills: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     timeline: Mapped[str | None] = mapped_column(String, nullable=True)
     status: Mapped[ProjectStatus] = mapped_column(Enum(ProjectStatus), default=ProjectStatus.open)
     progress: Mapped[int] = mapped_column(Integer, default=0)
-    # Final-review sign-off: while the project is in "review", the assigned
-    # professional can leave a closing note for the client before they
-    # confirm completion.
+
     closing_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Optional at-a-glance visuals a client can attach when posting, so a
-    # professional gets more context before bidding. Off by default only for
-    # video (admin-gated, see PlatformSetting "project_media_settings");
-    # images are on by default. video_url covers both an uploaded file's URL
-    # and a plain external link (YouTube etc.) — either way it's just a URL.
     image_urls: Mapped[list | None] = mapped_column(JSON, nullable=True)
     video_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
@@ -90,8 +76,6 @@ class Project(Base):
             return self.progress
         from app.models.milestone import MilestoneStatus
         total = len(self.milestones)
-        # Terminal states (paid out, or refunded via dispute) count as done so
-        # a completed project can reach 100% even when a milestone was
-        # refunded instead of paid.
+
         done = sum(1 for m in self.milestones if m.status in (MilestoneStatus.approved, MilestoneStatus.funded, MilestoneStatus.paid, MilestoneStatus.refunded))
         return round((done / total) * 100) if total else 0

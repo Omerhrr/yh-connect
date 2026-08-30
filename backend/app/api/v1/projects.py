@@ -26,7 +26,6 @@ from app.services.platform_settings import get_project_media_settings
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-
 @router.get("/media-settings", response_model=ProjectMediaSettingsOut)
 def project_media_settings(db: Session = Depends(get_db)):
     """Public (no auth) so the 'post a project' form knows whether to show
@@ -35,9 +34,7 @@ def project_media_settings(db: Session = Depends(get_db)):
     to post, but this stays cheap to call from anywhere without a token."""
     return ProjectMediaSettingsOut(**get_project_media_settings(db))
 
-
 MAX_PROJECT_IMAGES = 8
-
 
 def _gate_media(db: Session, image_urls: list[str] | None, video_url: str | None) -> tuple[list[str], str | None]:
     """Silently drops media the admin has disabled/exceeds limits, rather
@@ -51,7 +48,6 @@ def _gate_media(db: Session, image_urls: list[str] | None, video_url: str | None
     images = images[:MAX_PROJECT_IMAGES]
     video = video_url if media["video_enabled"] else None
     return images, video
-
 
 def _to_out(project: Project, db: Session) -> ProjectOut:
     client = project.client
@@ -103,11 +99,7 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         )
         if accepted_bid:
             contract_amount = accepted_bid.offered_amount if accepted_bid.offered_amount is not None else accepted_bid.amount
-            # Approved change orders permanently move the contract price —
-            # scope additions raise it, scope reductions lower it — even the
-            # ones that were too small/negative to spin up their own
-            # milestone (create_change_order/update_change_order only create
-            # a milestone for amount_delta > 0).
+
             approved_delta = (
                 db.query(ChangeOrder)
                 .filter(ChangeOrder.project_id == project.id, ChangeOrder.status == ChangeOrderStatus.approved)
@@ -154,7 +146,6 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         client_hire_rate=hire_rate,
     )
 
-
 @router.get("", response_model=list[ProjectOut])
 def list_projects(
     category_id: Optional[str] = None,
@@ -164,7 +155,7 @@ def list_projects(
     location: Optional[str] = None,
     budget_min: Optional[float] = None,
     budget_max: Optional[float] = None,
-    sort_by: Optional[str] = None,  # newest | budget_asc | budget_desc | most_bids
+    sort_by: Optional[str] = None,
     limit: int = 20,
     offset: int = 0,
     db: Session = Depends(get_db),
@@ -176,11 +167,7 @@ def list_projects(
     if category_id:
         query = query.filter(Project.category_id == category_id)
     if client_id:
-        # A client's job history (any status) shown on their public profile
-        # so professionals can see their full posting track record, not just
-        # currently-open listings — mirrors what the client sees of their own
-        # projects, just scoped read-only and without status defaulting to
-        # "open only".
+
         query = query.filter(Project.client_id == client_id)
         if status_filter:
             query = query.filter(Project.status == status_filter)
@@ -197,12 +184,7 @@ def list_projects(
     query = query.order_by(Project.created_at.desc())
 
     if q:
-        # Free-text search runs in Python (SQLite has no case-insensitive
-        # full-text index here), so filtering/sorting happens after.
-        # Natural-language queries ("I want tiling jobs near me") are
-        # understood via a keyword/synonym match against the category
-        # taxonomy first; if nothing matches, we fall back to plain keyword
-        # substring matching on title/description/skills.
+
         matched_categories = match_categories(q)
         all_projects = query.all()
         if matched_categories:
@@ -238,16 +220,13 @@ def list_projects(
     projects = projects[offset : offset + limit]
     return [_to_out(p, db) for p in projects]
 
-
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(
     payload: ProjectCreate,
     current_user: User = Depends(require_role(UserRole.client)),
     db: Session = Depends(get_db),
 ):
-    # Only enforceable once outbound email actually works — with no provider
-    # configured, verification links can never be delivered, so the existing
-    # (no gate) behavior is kept rather than locking every client out.
+
     if settings.email_configured and current_user.email_verified_at is None:
         raise HTTPException(status_code=403, detail="Please verify your email address before posting a project.")
     if not db.get(Category, payload.category_id):
@@ -276,7 +255,6 @@ def create_project(
     db.refresh(project)
     _notify_matching_professionals(db, project)
     return _to_out(project, db)
-
 
 def _notify_matching_professionals(db: Session, project: Project) -> None:
     """Tell professionals whose profile fits this project that it exists,
@@ -314,7 +292,6 @@ def _notify_matching_professionals(db: Session, project: Project) -> None:
         )
     db.commit()
 
-
 @router.get("/mine", response_model=list[ProjectOut])
 def my_projects(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     if current_user.role == UserRole.client:
@@ -328,14 +305,12 @@ def my_projects(current_user: User = Depends(get_current_user), db: Session = De
         )
     return [_to_out(p, db) for p in projects]
 
-
 @router.get("/{project_id}", response_model=ProjectOut)
 def get_project(project_id: str, db: Session = Depends(get_db)):
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     return _to_out(project, db)
-
 
 @router.post("/{project_id}/report", response_model=ProjectReportOut, status_code=201)
 def report_project(
@@ -358,7 +333,6 @@ def report_project(
     db.refresh(report)
     return report
 
-
 @router.patch("/{project_id}", response_model=ProjectOut)
 def update_project(
     project_id: str,
@@ -373,10 +347,7 @@ def update_project(
         raise HTTPException(status_code=403, detail="Not authorized to modify this project")
     data = payload.model_dump(exclude_unset=True)
     if current_user.role != UserRole.admin:
-        # Status / assignment / progress drive the hiring and escrow flow and
-        # are owned by the accept-a-bid and milestone transitions, not by a
-        # free-form PATCH; a client could otherwise mark a project completed
-        # or assign any professional without accepting a proposal.
+
         for field in ("status", "assigned_professional_id", "progress"):
             data.pop(field, None)
     if "category_id" in data and data["category_id"] is not None:
@@ -399,7 +370,6 @@ def update_project(
     db.commit()
     db.refresh(project)
     return _to_out(project, db)
-
 
 @router.post("/{project_id}/complete", response_model=ProjectOut)
 def complete_project(
@@ -451,7 +421,6 @@ def complete_project(
     db.refresh(project)
     return _to_out(project, db)
 
-
 @router.post("/{project_id}/confirm", response_model=ProjectOut)
 def confirm_project(
     project_id: str,
@@ -490,7 +459,6 @@ def confirm_project(
     db.refresh(project)
     return _to_out(project, db)
 
-
 @router.post("/{project_id}/reopen", response_model=ProjectOut)
 def reopen_project(
     project_id: str,
@@ -518,7 +486,6 @@ def reopen_project(
     db.commit()
     db.refresh(project)
     return _to_out(project, db)
-
 
 @router.post("/{project_id}/closing-note", response_model=ProjectOut)
 def post_closing_note(
@@ -548,7 +515,6 @@ def post_closing_note(
     db.commit()
     db.refresh(project)
     return _to_out(project, db)
-
 
 @router.post("/{project_id}/close", response_model=ProjectOut)
 def close_project(

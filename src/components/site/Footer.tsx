@@ -14,7 +14,7 @@ export function Footer() {
     <footer className="border-t bg-muted/30 mt-20">
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-          {/* Brand */}
+          {}
           <div className="md:col-span-1">
             <button onClick={() => go("home")} className="flex items-center gap-2 font-bold text-xl mb-3">
               <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">

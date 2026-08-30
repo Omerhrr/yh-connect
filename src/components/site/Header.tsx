@@ -38,7 +38,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
-        {/* Logo */}
+        {}
         <button
           onClick={() => go("home")}
           className="flex items-center gap-2 font-bold text-xl shrink-0"
@@ -51,8 +51,7 @@ export function Header() {
           </span>
         </button>
 
-        {/* Nav links: always visible in the header on lg and up; the menu
-            carries them below lg. Only the account actions live in the menu. */}
+        {}
         <nav className="hidden lg:flex items-center gap-4 xl:gap-5">
           {navLinks.map((link) => (
             <SmartLink
@@ -65,8 +64,7 @@ export function Header() {
           ))}
         </nav>
 
-        {/* Right side: theme toggle + menu (the menu holds the client and
-            talent sign-in/sign-up actions at every screen size) */}
+        {}
         <div className="flex items-center gap-1 shrink-0">
           {clientAuthed ? (
             <Button variant="ghost" size="sm" className="hidden lg:inline-flex whitespace-nowrap" onClick={() => go("client-dashboard")}>
@@ -89,12 +87,11 @@ export function Header() {
         </div>
       </div>
 
-      {/* Menu: nav links on mobile, plus the client and talent account
-          actions at every size */}
+      {}
       {menuOpen && (
         <div className="relative">
           <div className="lg:absolute lg:right-4 lg:top-2 lg:w-80 lg:rounded-xl lg:border lg:bg-background lg:shadow-lg border-t bg-background px-4 py-4 space-y-1">
-            {/* Nav links: mobile only (desktop shows them in the header) */}
+            {}
             <div className="lg:hidden space-y-1 pb-2">
               {navLinks.map((link) => (
                 <SmartLink
@@ -109,8 +106,7 @@ export function Header() {
             </div>
             <hr className="border-border lg:hidden" />
 
-            {/* Client actions: dashboard when in client mode, a one-click
-                switch when in talent mode, sign-in when logged out */}
+            {}
             <div className="py-2 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                 <Briefcase className="h-3.5 w-3.5" /> I'm Hiring
@@ -137,8 +133,7 @@ export function Header() {
               )}
             </div>
 
-            {/* Talent actions: dashboard when in talent mode, a one-click
-                switch when in client mode, sign-in when logged out */}
+
             <div className="py-2 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
                 <User className="h-3.5 w-3.5" /> I'm a Professional

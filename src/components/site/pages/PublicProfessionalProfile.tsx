@@ -9,12 +9,6 @@ import { InviteToProjectDialog } from "@/components/site/pages/DashboardPages";
 import { ProfessionalProfileView } from "@/components/site/pages/ProfessionalProfileView";
 import { toast } from "sonner";
 
-/**
- * Public (no-login-required) professional profile, reached from the public
- * Find Professionals directory. Anyone can browse this. Reaching out (Invite)
- * is where we ask an anonymous visitor to register, and where a registered
- * but not-yet-KYC'd client is prompted to verify their identity first.
- */
 export function PublicProfessionalProfile({ profileId }: { profileId: string }) {
   const router = useRouter();
   const { user } = useAuth();

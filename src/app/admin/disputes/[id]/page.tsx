@@ -41,8 +41,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const load = () => {
     api.adminDisputeDetail(id).then(setDispute).catch(() => toast.error("Could not load this dispute")).finally(() => setLoading(false));
   };
-  useEffect(load, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(load, [id]);
   const isClosed = dispute?.status === "resolved" || dispute?.status === "withdrawn";
 
   const sendReply = async () => {
@@ -125,7 +124,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
           <div className="flex flex-wrap gap-2">
             {dispute.evidence_urls.map((url) => (
               <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {}
                 <img src={url} alt="Evidence" className="h-20 w-20 rounded-lg object-cover border hover:opacity-80 transition-opacity" />
               </a>
             ))}
@@ -183,10 +182,6 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
               className="flex h-9 rounded-md border border-input bg-background px-3 text-sm"
             >
               {OUTCOMES.map((o) => {
-                // "No action" is unavailable only when the linked milestone
-                // actually has funds sitting in escrow (funded/approved) —
-                // if it was never funded (or already paid/refunded/rejected)
-                // there's nothing to move, so "no action" should be usable.
                 const milestoneHasFundsAtStake = !!dispute.milestone_id && (dispute.milestone_status === "funded" || dispute.milestone_status === "approved");
                 const disabled = (o === "no_action" && milestoneHasFundsAtStake) || (o === "partial_split" && !dispute.milestone_id);
                 return (

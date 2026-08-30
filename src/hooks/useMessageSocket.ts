@@ -9,13 +9,6 @@ const API_BASE =
 export type TypingEvent = { event: "typing"; user_id: string };
 export type WsInboundEvent = MessageOut | TypingEvent;
 
-/**
- * Live push channel for a project's message thread. Falls back silently if
- * the connection can't be established (no WS support behind a proxy, token
- * expired, etc), the caller should keep its own polling as a safety net.
- * Also exposes `sendTyping()`, a lightweight ping relayed to the other
- * participant so their UI can show "typing…".
- */
 export function useMessageSocket(projectId: string | null, onMessage: (m: WsInboundEvent) => void) {
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
@@ -38,11 +31,9 @@ export function useMessageSocket(projectId: string | null, onMessage: (m: WsInbo
           const data = JSON.parse(event.data) as WsInboundEvent;
           onMessageRef.current(data);
         } catch {
-          // ignore malformed payloads
         }
       };
       ws.onerror = () => {
-        // swallow, the caller's polling fallback covers this
       };
     } catch {
       ws = null;
@@ -62,7 +53,6 @@ export function useMessageSocket(projectId: string | null, onMessage: (m: WsInbo
       try {
         ws.send(JSON.stringify({ type: "typing" }));
       } catch {
-        // ignore
       }
     }
   };

@@ -9,7 +9,6 @@ from app.models.user import KycStatus, User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
-
 def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
@@ -28,10 +27,9 @@ def get_current_user(
     if not user or not user.is_active:
         raise credentials_exception
     if payload.get("tv", 0) != user.token_version:
-        # Token was issued before a logout-everywhere / password change.
+
         raise credentials_exception
     return user
-
 
 def require_role(*roles: UserRole):
     def checker(user: User = Depends(get_current_user)) -> User:
@@ -40,7 +38,6 @@ def require_role(*roles: UserRole):
         return user
 
     return checker
-
 
 def require_client_kyc_verified(user: User = Depends(require_role(UserRole.client))) -> User:
     """Gate for the points where a client can actually reach a specific

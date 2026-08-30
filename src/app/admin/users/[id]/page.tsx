@@ -27,8 +27,6 @@ const VERIFICATION_TONES: Record<string, string> = {
   rejected: "bg-red-100 text-red-600",
 };
 
-// Tier is derived the same way the professionals' own dashboard derives it:
-// both verified = Tier 3, identity only = Tier 2, otherwise Tier 1.
 function tierFor(identity: string, address: string) {
   if (identity === "verified" && address === "verified") return { tier: 3, label: "Tier 3 · Full trust, no caps" };
   if (identity === "verified") return { tier: 2, label: "Tier 2 · NIN-verified" };
@@ -120,7 +118,7 @@ export default function AdminUserDetailPage() {
         <p className="text-xs text-muted-foreground">Joined {new Date(data.created_at).toLocaleDateString()}</p>
       </div>
 
-      {/* Wallet */}
+      {}
       <div className="rounded-xl border bg-background p-6 space-y-3">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-sm font-semibold flex items-center gap-1.5">
