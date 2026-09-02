@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ApplyDialog } from "@/components/site/pages/DashboardPages";
 import { ProjectChat } from "@/components/site/chat/ProjectChat";
 import { api, ApiError, type ProjectOut, type BidStatus, type AccessRequestOut, type AccessRequestType } from "@/lib/api";
@@ -320,6 +321,24 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
   const chatRequest = myRequests.find((r) => r.request_type === "chat");
   const anyApproved = myRequests.find((r) => r.status === "approved");
 
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [counterOpen, setCounterOpen] = useState(false);
+  const [counterAt, setCounterAt] = useState("");
+  const respondToSchedule = async (action: "accept" | "counter", datetime?: string) => {
+    if (!inspectionRequest) return;
+    setScheduleBusy(true);
+    try {
+      await api.respondToSchedule(inspectionRequest.id, { action, datetime: datetime ? new Date(datetime).toISOString() : undefined });
+      toast.success(action === "accept" ? "Visit time confirmed" : "New time proposed");
+      setCounterOpen(false);
+      loadMyRequests();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not respond to schedule");
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
+
   const sendAccessRequest = async (type: AccessRequestType, note?: string) => {
     setRequesting(type);
     try {
@@ -477,9 +496,40 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
               ) : (
                 <>
                   {inspectionRequest ? (
-                    <Badge variant="outline" className="w-full justify-center py-1.5 text-xs rounded-full capitalize">
-                      Inspection request: {inspectionRequest.status}
-                    </Badge>
+                    <div className="space-y-1.5">
+                      <Badge variant="outline" className="w-full justify-center py-1.5 text-xs rounded-full capitalize">
+                        Inspection request: {inspectionRequest.status}
+                      </Badge>
+                      {inspectionRequest.status === "approved" && inspectionRequest.schedule_status === "agreed" && (
+                        <p className="text-xs text-emerald-700 text-center">
+                          Visit agreed for {inspectionRequest.scheduled_datetime ? new Date(inspectionRequest.scheduled_datetime).toLocaleString() : ""}
+                        </p>
+                      )}
+                      {inspectionRequest.status === "approved" && inspectionRequest.schedule_status && inspectionRequest.schedule_status !== "agreed" && (
+                        <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
+                          <p className="text-xs text-amber-700">
+                            Proposed by {inspectionRequest.proposed_by === "client" ? "client" : "you"}: {inspectionRequest.proposed_datetime ? new Date(inspectionRequest.proposed_datetime).toLocaleString() : "—"}
+                            {inspectionRequest.schedule_status !== "awaiting_talent" && " — waiting on the client"}
+                          </p>
+                          {inspectionRequest.schedule_status === "awaiting_talent" && !counterOpen && (
+                            <div className="flex gap-2">
+                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={scheduleBusy} onClick={() => respondToSchedule("accept")}>
+                                Confirm this time
+                              </Button>
+                              <Button size="sm" variant="outline" disabled={scheduleBusy} onClick={() => setCounterOpen(true)}>
+                                Propose different time
+                              </Button>
+                            </div>
+                          )}
+                          {inspectionRequest.schedule_status === "awaiting_talent" && counterOpen && (
+                            <div className="flex gap-2 items-center">
+                              <Input type="datetime-local" value={counterAt} onChange={(e) => setCounterAt(e.target.value)} className="h-8 text-xs" />
+                              <Button size="sm" disabled={scheduleBusy || !counterAt} onClick={() => respondToSchedule("counter", counterAt)}>Send</Button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <Button
                       variant="outline"

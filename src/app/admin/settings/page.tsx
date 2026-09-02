@@ -15,6 +15,8 @@ import {
   type ReceiptFont,
   type ReceiptSettingsOut,
   type ReceiptTemplate,
+  type AcceptanceFeeSettings,
+  type AcceptanceFeeRule,
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -105,6 +107,155 @@ function ToggleField({ label, help, checked, onChange }: { label: string; help: 
       >
         <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0.5"}`} />
       </button>
+    </div>
+  );
+}
+
+const SKILL_LEVEL_OPTIONS = [
+  { value: "", label: "Any skill level" },
+  { value: "skilled", label: "Skilled" },
+  { value: "semi_skilled", label: "Semi-skilled" },
+  { value: "unskilled", label: "Unskilled" },
+];
+
+function AcceptanceFeeSection() {
+  const [settings, setSettings] = useState<AcceptanceFeeSettings | null>(null);
+  const [draft, setDraft] = useState<AcceptanceFeeSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.adminGetAcceptanceFeeSettings()
+      .then((s) => { setSettings(s); setDraft(s); })
+      .catch(() => toast.error("Could not load acceptance fee settings"))
+      .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+
+  if (loading || !draft) {
+    return <Skeleton className="h-64 rounded-xl" />;
+  }
+
+  const updateRule = (i: number, patch: Partial<AcceptanceFeeRule>) => {
+    const rules = [...draft.rules];
+    rules[i] = { ...rules[i], ...patch };
+    setDraft({ ...draft, rules });
+  };
+  const addRule = () => setDraft({ ...draft, rules: [...draft.rules, { skill_level: "", min_price: null, max_price: null, amount: 0 }] });
+  const removeRule = (i: number) => setDraft({ ...draft, rules: draft.rules.filter((_, idx) => idx !== i) });
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const cleanedRules = draft.rules.map((r) => ({
+        skill_level: r.skill_level || null,
+        min_price: r.min_price === null || r.min_price === undefined || (r.min_price as unknown as string) === "" ? null : Number(r.min_price),
+        max_price: r.max_price === null || r.max_price === undefined || (r.max_price as unknown as string) === "" ? null : Number(r.max_price),
+        amount: Number(r.amount) || 0,
+      }));
+      const updated = await api.adminSaveAcceptanceFeeSettings({
+        mode: draft.mode,
+        general_amount: Number(draft.general_amount) || 0,
+        rules: cleanedRules,
+      });
+      setSettings(updated);
+      setDraft(updated);
+      toast.success("Acceptance fee settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save acceptance fee settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dirty = JSON.stringify(draft) !== JSON.stringify(settings);
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        icon={Lock}
+        title="Talent Acceptance Fee"
+        description="A one-time fee talent must pay from their wallet after a project's contract is approved, before work can begin. Milestone funding stays locked until it's paid."
+      >
+        <ToggleField
+          label="Rule-based pricing"
+          help="Off: everyone pays the same flat fee. On: the fee varies by the talent's skill tier and/or the agreed project price."
+          checked={draft.mode === "rule_based"}
+          onChange={(v) => setDraft({ ...draft, mode: v ? "rule_based" : "general" })}
+        />
+
+        {draft.mode === "general" && (
+          <NumberField
+            label="Flat Acceptance Fee"
+            help="Charged to every talent, on every project, regardless of skill tier or price."
+            value={String(draft.general_amount)}
+            onChange={(v) => setDraft({ ...draft, general_amount: Number(v) || 0 })}
+            min={0}
+            suffix="₦"
+            dirty={dirty}
+          />
+        )}
+
+        {draft.mode === "rule_based" && (
+          <div className="space-y-3">
+            <NumberField
+              label="Fallback Flat Fee"
+              help="Used when a project doesn't match any rule below."
+              value={String(draft.general_amount)}
+              onChange={(v) => setDraft({ ...draft, general_amount: Number(v) || 0 })}
+              min={0}
+              suffix="₦"
+              dirty={dirty}
+            />
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Rules (first match wins, checked in order)</p>
+              {draft.rules.length === 0 && (
+                <p className="text-xs text-muted-foreground">No rules yet — add one below, e.g. "skilled talent, ₦500k–₦1m project → ₦15,000".</p>
+              )}
+              {draft.rules.map((rule, i) => (
+                <div key={i} className="rounded-lg border p-3 space-y-2 bg-muted/20">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Skill tier</label>
+                      <select
+                        value={rule.skill_level || ""}
+                        onChange={(e) => updateRule(i, { skill_level: e.target.value || null })}
+                        className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm"
+                      >
+                        {SKILL_LEVEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Min price (₦)</label>
+                      <Input type="number" value={rule.min_price ?? ""} onChange={(e) => updateRule(i, { min_price: e.target.value === "" ? null : Number(e.target.value) })} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Max price (₦)</label>
+                      <Input type="number" value={rule.max_price ?? ""} onChange={(e) => updateRule(i, { max_price: e.target.value === "" ? null : Number(e.target.value) })} />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Fee (₦)</label>
+                      <Input type="number" value={rule.amount} onChange={(e) => updateRule(i, { amount: Number(e.target.value) || 0 })} />
+                    </div>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700" onClick={() => removeRule(i)}>
+                    Remove rule
+                  </Button>
+                </div>
+              ))}
+              <Button size="sm" variant="outline" onClick={addRule}>+ Add rule</Button>
+            </div>
+          </div>
+        )}
+      </SectionCard>
+
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => setDraft(settings)} disabled={!dirty || saving}>Discard</Button>
+        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={save} disabled={!dirty || saving}>
+          {saving ? "Saving..." : "Save changes"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -429,7 +580,7 @@ function ReceiptBrandingSection() {
 }
 
 export default function AdminSettingsPage() {
-  const [tab, setTab] = useState<"platform" | "receipts" | "project-media">("platform");
+  const [tab, setTab] = useState<"platform" | "receipts" | "project-media" | "acceptance-fee">("platform");
   const [settings, setSettings] = useState<PlatformSettingOut[]>([]);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<CategoryOut[]>([]);
@@ -541,10 +692,17 @@ export default function AdminSettingsPage() {
         >
           Project Media
         </button>
+        <button
+          onClick={() => setTab("acceptance-fee")}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${tab === "acceptance-fee" ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+        >
+          Acceptance Fee
+        </button>
       </div>
 
       {tab === "receipts" && <ReceiptBrandingSection />}
       {tab === "project-media" && <ProjectMediaSection />}
+      {tab === "acceptance-fee" && <AcceptanceFeeSection />}
 
       {tab === "platform" && (
       <>

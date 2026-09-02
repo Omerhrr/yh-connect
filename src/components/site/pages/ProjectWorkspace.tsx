@@ -25,6 +25,8 @@ import {
   Milestone as MilestoneIcon,
   XCircle,
   MapPin,
+  FileText,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +46,8 @@ import {
   type InviteOut,
   type AccessRequestOut,
   type ProjectMediaSettingsOut,
+  type ContractOut,
+  type AcceptanceFeeQuote,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
 import { CATEGORIES } from "@/data/content";
@@ -1254,24 +1258,219 @@ function FinalReviewSection({
   );
 }
 
+function ContractSection({
+  project, isClient, isProfessional,
+}: { project: ProjectOut; isClient: boolean; isProfessional: boolean }) {
+  const [contract, setContract] = useState<ContractOut | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const role: "client" | "professional" = isClient ? "client" : "professional";
+  const myApproval = contract ? (isClient ? contract.client_approved : contract.professional_approved) : false;
+  const otherApproval = contract ? (isClient ? contract.professional_approved : contract.client_approved) : false;
+
+  const load = () => {
+    setLoading(true);
+    api.getProjectContract(project.id).then(setContract).catch(() => setContract(null)).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, [project.id]);
+
+  if (loading) return null;
+  if (!contract) return null;
+
+  const startEdit = () => { setDraft(contract.content); setEditing(true); };
+
+  const saveEdit = async () => {
+    setBusy(true);
+    try {
+      const updated = await api.editContract(contract.id, draft);
+      setContract(updated);
+      setEditing(false);
+      toast.success("Contract updated — the other party needs to review and approve it again");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not save the contract");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendForApproval = async () => {
+    setBusy(true);
+    try {
+      const updated = await api.sendContract(contract.id);
+      setContract(updated);
+      toast.success("Sent for the other party's review");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not send the contract");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const approve = async () => {
+    setBusy(true);
+    try {
+      const updated = await api.approveContract(contract.id);
+      setContract(updated);
+      toast.success(updated.status === "approved" ? "Contract fully approved — work can start once the acceptance fee is paid" : "Approved — waiting on the other party");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not approve the contract");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border bg-background overflow-hidden">
+      <div className="flex items-center justify-between gap-3 px-4 md:px-5 py-3 border-b bg-muted/30">
+        <h2 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" /> Contract</h2>
+        <Badge className={`text-xs rounded-full capitalize ${contract.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+          {contract.status === "approved" ? "Approved" : contract.status.replace(/_/g, " ")}
+        </Badge>
+      </div>
+      <div className="p-4 md:p-5 space-y-3">
+        {}
+        <div className="rounded-lg border shadow-sm bg-[#fbfbf9] p-5 md:p-8 font-serif text-sm leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto">
+          {editing ? (
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={18}
+              className="w-full bg-transparent border rounded-md p-3 font-serif text-sm resize-y focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          ) : (
+            contract.content
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span className={contract.client_approved ? "text-emerald-700 font-medium" : ""}>
+            {contract.client_approved ? "✓" : "○"} Client approved
+          </span>
+          <span>·</span>
+          <span className={contract.professional_approved ? "text-emerald-700 font-medium" : ""}>
+            {contract.professional_approved ? "✓" : "○"} Talent approved
+          </span>
+        </div>
+
+        {contract.status !== "approved" && (isClient || isProfessional) && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {editing ? (
+              <>
+                <Button size="sm" disabled={busy || !draft.trim()} onClick={saveEdit}>
+                  {busy ? "Saving..." : "Save changes"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setEditing(false)} disabled={busy}>Cancel</Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" onClick={startEdit} disabled={busy}>
+                  <Pencil className="h-3.5 w-3.5 mr-1" /> Edit scope of work
+                </Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={sendForApproval}>
+                  <Send className="h-3.5 w-3.5 mr-1" /> Send to {role === "client" ? "talent" : "client"}
+                </Button>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy || myApproval} onClick={approve}>
+                  {myApproval ? "You approved this" : "Approve contract"}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+        {contract.status !== "approved" && !myApproval && !editing && (
+          <p className="text-xs text-muted-foreground">
+            Review the scope above — edit it if anything's off, or approve it as-is. {otherApproval ? "The other party has already approved; your approval finalizes it." : ""}
+          </p>
+        )}
+        {contract.status === "approved" && (
+          <p className="text-xs text-emerald-700">Both sides approved this contract{contract.approved_at ? ` on ${new Date(contract.approved_at).toLocaleDateString()}` : ""}. Milestone funding is now unlocked once the acceptance fee (if any) is paid.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AcceptanceFeeSection({ projectId }: { projectId: string }) {
+  const [quote, setQuote] = useState<AcceptanceFeeQuote | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = () => {
+    api.getAcceptanceFeeQuote(projectId).then(setQuote).catch(() => setQuote(null));
+  };
+  useEffect(() => { load(); }, [projectId]);
+
+  if (!quote || quote.paid) {
+    return quote?.paid ? (
+      <div className="rounded-xl border bg-emerald-50 border-emerald-200 p-4 flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+        <p className="text-sm text-emerald-700">Acceptance fee paid — you're clear to begin work.</p>
+      </div>
+    ) : null;
+  }
+
+  const pay = async () => {
+    setBusy(true);
+    try {
+      await api.payAcceptanceFee(projectId);
+      toast.success("Acceptance fee paid — you can now begin work");
+      load();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not pay the acceptance fee");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2"><Wallet className="h-4 w-4 text-muted-foreground" /> Acceptance Fee</h2>
+      <p className="text-sm text-muted-foreground">
+        A one-time acceptance fee of <span className="font-semibold text-foreground">{fmtNaira(quote.amount)}</span> is required before you can start work on this project. It's charged from your wallet balance.
+      </p>
+      <p className="text-xs text-muted-foreground">Your wallet balance: {fmtNaira(quote.wallet_balance)}</p>
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          className="bg-emerald-600 hover:bg-emerald-700"
+          disabled={busy || (quote.amount > 0 && quote.wallet_balance < quote.amount)}
+          onClick={pay}
+        >
+          {busy ? "Paying..." : quote.amount <= 0 ? "Confirm & begin work" : `Pay ${fmtNaira(quote.amount)}`}
+        </Button>
+        {quote.amount > 0 && quote.wallet_balance < quote.amount && (
+          <Link href="/talent/dashboard/earnings">
+            <Button size="sm" variant="outline">Top up wallet</Button>
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ApproveInspectionDialog({
   request, onClose, onApprove, submitting,
-}: { request: AccessRequestOut; onClose: () => void; onApprove: (address: string, phone?: string, details?: string) => void; submitting: boolean }) {
+}: { request: AccessRequestOut; onClose: () => void; onApprove: (address: string, phone: string | undefined, details: string | undefined, datetime: string) => void; submitting: boolean }) {
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [details, setDetails] = useState("");
+  const [datetime, setDatetime] = useState("");
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="w-full sm:max-w-md bg-background rounded-t-2xl sm:rounded-2xl border shadow-lg p-6 space-y-4">
         <div>
           <h2 className="text-lg font-bold">Approve Inspection Visit</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            Share where {request.professional_name} can find the site. This opens a chat with them, and the address will show as a map preview there.
+            Share where {request.professional_name} can find the site and propose a visit date/time — they can accept it or propose another.
           </p>
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Site Address *</label>
           <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. 12 Admiralty Way, Lekki Phase 1, Lagos" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Proposed visit date & time *</label>
+          <Input type="datetime-local" value={datetime} onChange={(e) => setDatetime(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Phone (optional)</label>
@@ -1283,7 +1482,7 @@ function ApproveInspectionDialog({
             rows={2}
             value={details}
             onChange={(e) => setDetails(e.target.value)}
-            placeholder="Best time to visit, gate code, landmark, etc."
+            placeholder="Gate code, landmark, etc."
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
           />
         </div>
@@ -1291,13 +1490,65 @@ function ApproveInspectionDialog({
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
           <Button
             className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-            disabled={submitting || !address.trim()}
-            onClick={() => onApprove(address.trim(), phone.trim() || undefined, details.trim() || undefined)}
+            disabled={submitting || !address.trim() || !datetime}
+            onClick={() => onApprove(address.trim(), phone.trim() || undefined, details.trim() || undefined, datetime)}
           >
-            {submitting ? "Approving..." : "Approve & Open Chat"}
+            {submitting ? "Approving..." : "Approve & Propose Time"}
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function InspectionScheduleStrip({
+  request, viewerRole, onRespond, submitting,
+}: {
+  request: AccessRequestOut;
+  viewerRole: "client" | "professional";
+  onRespond: (action: "accept" | "counter", datetime?: string) => void;
+  submitting: boolean;
+}) {
+  const [counterOpen, setCounterOpen] = useState(false);
+  const [counterAt, setCounterAt] = useState("");
+  if (!request.schedule_status) return null;
+
+  if (request.schedule_status === "agreed") {
+    return (
+      <p className="text-xs text-emerald-700 mt-1 flex items-center gap-1">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Visit agreed for {request.scheduled_datetime ? new Date(request.scheduled_datetime).toLocaleString() : ""}
+      </p>
+    );
+  }
+
+  const isMyTurn = (viewerRole === "client" && request.schedule_status === "awaiting_client") ||
+    (viewerRole === "professional" && request.schedule_status === "awaiting_talent");
+
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      <p className="text-xs text-amber-700">
+        Proposed by {request.proposed_by === "client" ? "client" : "talent"}: {request.proposed_datetime ? new Date(request.proposed_datetime).toLocaleString() : "—"}
+        {!isMyTurn && " — waiting on the other side"}
+      </p>
+      {isMyTurn && !counterOpen && (
+        <div className="flex gap-2">
+          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={submitting} onClick={() => onRespond("accept")}>
+            Confirm this time
+          </Button>
+          <Button size="sm" variant="outline" disabled={submitting} onClick={() => setCounterOpen(true)}>
+            Propose different time
+          </Button>
+        </div>
+      )}
+      {isMyTurn && counterOpen && (
+        <div className="flex gap-2 items-center">
+          <Input type="datetime-local" value={counterAt} onChange={(e) => setCounterAt(e.target.value)} className="h-8 text-xs" />
+          <Button size="sm" disabled={submitting || !counterAt} onClick={() => onRespond("counter", counterAt)}>
+            Send
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setCounterOpen(false)}>Cancel</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1369,7 +1620,7 @@ export function ProjectWorkspace({
     Promise.all(calls).catch(() => toast.error("Could not load project data")).finally(() => setLoading(false));
   };
 
-  const respondToRequest = async (id: string, status: "approved" | "rejected", extra?: { address?: string; phone?: string; details?: string }) => {
+  const respondToRequest = async (id: string, status: "approved" | "rejected", extra?: { address?: string; phone?: string; details?: string; proposed_datetime?: string }) => {
     setRespondingRequestId(id);
     try {
       await api.respondToAccessRequest(id, { status, ...extra });
@@ -1378,6 +1629,19 @@ export function ProjectWorkspace({
       api.projectAccessRequests(project.id).then(setAccessRequests).catch(() => {});
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not respond to request");
+    } finally {
+      setRespondingRequestId(null);
+    }
+  };
+
+  const respondToSchedule = async (id: string, action: "accept" | "counter", datetime?: string) => {
+    setRespondingRequestId(id);
+    try {
+      await api.respondToSchedule(id, { action, datetime: datetime ? new Date(datetime).toISOString() : undefined });
+      toast.success(action === "accept" ? "Visit time confirmed" : "New time proposed");
+      api.projectAccessRequests(project.id).then(setAccessRequests).catch(() => {});
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not respond to schedule");
     } finally {
       setRespondingRequestId(null);
     }
@@ -1575,6 +1839,14 @@ export function ProjectWorkspace({
                       {req.status === "approved" && req.request_type === "inspection" && req.address && (
                         <p className="text-xs text-emerald-700 mt-1">Shared: {req.address}{req.phone ? ` · ${req.phone}` : ""}</p>
                       )}
+                      {req.status === "approved" && req.request_type === "inspection" && (
+                        <InspectionScheduleStrip
+                          request={req}
+                          viewerRole="client"
+                          submitting={respondingRequestId === req.id}
+                          onRespond={(action, datetime) => respondToSchedule(req.id, action, datetime)}
+                        />
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {req.status === "pending" ? (
@@ -1619,7 +1891,7 @@ export function ProjectWorkspace({
               request={inspectionApproveFor}
               submitting={respondingRequestId === inspectionApproveFor.id}
               onClose={() => setInspectionApproveFor(null)}
-              onApprove={(address, phone, details) => respondToRequest(inspectionApproveFor.id, "approved", { address, phone, details })}
+              onApprove={(address, phone, details, datetime) => respondToRequest(inspectionApproveFor.id, "approved", { address, phone, details, proposed_datetime: new Date(datetime).toISOString() })}
             />
           )}
 
@@ -1631,6 +1903,14 @@ export function ProjectWorkspace({
               isProfessional={isProfessional}
               onChanged={() => { load(); refreshProject(); }}
             />
+          )}
+
+          {}
+          {project.assigned_professional_id && (isClient || isProfessional) && (
+            <ContractSection project={project} isClient={isClient} isProfessional={isProfessional} />
+          )}
+          {project.assigned_professional_id && isProfessional && (
+            <AcceptanceFeeSection projectId={project.id} />
           )}
 
           {}

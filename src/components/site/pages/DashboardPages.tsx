@@ -3834,6 +3834,7 @@ export function TalentEarnings() {
   const [txs, setTxs] = useState<WalletTransactionOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [fundOpen, setFundOpen] = useState(false);
   const [datePreset, setDatePreset] = useState<DatePreset>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -3872,10 +3873,22 @@ export function TalentEarnings() {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">Earnings</h1>
-        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={openWithdraw}>
-          <Wallet className="h-4 w-4 mr-1.5" /> Withdraw
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setFundOpen(true)}>
+            <Wallet className="h-4 w-4 mr-1.5" /> Fund Wallet
+          </Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={openWithdraw}>
+            <Wallet className="h-4 w-4 mr-1.5" /> Withdraw
+          </Button>
+        </div>
       </div>
+
+      {fundOpen && (
+        <FundWalletDialog
+          onClose={() => setFundOpen(false)}
+          onFunded={() => { setFundOpen(false); refreshMe(); load(); }}
+        />
+      )}
 
       {hasPayoutDetails === false && (
         <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
