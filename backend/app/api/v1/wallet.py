@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
+from app.api.v1.acceptance_fee import has_paid_acceptance_fee
+from app.models.contract import Contract, ContractStatus
 from app.models.milestone import Milestone, MilestoneStatus
 from app.models.payout_account import PayoutAccount
 from app.models.profile import ProfessionalProfile
@@ -48,12 +50,14 @@ def _tx_out(tx: WalletTransaction) -> WalletTransactionOut:
 @router.post("/wallet/topup", response_model=WalletTopupResponse)
 def topup_wallet(
     payload: WalletTopupRequest,
-    current_user: User = Depends(require_role(UserRole.client)),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Add funds to the client's prepaid escrow wallet via Monnify. Once
-    credited, this balance is drawn down instantly when funding milestones,
-    no separate checkout needed per milestone."""
+    """Add funds to the caller's prepaid wallet via Monnify — clients use
+    this to fund milestone escrow; talent use it to pay the acceptance fee
+    (see app/api/v1/acceptance_fee.py)."""
+    if current_user.role not in (UserRole.client, UserRole.professional):
+        raise HTTPException(status_code=403, detail="Only clients and talent have a wallet")
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Enter an amount greater than zero")
 
@@ -69,11 +73,12 @@ def topup_wallet(
         raise HTTPException(status_code=400, detail=f"Could not start payment: {e}")
     reference = result.get("transactionReference") or result.get("paymentReference")
 
+    is_client = current_user.role == UserRole.client
     tx = WalletTransaction(
         project_id=None,
         milestone_id=None,
-        client_id=current_user.id,
-        professional_id=None,
+        client_id=current_user.id if is_client else None,
+        professional_id=None if is_client else current_user.id,
         type=WalletTransactionType.topup,
         status=WalletTransactionStatus.pending,
         amount=payload.amount,
@@ -197,6 +202,13 @@ def fund_milestone(
         raise HTTPException(status_code=400, detail="Milestone is not in a fundable state")
     if has_blocking_dispute(db, project.id, milestone.id):
         raise HTTPException(status_code=400, detail="This milestone is under dispute and can't be funded until it's resolved")
+
+    contract = db.query(Contract).filter(Contract.project_id == project.id).first()
+    if contract and contract.status != ContractStatus.approved:
+        raise HTTPException(status_code=400, detail="The contract must be reviewed and approved by both sides before funding work")
+    if contract and project.assigned_professional_id and not has_paid_acceptance_fee(db, project.id, project.assigned_professional_id):
+        raise HTTPException(status_code=400, detail="The talent hasn't paid the acceptance fee yet — funding opens once that's done")
+
     if current_user.wallet_balance < milestone.amount:
         raise HTTPException(
             status_code=400,
@@ -262,14 +274,15 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
     if payment_status == "PAID":
         tx.status = WalletTransactionStatus.successful
         if tx.type == WalletTransactionType.topup:
-            client = db.get(User, tx.client_id)
-            if client:
-                client.wallet_balance += tx.amount
+            beneficiary = db.get(User, tx.client_id or tx.professional_id)
+            if beneficiary:
+                beneficiary.wallet_balance += tx.amount
                 notify(
-                    db, client.id, NotificationType.general,
+                    db, beneficiary.id, NotificationType.general,
                     f"₦{tx.amount:,.2f} added to your wallet",
                     body="Your wallet top-up was successful.",
-                    link="/client/dashboard/payments", email_also=True,
+                    link="/client/dashboard/payments" if tx.client_id else "/talent/dashboard/earnings",
+                    email_also=True,
                 )
         elif tx.milestone_id:
             milestone = db.get(Milestone, tx.milestone_id)

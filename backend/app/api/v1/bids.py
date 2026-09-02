@@ -7,11 +7,13 @@ from app.api.deps import get_current_user, require_role
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.bid import Bid, BidStatus
+from app.models.contract import Contract, ContractStatus
 from app.models.profile import ProfessionalProfile
 from app.models.project import Project, ProjectStatus
 from app.models.user import KycStatus, User, UserRole
 from app.models.notification import NotificationType
 from app.schemas.bid import BidCreate, BidOut, BidUpdate, OfferRespond
+from app.services.contracts import generate_contract_content
 from app.services.notify import notify
 from app.services.tiers import (
     count_active_projects,
@@ -149,9 +151,27 @@ def _finalize_acceptance(db: Session, bid: Bid, project: Project, final_amount: 
     notify(
         db, bid.professional_id, NotificationType.bid_accepted,
         f"Your proposal for \"{project.title}\" was accepted",
-        body=f"Agreed amount: ₦{bid.amount:,.2f}. You can now propose milestones for the client's approval and get started.",
+        body=f"Agreed amount: ₦{bid.amount:,.2f}. A contract has been generated for review before work begins.",
         link=f"/talent/dashboard/find-work/{project.id}", email_also=True,
     )
+    _create_contract_if_missing(db, project, bid)
+
+def _create_contract_if_missing(db: Session, project: Project, bid: Bid) -> None:
+    """Auto-generate the scope-of-work contract the moment a bid is
+    accepted — sits between acceptance and job commencement (see
+    app/models/contract.py / app/services/contracts.py)."""
+    existing = db.query(Contract).filter(Contract.project_id == project.id).first()
+    if existing:
+        return
+    contract = Contract(
+        project_id=project.id,
+        bid_id=bid.id,
+        client_id=project.client_id,
+        professional_id=bid.professional_id,
+        content=generate_contract_content(project, bid),
+        status=ContractStatus.sent_to_client,
+    )
+    db.add(contract)
 
 @router.patch("/bids/{bid_id}", response_model=BidOut)
 def update_bid(bid_id: str, payload: BidUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

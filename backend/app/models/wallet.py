@@ -17,6 +17,7 @@ class WalletTransactionType(str, enum.Enum):
     refund = "refund"
     withdrawal = "withdrawal"
     adjustment = "adjustment"
+    acceptance_fee = "acceptance_fee"
 
 class WalletTransactionStatus(str, enum.Enum):
     pending = "pending"

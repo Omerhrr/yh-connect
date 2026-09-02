@@ -16,6 +16,29 @@ def _post_project(client, client_user):
     assert resp.status_code == 201, resp.text
     return resp.json()
 
+def _approve_contract_and_pay_fee(client, project_id, client_user, professional_user):
+    """Bid acceptance auto-generates a contract + gates milestone funding on
+    it being approved by both sides and the (default-zero) acceptance fee
+    being paid — clear that gate so existing fund-and-go test flows keep
+    working."""
+    resp = client.get(f"/api/v1/projects/{project_id}/contract", headers=auth_headers(client_user["access_token"]))
+    assert resp.status_code == 200, resp.text
+    contract_id = resp.json()["id"]
+
+    resp = client.post(
+        f"/api/v1/contracts/{contract_id}/approve", headers=auth_headers(client_user["access_token"])
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(
+        f"/api/v1/contracts/{contract_id}/approve", headers=auth_headers(professional_user["access_token"])
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.post(
+        f"/api/v1/projects/{project_id}/acceptance-fee/pay", headers=auth_headers(professional_user["access_token"])
+    )
+    assert resp.status_code == 200, resp.text
+
 def _hire_and_fund(client, client_user, professional_user):
     """Post a project, accept a bid, create+fund a milestone. Returns (project, milestone_id)."""
     project = _post_project(client, client_user)
@@ -31,6 +54,8 @@ def _hire_and_fund(client, client_user, professional_user):
         f"/api/v1/bids/{bid['id']}", json={"status": "accepted"}, headers=auth_headers(client_user["access_token"])
     )
     assert resp.status_code == 200
+
+    _approve_contract_and_pay_fee(client, project["id"], client_user, professional_user)
 
     resp = client.post(
         f"/api/v1/projects/{project['id']}/milestones",

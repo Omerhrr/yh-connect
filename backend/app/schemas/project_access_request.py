@@ -15,6 +15,15 @@ class AccessRequestRespond(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     details: Optional[str] = None
+    # Client's proposed inspection visit date/time, required when approving
+    # an inspection request — kicks off the mutual-agreement loop.
+    proposed_datetime: Optional[datetime] = None
+
+class ScheduleRespond(BaseModel):
+    """Talent or client responding to the other side's proposed inspection
+    date/time: either accept it outright, or counter with a different one."""
+    action: str  # "accept" | "counter"
+    datetime: Optional[datetime] = None
 
 class AccessRequestOut(BaseModel):
     id: str
@@ -29,6 +38,10 @@ class AccessRequestOut(BaseModel):
     details: Optional[str] = None
     created_at: datetime
     responded_at: Optional[datetime] = None
+    proposed_datetime: Optional[datetime] = None
+    proposed_by: Optional[str] = None
+    schedule_status: Optional[str] = None
+    scheduled_datetime: Optional[datetime] = None
     project_title: Optional[str] = None
     professional_name: Optional[str] = None
     client_name: Optional[str] = None

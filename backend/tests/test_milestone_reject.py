@@ -1,5 +1,5 @@
 from tests.conftest import auth_headers
-from tests.test_disputes import _post_project
+from tests.test_disputes import _post_project, _approve_contract_and_pay_fee
 
 def _hire(client, client_user, professional_user, amount=200000):
     project = _post_project(client, client_user)
@@ -11,6 +11,7 @@ def _hire(client, client_user, professional_user, amount=200000):
     bid = resp.json()
     resp = client.patch(f"/api/v1/bids/{bid['id']}", json={"status": "accepted"}, headers=auth_headers(client_user["access_token"]))
     assert resp.status_code == 200, resp.text
+    _approve_contract_and_pay_fee(client, project["id"], client_user, professional_user)
     return project
 
 def test_professional_cannot_create_milestones(client, client_user, professional_user):

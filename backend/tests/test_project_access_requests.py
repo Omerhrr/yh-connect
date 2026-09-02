@@ -94,7 +94,12 @@ def test_inspection_approval_requires_address(client, client_user, professional_
 
     resp = client.patch(
         f"/api/v1/access-requests/{req_id}",
-        json={"status": "approved", "address": "12 Bourdillon Rd, Ikoyi", "phone": "08012345678"},
+        json={
+            "status": "approved",
+            "address": "12 Bourdillon Rd, Ikoyi",
+            "phone": "08012345678",
+            "proposed_datetime": "2026-09-10T10:00:00",
+        },
         headers=auth_headers(client_user["access_token"]),
     )
     assert resp.status_code == 200, resp.text
@@ -102,6 +107,7 @@ def test_inspection_approval_requires_address(client, client_user, professional_
     assert body["status"] == "approved"
     assert body["address"] == "12 Bourdillon Rd, Ikoyi"
     assert body["phone"] == "08012345678"
+    assert body["schedule_status"] == "awaiting_talent"
 
 def test_approved_request_grants_messaging_eligibility(client, client_user, professional_user):
     project = _post_project(client, client_user)

@@ -1,12 +1,14 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
+    acceptance_fee,
     admin,
     auth,
     bids,
     categories,
     clients,
     content,
+    contracts,
     disputes,
     favorites,
     internal,
@@ -38,6 +40,8 @@ api_router.include_router(projects.router)
 api_router.include_router(bids.router)
 api_router.include_router(invites.router)
 api_router.include_router(project_access_requests.router)
+api_router.include_router(contracts.router)
+api_router.include_router(acceptance_fee.router)
 api_router.include_router(milestones.router)
 api_router.include_router(wallet.router)
 api_router.include_router(disputes.router)

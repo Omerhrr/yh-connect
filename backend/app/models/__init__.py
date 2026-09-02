@@ -22,6 +22,7 @@ from app.models.education import Education
 from app.models.certification import Certification
 from app.models.project_report import ProjectReport
 from app.models.project_access_request import ProjectAccessRequest, AccessRequestType, AccessRequestStatus
+from app.models.contract import Contract, ContractStatus
 
 __all__ = [
     "User",
@@ -68,4 +69,6 @@ __all__ = [
     "ProjectAccessRequest",
     "AccessRequestType",
     "AccessRequestStatus",
+    "Contract",
+    "ContractStatus",
 ]

@@ -23,6 +23,8 @@ class CertificationReview(BaseModel):
     note: Optional[str] = None
 
     badge_name: Optional[str] = None
+    # Admin-assigned skill tier for rule-based acceptance fees: "skilled" | "semi_skilled" | "unskilled"
+    skill_level: Optional[str] = None
 
 class BusinessVerificationSubmit(BaseModel):
     cac_number: str

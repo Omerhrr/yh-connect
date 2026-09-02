@@ -28,4 +28,9 @@ class Certification(Base):
 
     badge_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
+    # Admin-assigned skill tier for this certification/badge, used to compute
+    # rule-based acceptance fees (see app/services/acceptance_fee.py).
+    # "skilled" | "semi_skilled" | "unskilled" — null until an admin sets it.
+    skill_level: Mapped[str | None] = mapped_column(String, nullable=True)
+
     profile: Mapped["ProfessionalProfile"] = relationship("ProfessionalProfile", back_populates="certifications")

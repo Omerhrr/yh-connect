@@ -372,9 +372,52 @@ export type AccessRequestOut = {
   details?: string | null;
   created_at: string;
   responded_at?: string | null;
+  proposed_datetime?: string | null;
+  proposed_by?: "client" | "professional" | null;
+  schedule_status?: "awaiting_talent" | "awaiting_client" | "agreed" | null;
+  scheduled_datetime?: string | null;
   project_title?: string | null;
   professional_name?: string | null;
   client_name?: string | null;
+};
+
+export type ContractStatus = "draft" | "sent_to_client" | "sent_to_professional" | "approved";
+
+export type ContractOut = {
+  id: string;
+  project_id: string;
+  bid_id?: string | null;
+  client_id: string;
+  professional_id: string;
+  content: string;
+  status: ContractStatus;
+  client_approved: boolean;
+  professional_approved: boolean;
+  last_edited_by?: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+  approved_at?: string | null;
+  project_title?: string | null;
+};
+
+export type AcceptanceFeeRule = {
+  skill_level?: string | null;
+  min_price?: number | null;
+  max_price?: number | null;
+  amount: number;
+};
+
+export type AcceptanceFeeSettings = {
+  mode: "general" | "rule_based";
+  general_amount: number;
+  rules: AcceptanceFeeRule[];
+};
+
+export type AcceptanceFeeQuote = {
+  amount: number;
+  paid: boolean;
+  wallet_balance: number;
 };
 
 export type MilestoneStatus = "pending" | "in_progress" | "submitted" | "approved" | "funded" | "paid" | "refunded" | "rejected";
@@ -1210,8 +1253,23 @@ export const api = {
   myAccessRequests: () => request<AccessRequestOut[]>("/access-requests/mine"),
   respondToAccessRequest: (
     requestId: string,
-    payload: { status: "approved" | "rejected"; address?: string; phone?: string; details?: string }
+    payload: { status: "approved" | "rejected"; address?: string; phone?: string; details?: string; proposed_datetime?: string }
   ) => request<AccessRequestOut>(`/access-requests/${requestId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  respondToSchedule: (requestId: string, payload: { action: "accept" | "counter"; datetime?: string }) =>
+    request<AccessRequestOut>(`/access-requests/${requestId}/schedule`, { method: "POST", body: JSON.stringify(payload) }),
+
+  getProjectContract: (projectId: string) => request<ContractOut>(`/projects/${projectId}/contract`),
+  editContract: (contractId: string, content: string) =>
+    request<ContractOut>(`/contracts/${contractId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
+  sendContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/send`, { method: "POST" }),
+  approveContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/approve`, { method: "POST" }),
+
+  getAcceptanceFeeQuote: (projectId: string) => request<AcceptanceFeeQuote>(`/projects/${projectId}/acceptance-fee`),
+  payAcceptanceFee: (projectId: string) =>
+    request<{ transaction_id: string; amount: number; wallet_balance: number }>(`/projects/${projectId}/acceptance-fee/pay`, { method: "POST" }),
+  adminGetAcceptanceFeeSettings: () => request<AcceptanceFeeSettings>("/admin/settings/acceptance-fee"),
+  adminSaveAcceptanceFeeSettings: (payload: Partial<AcceptanceFeeSettings>) =>
+    request<AcceptanceFeeSettings>("/admin/settings/acceptance-fee", { method: "PUT", body: JSON.stringify(payload) }),
 
   milestones: (projectId: string) => request<MilestoneOut[]>(`/projects/${projectId}/milestones`),
   createMilestone: (projectId: string, payload: { title: string; description?: string; amount: number; due_date?: string }) =>

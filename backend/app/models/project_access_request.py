@@ -47,6 +47,15 @@ class ProjectAccessRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Inspection date/time negotiation: the client proposes a visit slot at
+    # approval time; the talent must agree or counter-propose a different
+    # slot, which loops back to the client, until both land on the same one
+    # (schedule_status becomes "agreed" and scheduled_datetime is set).
+    proposed_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    proposed_by: Mapped[str | None] = mapped_column(String, nullable=True)  # "client" | "professional"
+    schedule_status: Mapped[str | None] = mapped_column(String, nullable=True)  # awaiting_talent | awaiting_client | agreed
+    scheduled_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     project: Mapped["Project"] = relationship("Project")
     professional: Mapped["User"] = relationship("User", foreign_keys=[professional_id])
     client: Mapped["User"] = relationship("User", foreign_keys=[client_id])

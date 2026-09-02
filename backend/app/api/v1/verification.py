@@ -278,6 +278,7 @@ def list_pending_certifications(
             "issuing_body": c.issuing_body,
             "credential_url": c.credential_url,
             "badge_name": c.badge_name,
+            "skill_level": c.skill_level,
             "professional_name": f"{c.profile.user.first_name} {c.profile.user.last_name}" if c.profile and c.profile.user else None,
             "professional_title": c.profile.title if c.profile else None,
             "category": c.profile.category.label if c.profile and c.profile.category else None,
@@ -306,6 +307,8 @@ def review_certification(
     cert.verified_at = datetime.utcnow() if payload.status == "verified" else None
     if payload.status == "verified" and payload.badge_name:
         cert.badge_name = payload.badge_name.strip()
+    if payload.skill_level in ("skilled", "semi_skilled", "unskilled"):
+        cert.skill_level = payload.skill_level
     db.commit()
 
     if payload.status == "verified":
