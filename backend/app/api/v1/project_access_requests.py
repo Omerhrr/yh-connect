@@ -20,6 +20,7 @@ from app.schemas.project_access_request import (
     ScheduleRespond,
 )
 from app.services.notify import notify
+from app.services.reminders import check_schedule_reminder, check_visit_reminder
 
 router = APIRouter(tags=["project-access-requests"])
 
@@ -94,6 +95,9 @@ def list_project_access_requests(
         .order_by(ProjectAccessRequest.created_at.desc())
         .all()
     )
+    for r in reqs:
+        check_schedule_reminder(db, r)
+        check_visit_reminder(db, r)
     return [_to_out(r) for r in reqs]
 
 
@@ -107,6 +111,9 @@ def my_access_requests(
         .order_by(ProjectAccessRequest.created_at.desc())
         .all()
     )
+    for r in reqs:
+        check_schedule_reminder(db, r)
+        check_visit_reminder(db, r)
     return [_to_out(r) for r in reqs]
 
 
@@ -139,6 +146,8 @@ def respond_to_access_request(
         req.proposed_by = "client"
         req.schedule_status = "awaiting_talent"
         req.scheduled_datetime = None
+        req.schedule_updated_at = datetime.utcnow()
+        req.schedule_reminder_sent = False
 
     req.status = payload.status
     req.responded_at = datetime.utcnow()
@@ -203,6 +212,8 @@ def respond_to_schedule(
     if payload.action == "accept":
         req.schedule_status = "agreed"
         req.scheduled_datetime = req.proposed_datetime
+        req.schedule_updated_at = datetime.utcnow()
+        req.schedule_reminder_sent = False
         notify(
             db, req.client_id if is_professional else req.professional_id, NotificationType.general,
             f"Inspection time agreed for \"{req.project.title}\"",
@@ -216,6 +227,8 @@ def respond_to_schedule(
         req.proposed_datetime = payload.datetime
         req.proposed_by = role
         req.schedule_status = "awaiting_client" if is_professional else "awaiting_talent"
+        req.schedule_updated_at = datetime.utcnow()
+        req.schedule_reminder_sent = False
         notify(
             db, req.client_id if is_professional else req.professional_id, NotificationType.general,
             f"New inspection time proposed for \"{req.project.title}\"",

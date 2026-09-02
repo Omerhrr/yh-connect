@@ -401,6 +401,31 @@ export type ContractOut = {
   project_title?: string | null;
 };
 
+export type ContractHistoryEntry = {
+  version: number;
+  content: string;
+  edited_by?: string | null;
+  edited_at?: string | null;
+};
+
+export type AdminContractRow = {
+  id: string;
+  project_id: string;
+  project_title?: string | null;
+  client_id: string;
+  client_name?: string | null;
+  professional_id: string;
+  professional_name?: string | null;
+  status: ContractStatus;
+  client_approved: boolean;
+  professional_approved: boolean;
+  version: number;
+  updated_at: string;
+  approved_at?: string | null;
+  acceptance_fee_paid: boolean;
+  stalled: boolean;
+};
+
 export type AcceptanceFeeRule = {
   skill_level?: string | null;
   min_price?: number | null;
@@ -1263,6 +1288,7 @@ export const api = {
     request<ContractOut>(`/contracts/${contractId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
   sendContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/send`, { method: "POST" }),
   approveContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/approve`, { method: "POST" }),
+  contractHistory: (contractId: string) => request<ContractHistoryEntry[]>(`/contracts/${contractId}/history`),
 
   getAcceptanceFeeQuote: (projectId: string) => request<AcceptanceFeeQuote>(`/projects/${projectId}/acceptance-fee`),
   payAcceptanceFee: (projectId: string) =>
@@ -1270,6 +1296,9 @@ export const api = {
   adminGetAcceptanceFeeSettings: () => request<AcceptanceFeeSettings>("/admin/settings/acceptance-fee"),
   adminSaveAcceptanceFeeSettings: (payload: Partial<AcceptanceFeeSettings>) =>
     request<AcceptanceFeeSettings>("/admin/settings/acceptance-fee", { method: "PUT", body: JSON.stringify(payload) }),
+  adminListContracts: () => request<AdminContractRow[]>("/admin/contracts"),
+  adminNudgeContract: (contractId: string) =>
+    request<{ notified: number }>(`/admin/contracts/${contractId}/nudge`, { method: "POST" }),
 
   milestones: (projectId: string) => request<MilestoneOut[]>(`/projects/${projectId}/milestones`),
   createMilestone: (projectId: string, payload: { title: string; description?: string; amount: number; due_date?: string }) =>

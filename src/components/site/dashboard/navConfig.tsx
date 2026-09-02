@@ -56,6 +56,7 @@ export const ADMIN_NAV: DashboardNavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/verifications", label: "Verifications", icon: BadgeCheck },
   { href: "/admin/disputes", label: "Disputes", icon: ShieldAlert },
+  { href: "/admin/contracts", label: "Contracts", icon: FileText },
   { href: "/admin/payments", label: "Payments", icon: Wallet },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "Projects", icon: FolderKanban },

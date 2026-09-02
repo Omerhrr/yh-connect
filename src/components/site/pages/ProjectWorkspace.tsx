@@ -47,6 +47,7 @@ import {
   type AccessRequestOut,
   type ProjectMediaSettingsOut,
   type ContractOut,
+  type ContractHistoryEntry,
   type AcceptanceFeeQuote,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
@@ -1258,6 +1259,50 @@ function FinalReviewSection({
   );
 }
 
+function OnboardingStrip({ project, milestones }: { project: ProjectOut; milestones: MilestoneOut[] }) {
+  const [contract, setContract] = useState<ContractOut | null>(null);
+  const [fee, setFee] = useState<AcceptanceFeeQuote | null>(null);
+
+  useEffect(() => {
+    api.getProjectContract(project.id).then(setContract).catch(() => setContract(null));
+    api.getAcceptanceFeeQuote(project.id).then(setFee).catch(() => setFee(null));
+  }, [project.id]);
+
+  const workStarted = milestones.some((m) => ["funded", "submitted", "approved", "paid"].includes(m.status));
+  if (workStarted) return null;
+  if (!contract) return null;
+
+  const contractDone = contract.status === "approved";
+  const feeDone = !fee || fee.paid || fee.amount <= 0;
+  const steps: { label: string; done: boolean; active: boolean }[] = [
+    { label: "Contract approved", done: contractDone, active: !contractDone },
+    { label: "Acceptance fee", done: feeDone, active: contractDone && !feeDone },
+    { label: "Work begins", done: false, active: contractDone && feeDone },
+  ];
+
+  return (
+    <div className="rounded-xl border bg-background p-4 md:p-5">
+      <div className="flex items-center justify-between">
+        {steps.map((step, i) => (
+          <div key={step.label} className="flex items-center flex-1 last:flex-none">
+            <div className="flex flex-col items-center gap-1.5">
+              <div
+                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
+                  step.done ? "bg-emerald-600 text-white" : step.active ? "bg-primary/10 text-primary border-2 border-primary" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {step.done ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+              </div>
+              <span className={`text-[11px] text-center whitespace-nowrap ${step.active ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{step.label}</span>
+            </div>
+            {i < steps.length - 1 && <div className={`h-0.5 flex-1 mx-2 ${steps[i + 1].done || steps[i].done ? "bg-emerald-600" : "bg-muted"}`} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ContractSection({
   project, isClient, isProfessional,
 }: { project: ProjectOut; isClient: boolean; isProfessional: boolean }) {
@@ -1266,6 +1311,8 @@ function ContractSection({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<ContractHistoryEntry[] | null>(null);
   const role: "client" | "professional" = isClient ? "client" : "professional";
   const myApproval = contract ? (isClient ? contract.client_approved : contract.professional_approved) : false;
   const otherApproval = contract ? (isClient ? contract.professional_approved : contract.client_approved) : false;
@@ -1280,6 +1327,11 @@ function ContractSection({
   if (!contract) return null;
 
   const startEdit = () => { setDraft(contract.content); setEditing(true); };
+
+  const openHistory = () => {
+    setHistoryOpen(true);
+    if (!history) api.contractHistory(contract.id).then(setHistory).catch(() => setHistory([]));
+  };
 
   const saveEdit = async () => {
     setBusy(true);
@@ -1325,9 +1377,16 @@ function ContractSection({
     <div className="rounded-xl border bg-background overflow-hidden">
       <div className="flex items-center justify-between gap-3 px-4 md:px-5 py-3 border-b bg-muted/30">
         <h2 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" /> Contract</h2>
-        <Badge className={`text-xs rounded-full capitalize ${contract.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-          {contract.status === "approved" ? "Approved" : contract.status.replace(/_/g, " ")}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {contract.version > 1 && (
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={openHistory}>
+              v{contract.version} · View history
+            </Button>
+          )}
+          <Badge className={`text-xs rounded-full capitalize ${contract.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+            {contract.status === "approved" ? "Approved" : contract.status.replace(/_/g, " ")}
+          </Badge>
+        </div>
       </div>
       <div className="p-4 md:p-5 space-y-3">
         {}
@@ -1387,6 +1446,28 @@ function ContractSection({
           <p className="text-xs text-emerald-700">Both sides approved this contract{contract.approved_at ? ` on ${new Date(contract.approved_at).toLocaleDateString()}` : ""}. Milestone funding is now unlocked once the acceptance fee (if any) is paid.</p>
         )}
       </div>
+
+      {historyOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setHistoryOpen(false)}>
+          <div className="w-full max-w-lg max-h-[80vh] overflow-y-auto bg-background rounded-2xl border shadow-lg p-5 space-y-3" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Contract History</h3>
+              <button onClick={() => setHistoryOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
+            </div>
+            {history === null && <p className="text-sm text-muted-foreground">Loading...</p>}
+            {history !== null && history.length === 0 && <p className="text-sm text-muted-foreground">No prior versions — this is the first draft.</p>}
+            {history !== null && [...history].reverse().map((h) => (
+              <div key={h.version} className="rounded-lg border p-3 space-y-1.5">
+                <p className="text-xs text-muted-foreground">
+                  Version {h.version} · edited by {h.edited_by === "client" ? "client" : h.edited_by === "professional" ? "talent" : "system"}
+                  {h.edited_at ? ` · ${new Date(h.edited_at).toLocaleString()}` : ""}
+                </p>
+                <p className="text-xs font-serif whitespace-pre-wrap bg-muted/30 rounded-md p-2.5 max-h-40 overflow-y-auto">{h.content}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1906,6 +1987,9 @@ export function ProjectWorkspace({
           )}
 
           {}
+          {project.assigned_professional_id && (isClient || isProfessional) && (
+            <OnboardingStrip project={project} milestones={milestones} />
+          )}
           {project.assigned_professional_id && (isClient || isProfessional) && (
             <ContractSection project={project} isClient={isClient} isProfessional={isProfessional} />
           )}

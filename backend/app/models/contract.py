@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Text, ForeignKey, DateTime, Enum, Integer, Boolean
+from sqlalchemy import String, Text, ForeignKey, DateTime, Enum, Integer, Boolean, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -39,6 +39,17 @@ class Contract(Base):
     professional_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     last_edited_by: Mapped[str | None] = mapped_column(String, nullable=True)  # "client" | "professional"
     version: Mapped[int] = mapped_column(Integer, default=1)
+
+    # Prior versions, appended on every edit before the content is
+    # overwritten: [{"version": 1, "content": "...", "edited_by": "client",
+    # "edited_at": "2026-09-02T..."}, ...] — lets either party see what
+    # changed and who changed it, for dispute purposes.
+    history: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+    # Set once a reminder has gone out for the *current* pending approval
+    # state; reset to False whenever the content changes or a new approval
+    # comes in, so a fresh wait period gets its own single reminder.
+    approval_reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

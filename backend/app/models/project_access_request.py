@@ -55,6 +55,9 @@ class ProjectAccessRequest(Base):
     proposed_by: Mapped[str | None] = mapped_column(String, nullable=True)  # "client" | "professional"
     schedule_status: Mapped[str | None] = mapped_column(String, nullable=True)  # awaiting_talent | awaiting_client | agreed
     scheduled_datetime: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    schedule_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    schedule_reminder_sent: Mapped[bool] = mapped_column(default=False)
+    visit_reminder_sent: Mapped[bool] = mapped_column(default=False)
 
     project: Mapped["Project"] = relationship("Project")
     professional: Mapped["User"] = relationship("User", foreign_keys=[professional_id])

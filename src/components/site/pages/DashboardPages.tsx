@@ -2208,6 +2208,7 @@ const TXN_TYPE_LABELS: Record<string, { label: string; sign: "+" | "-"; classNam
   refund: { label: "Refunded to wallet", sign: "+", className: "text-emerald-600" },
   withdrawal: { label: "Withdrawn to bank", sign: "-", className: "text-foreground" },
   adjustment: { label: "Admin adjustment", sign: "+", className: "text-slate-600" },
+  acceptance_fee: { label: "Acceptance fee paid", sign: "-", className: "text-foreground" },
 };
 
 function FundWalletDialog({ onClose, onFunded }: { onClose: () => void; onFunded: () => void }) {
