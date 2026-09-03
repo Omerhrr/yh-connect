@@ -12,11 +12,17 @@ from sqlalchemy.orm import Session
 from app.models.contract import Contract, ContractStatus
 from app.models.notification import NotificationType
 from app.models.project_access_request import AccessRequestType, ProjectAccessRequest
+from app.models.user import User, UserRole
 from app.services.notify import notify
 
 SCHEDULE_REMINDER_AFTER = timedelta(hours=24)
 CONTRACT_REMINDER_AFTER = timedelta(hours=24)
 VISIT_REMINDER_WINDOW = timedelta(hours=24)
+
+# If a contract is still sitting unapproved this long after its own reminder
+# already fired, it's a standoff — support gets pulled in automatically
+# rather than relying on someone opening the admin contracts page.
+CONTRACT_ESCALATION_AFTER = timedelta(days=4)
 
 
 def check_schedule_reminder(db: Session, req: ProjectAccessRequest) -> None:
@@ -99,4 +105,35 @@ def check_contract_reminder(db: Session, contract: Contract) -> None:
             link=link, email_also=True,
         )
     contract.approval_reminder_sent = True
+    db.commit()
+
+
+def check_contract_escalation(db: Session, contract: Contract) -> None:
+    """If a contract's reminder already went out and it's *still* unapproved
+    days later — a genuine standoff, not just someone being slow to check
+    their notifications — auto-notify admin/support once. No Dispute case is
+    opened: no money has moved yet at this stage, so there's nothing to
+    refund or release, just two people who need a human to unstick them."""
+    if contract.status == ContractStatus.approved or contract.status == ContractStatus.draft:
+        return
+    if contract.admin_escalated_at:
+        return
+    if not contract.approval_reminder_sent:
+        return
+    if datetime.utcnow() - contract.updated_at < CONTRACT_ESCALATION_AFTER:
+        return
+
+    admin_ids = [u.id for u in db.query(User.id).filter(User.role == UserRole.admin).all()]
+    for admin_id in admin_ids:
+        notify(
+            db, admin_id, NotificationType.general,
+            f"Contract standoff needs support — \"{contract.project.title}\"",
+            body=(
+                f"This contract has sat unapproved for {CONTRACT_ESCALATION_AFTER.days}+ days since its reminder went out "
+                f"(client approved: {contract.client_approved}, talent approved: {contract.professional_approved}). "
+                "Consider reaching out to unstick it."
+            ),
+            link="/admin/contracts", email_also=True,
+        )
+    contract.admin_escalated_at = datetime.utcnow()
     db.commit()

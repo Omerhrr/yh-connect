@@ -18,7 +18,7 @@ const STATUS_LABELS: Record<string, string> = {
 export default function AdminContractsPage() {
   const [rows, setRows] = useState<AdminContractRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<"all" | "stalled" | "approved" | "pending">("all");
+  const [filter, setFilter] = useState<"all" | "stalled" | "escalated" | "approved" | "pending">("all");
   const [nudging, setNudging] = useState<string | null>(null);
 
   const load = () => {
@@ -28,9 +28,11 @@ export default function AdminContractsPage() {
   useEffect(load, []);
 
   const stalledCount = rows.filter((r) => r.stalled).length;
+  const escalatedCount = rows.filter((r) => r.escalated).length;
 
   const filtered = rows.filter((r) => {
     if (filter === "stalled") return r.stalled;
+    if (filter === "escalated") return r.escalated;
     if (filter === "approved") return r.status === "approved";
     if (filter === "pending") return r.status !== "approved";
     return true;
@@ -53,14 +55,17 @@ export default function AdminContractsPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Contracts</h1>
-        {stalledCount > 0 && <Badge className="text-xs rounded-full bg-amber-100 text-amber-700">{stalledCount} stalled</Badge>}
+        <div className="flex items-center gap-2">
+          {escalatedCount > 0 && <Badge className="text-xs rounded-full bg-red-100 text-red-700">{escalatedCount} escalated</Badge>}
+          {stalledCount > 0 && <Badge className="text-xs rounded-full bg-amber-100 text-amber-700">{stalledCount} stalled</Badge>}
+        </div>
       </div>
       <p className="text-sm text-muted-foreground">
-        Every auto-generated contract between bid acceptance and job start, with approval and acceptance-fee status. A contract is flagged stalled if it's been sitting fully-sent, unapproved by at least one side, for more than a day.
+        Every auto-generated contract between bid acceptance and job start, with approval and acceptance-fee status. A contract is flagged stalled if it's been sitting fully-sent, unapproved by at least one side, for more than a day — and escalated once we've auto-notified support that it's a genuine standoff.
       </p>
 
       <div className="flex items-center gap-1 border-b">
-        {(["all", "stalled", "pending", "approved"] as const).map((f) => (
+        {(["all", "escalated", "stalled", "pending", "approved"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -81,7 +86,12 @@ export default function AdminContractsPage() {
                 <Link href={`/admin/projects/${r.project_id}`} className="text-sm font-medium hover:underline truncate">
                   {r.project_title || "Untitled project"}
                 </Link>
-                {r.stalled && (
+                {r.escalated && (
+                  <Badge className="text-xs rounded-full bg-red-100 text-red-700 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Escalated
+                  </Badge>
+                )}
+                {!r.escalated && r.stalled && (
                   <Badge className="text-xs rounded-full bg-amber-100 text-amber-700 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" /> Stalled
                   </Badge>

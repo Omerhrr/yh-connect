@@ -424,6 +424,7 @@ export type AdminContractRow = {
   approved_at?: string | null;
   acceptance_fee_paid: boolean;
   stalled: boolean;
+  escalated: boolean;
 };
 
 export type AcceptanceFeeRule = {

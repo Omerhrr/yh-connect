@@ -11,7 +11,7 @@ from app.models.user import User, UserRole
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
 from app.schemas.contract import ContractOut, ContractUpdate
 from app.services.notify import notify
-from app.services.reminders import check_contract_reminder, CONTRACT_REMINDER_AFTER
+from app.services.reminders import check_contract_reminder, check_contract_escalation, CONTRACT_REMINDER_AFTER
 
 router = APIRouter(tags=["contracts"])
 
@@ -39,6 +39,7 @@ def get_project_contract(project_id: str, current_user: User = Depends(get_curre
         raise HTTPException(status_code=404, detail="No contract has been generated for this project yet")
     _authorize(contract, current_user)
     check_contract_reminder(db, contract)
+    check_contract_escalation(db, contract)
     return _to_out(contract)
 
 
@@ -88,6 +89,7 @@ def edit_contract(
     contract.status = "sent_to_professional" if role == "client" else "sent_to_client"
     contract.updated_at = datetime.utcnow()
     contract.approval_reminder_sent = False
+    contract.admin_escalated_at = None
 
     other_id = contract.professional_id if role == "client" else contract.client_id
     other_label = "client" if role == "professional" else "professional"
@@ -142,6 +144,7 @@ def admin_list_contracts(current_user: User = Depends(require_role(UserRole.admi
             "approved_at": c.approved_at,
             "acceptance_fee_paid": fee_paid,
             "stalled": stalled,
+            "escalated": c.admin_escalated_at is not None,
         })
     return rows
 
@@ -170,6 +173,7 @@ def admin_nudge_contract(contract_id: str, current_user: User = Depends(require_
             link=link, email_also=True,
         )
     contract.approval_reminder_sent = True
+    contract.admin_escalated_at = None
     db.commit()
     return {"notified": len(pending)}
 
@@ -227,6 +231,7 @@ def approve_contract(
     else:
         contract.professional_approved = True
     contract.approval_reminder_sent = False
+    contract.admin_escalated_at = None
     contract.updated_at = datetime.utcnow()
 
     if contract.client_approved and contract.professional_approved:

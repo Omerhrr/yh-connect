@@ -51,6 +51,12 @@ class Contract(Base):
     # comes in, so a fresh wait period gets its own single reminder.
     approval_reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Set once support has been auto-notified about a contract that's stayed
+    # unapproved long after its reminder went out — a lightweight standoff
+    # escalation short of a full dispute case (no money has moved yet, so
+    # there's nothing to refund/release; it just needs a human nudge).
+    admin_escalated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
