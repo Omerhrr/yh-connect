@@ -7,11 +7,16 @@ import {
   Check,
   ChevronLeft,
   ClipboardList,
-  MessagesSquare,
   Mic,
+  MessagesSquare,
+  MicOff,
   MoreHorizontal,
   Pause,
   Pencil,
+  Phone,
+  PhoneCall,
+  PhoneMissed,
+  PhoneOff,
   Play,
   Reply,
   Send,
@@ -25,7 +30,19 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/store/auth";
 import { api, ApiError, resolveAssetUrl, type MessageOut } from "@/lib/api";
 import { toast } from "sonner";
-import { useMessageSocket } from "@/hooks/useMessageSocket";
+import { useMessageSocket, type CallSignalEvent } from "@/hooks/useMessageSocket";
+
+// Free public STUN servers only (no TURN) — direct browser-to-browser audio,
+// no third-party cost. Works for most home/office/mobile connections; calls
+// behind very strict corporate NATs may fail to connect since there's no
+// relay fallback, which is an accepted tradeoff for a zero-cost setup.
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+const RING_TIMEOUT_MS = 45000;
+
+type CallStatus = "idle" | "outgoing" | "incoming" | "connected";
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const EMOJI_PALETTE = [
@@ -229,6 +246,12 @@ export function ProjectChat({
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [composingUpdate, setComposingUpdate] = useState(false);
 
+  const [callStatus, setCallStatus] = useState<CallStatus>("idle");
+  const [callMuted, setCallMuted] = useState(false);
+  const [callSeconds, setCallSeconds] = useState(0);
+  const callStatusRef = useRef<CallStatus>("idle");
+  callStatusRef.current = callStatus;
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messageRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -238,8 +261,194 @@ export function ProjectChat({
   const recordIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const pcRef = useRef<RTCPeerConnection | null>(null);
+  const localCallStreamRef = useRef<MediaStream | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement>(null);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const callerIdRef = useRef<string | null>(null);
+  const callStartRef = useRef<number | null>(null);
+  const callTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sendRawRef = useRef<(payload: Record<string, unknown>) => boolean>(() => false);
+  const incomingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
+
   const loadMessages = () => {
     api.projectMessages(projectId, otherUserId).then(setMessages).catch(() => {});
+  };
+
+  const clearRingTimeout = () => {
+    if (ringTimeoutRef.current) {
+      clearTimeout(ringTimeoutRef.current);
+      ringTimeoutRef.current = null;
+    }
+  };
+
+  const cleanupCall = () => {
+    clearRingTimeout();
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+    pcRef.current?.close();
+    pcRef.current = null;
+    localCallStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localCallStreamRef.current = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+    pendingCandidatesRef.current = [];
+    callerIdRef.current = null;
+    callStartRef.current = null;
+    setCallSeconds(0);
+    setCallMuted(false);
+    setCallStatus("idle");
+  };
+
+  const createPeerConnection = () => {
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        sendRawRef.current({ type: "call:ice", candidate: e.candidate.toJSON() });
+      }
+    };
+    pc.ontrack = (e) => {
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = e.streams[0];
+    };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected" && callStartRef.current === null) {
+        callStartRef.current = Date.now();
+        clearRingTimeout();
+        setCallStatus("connected");
+        callTimerRef.current = setInterval(() => {
+          setCallSeconds(Math.round((Date.now() - (callStartRef.current || Date.now())) / 1000));
+        }, 1000);
+      }
+    };
+    pcRef.current = pc;
+    return pc;
+  };
+
+  const startCall = async () => {
+    if (callStatus !== "idle") return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localCallStreamRef.current = stream;
+      callerIdRef.current = user?.id || null;
+      const pc = createPeerConnection();
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      setCallStatus("outgoing");
+      sendRawRef.current({ type: "call:offer", sdp: offer });
+      ringTimeoutRef.current = setTimeout(() => {
+        if (callStartRef.current === null) {
+          sendRawRef.current({ type: "call:end", status: "missed", caller_id: callerIdRef.current });
+          toast.message("No answer");
+          cleanupCall();
+        }
+      }, RING_TIMEOUT_MS);
+    } catch {
+      toast.error("Couldn't access your microphone. Check your browser permissions.");
+    }
+  };
+
+  const acceptCall = async (offerSdp: RTCSessionDescriptionInit) => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localCallStreamRef.current = stream;
+      const pc = createPeerConnection();
+      stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      await pc.setRemoteDescription(offerSdp);
+      for (const cand of pendingCandidatesRef.current) {
+        try {
+          await pc.addIceCandidate(cand);
+        } catch {}
+      }
+      pendingCandidatesRef.current = [];
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      sendRawRef.current({ type: "call:answer", sdp: answer });
+    } catch {
+      toast.error("Couldn't access your microphone. Check your browser permissions.");
+      sendRawRef.current({ type: "call:reject" });
+      cleanupCall();
+    }
+  };
+
+  const declineCall = () => {
+    sendRawRef.current({ type: "call:reject" });
+    cleanupCall();
+  };
+
+  const endCall = () => {
+    const wasConnected = callStartRef.current !== null;
+    const duration = wasConnected ? Math.round((Date.now() - (callStartRef.current || Date.now())) / 1000) : undefined;
+    sendRawRef.current({
+      type: "call:end",
+      status: wasConnected ? "completed" : "missed",
+      duration_seconds: duration,
+      caller_id: callerIdRef.current || user?.id,
+    });
+    cleanupCall();
+  };
+
+  const handleCallSignal = async (e: CallSignalEvent) => {
+    if (e.from !== otherUserId && e.event !== "call:busy") return;
+    switch (e.event) {
+      case "call:offer": {
+        if (callStatus !== "idle" || !e.sdp) {
+          sendRawRef.current({ type: "call:busy" });
+          return;
+        }
+        callerIdRef.current = otherUserId;
+        setCallStatus("incoming");
+        pendingCandidatesRef.current = [];
+        incomingOfferRef.current = e.sdp;
+        ringTimeoutRef.current = setTimeout(() => {
+          declineCall();
+        }, RING_TIMEOUT_MS);
+        break;
+      }
+      case "call:answer": {
+        if (pcRef.current && e.sdp) {
+          await pcRef.current.setRemoteDescription(e.sdp);
+          for (const cand of pendingCandidatesRef.current) {
+            try {
+              await pcRef.current.addIceCandidate(cand);
+            } catch {}
+          }
+          pendingCandidatesRef.current = [];
+        }
+        break;
+      }
+      case "call:ice": {
+        if (e.candidate) {
+          if (pcRef.current && pcRef.current.remoteDescription) {
+            try {
+              await pcRef.current.addIceCandidate(e.candidate);
+            } catch {}
+          } else {
+            pendingCandidatesRef.current.push(e.candidate);
+          }
+        }
+        break;
+      }
+      case "call:end": {
+        toast.message("Call ended");
+        cleanupCall();
+        loadMessages();
+        break;
+      }
+      case "call:reject": {
+        toast.message("Call declined");
+        cleanupCall();
+        loadMessages();
+        break;
+      }
+      case "call:busy": {
+        toast.message("They're unavailable right now");
+        cleanupCall();
+        break;
+      }
+    }
   };
 
   useEffect(() => {
@@ -249,9 +458,13 @@ export function ProjectChat({
     return () => clearInterval(interval);
   }, [projectId, otherUserId]);
 
-  const { sendTyping } = useMessageSocket(projectId, (e) => {
+  const { sendTyping, sendRaw } = useMessageSocket(projectId, (e) => {
     if (!("id" in e)) {
-      if (e.user_id !== otherUserId) return;
+      if ("event" in e && typeof e.event === "string" && e.event.startsWith("call:")) {
+        handleCallSignal(e as CallSignalEvent);
+        return;
+      }
+      if ("user_id" in e && e.user_id !== otherUserId) return;
       setOtherTyping(true);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => setOtherTyping(false), 3000);
@@ -265,6 +478,23 @@ export function ProjectChat({
       api.markThreadRead(projectId, otherUserId).then(onActivity).catch(() => {});
     }
   });
+  sendRawRef.current = sendRaw;
+
+  useEffect(() => {
+    return () => {
+      if (callStatusRef.current !== "idle") {
+        const wasConnected = callStartRef.current !== null;
+        sendRawRef.current({
+          type: "call:end",
+          status: wasConnected ? "completed" : "missed",
+          duration_seconds: wasConnected ? Math.round((Date.now() - (callStartRef.current || Date.now())) / 1000) : undefined,
+          caller_id: callerIdRef.current,
+        });
+      }
+      cleanupCall();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, otherUserId]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -504,6 +734,16 @@ export function ProjectChat({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {callStatus === "idle" && (
+            <button
+              type="button"
+              onClick={startCall}
+              className="shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-primary hover:bg-primary/10"
+              title="Call"
+            >
+              <Phone className="h-4 w-4" />
+            </button>
+          )}
           {messagesHref && (
             <Link
               href={messagesHref}
@@ -521,6 +761,78 @@ export function ProjectChat({
           )}
         </div>
       </div>
+
+      <audio ref={remoteAudioRef} autoPlay playsInline hidden />
+
+      {callStatus !== "idle" && (
+        <div className="flex items-center gap-3 px-3 py-2 border-b bg-primary/5 shrink-0">
+          {callStatus === "incoming" ? (
+            <>
+              <span className="h-8 w-8 rounded-full bg-primary/15 text-primary flex items-center justify-center animate-pulse">
+                <PhoneCall className="h-4 w-4" />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{otherUserName} is calling…</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => incomingOfferRef.current && acceptCall(incomingOfferRef.current)}
+                className="h-8 w-8 rounded-full bg-green-600 text-white flex items-center justify-center hover:opacity-90"
+                title="Accept"
+              >
+                <Phone className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={declineCall}
+                className="h-8 w-8 rounded-full bg-red-600 text-white flex items-center justify-center hover:opacity-90"
+                title="Decline"
+              >
+                <PhoneOff className="h-4 w-4" />
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="h-8 w-8 rounded-full bg-primary/15 text-primary flex items-center justify-center">
+                <PhoneCall className={`h-4 w-4 ${callStatus === "outgoing" ? "animate-pulse" : ""}`} />
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">
+                  {callStatus === "outgoing" ? `Calling ${otherUserName}…` : "On call"}
+                </p>
+                {callStatus === "connected" && (
+                  <p className="text-xs text-muted-foreground tabular-nums">{formatDuration(callSeconds)}</p>
+                )}
+              </div>
+              {callStatus === "connected" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const stream = localCallStreamRef.current;
+                    if (stream) {
+                      const next = !callMuted;
+                      stream.getAudioTracks().forEach((t) => (t.enabled = !next));
+                      setCallMuted(next);
+                    }
+                  }}
+                  className={`h-8 w-8 rounded-full flex items-center justify-center border ${callMuted ? "bg-red-50 text-red-600 border-red-200" : "text-muted-foreground"}`}
+                  title={callMuted ? "Unmute" : "Mute"}
+                >
+                  {callMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={endCall}
+                className="h-8 w-8 rounded-full bg-red-600 text-white flex items-center justify-center hover:opacity-90"
+                title="End call"
+              >
+                <PhoneOff className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {}
       {mapAddress && (
@@ -557,6 +869,25 @@ export function ProjectChat({
           const mine = m.sender_id === user?.id;
           const menuOpen = openMenuFor === m.id;
           const editing = editingId === m.id;
+
+          if (m.message_type === "call") {
+            const missed = m.body === "missed" || m.body === "unavailable" || m.body === "declined";
+            const label = m.body === "declined"
+              ? "Call declined"
+              : missed
+              ? "Missed call"
+              : m.duration_seconds
+              ? `Call • ${formatDuration(m.duration_seconds)}`
+              : "Call ended";
+            return (
+              <div key={m.id} className="flex justify-center py-1">
+                <span className={`text-[11px] rounded-full px-3 py-1 flex items-center gap-1 ${missed ? "text-red-600 bg-red-50 dark:bg-red-950/30" : "text-muted-foreground bg-muted/70"}`}>
+                  {missed ? <PhoneMissed className="h-3 w-3" /> : <PhoneCall className="h-3 w-3" />}
+                  {label}
+                </span>
+              </div>
+            );
+          }
 
           if (m.message_type === "system") {
             return (

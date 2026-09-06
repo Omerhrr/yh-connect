@@ -521,7 +521,7 @@ export type WalletTransactionOut = {
   project_title?: string | null;
 };
 
-export type MessageType = "text" | "image" | "voice" | "file" | "update" | "system";
+export type MessageType = "text" | "image" | "voice" | "file" | "update" | "system" | "call";
 
 export type ReplyPreview = {
   id: string;

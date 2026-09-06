@@ -34,6 +34,21 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(project_id, user_id, ws)
 
+    async def send_to_if_online(self, project_id: str, user_id: str, payload: dict) -> bool:
+        """Same as send_to, but reports whether any socket was actually open
+        to receive it — used for call signaling to detect "nobody's there to
+        ring" (e.g. a call offer with no listening socket) so the caller can
+        be told the other party is unavailable instead of ringing forever."""
+        sockets = list(self._connections.get((project_id, user_id), []))
+        delivered = False
+        for ws in sockets:
+            try:
+                await ws.send_json(payload)
+                delivered = True
+            except Exception:
+                self.disconnect(project_id, user_id, ws)
+        return delivered
+
     def is_online(self, user_id: str) -> bool:
         """True if this user has any open websocket connection right now, on
         any project thread. Used to decide whether a new message/update needs

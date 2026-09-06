@@ -170,6 +170,16 @@ def _require_recipient_is_project_participant(db: Session, project: Project, rec
         detail="You can only message the client or the assigned professional on this project",
     )
 
+def _call_preview(message: Message) -> str:
+    if message.body == "declined":
+        return "Call declined"
+    if message.body == "missed" or message.body == "unavailable":
+        return "Missed call"
+    if message.duration_seconds:
+        mins, secs = divmod(message.duration_seconds, 60)
+        return f"Call ended • {mins}:{secs:02d}"
+    return "Call ended"
+
 @legacy_router.get("", response_model=list[MessageOut])
 def list_messages(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     messages = (
@@ -271,6 +281,7 @@ def list_threads(current_user: User = Depends(get_current_user), db: Session = D
                 last_message=(
                     "This message was deleted"
                     if last.is_deleted
+                    else _call_preview(last) if last.message_type == "call"
                     else (last.body or ("Voice note" if last.message_type == "voice" else "Attachment"))
                 ),
                 last_message_at=last.created_at,
@@ -509,11 +520,40 @@ async def delete_message(
     db.refresh(message)
     return await _broadcast_message_update(db, message, current_user.id)
 
+_CALL_SIGNAL_TYPES = {"call:offer", "call:answer", "call:ice", "call:end", "call:reject", "call:busy"}
+
+async def _log_call_message(db: Session, project_id: str, caller_id: str, callee_id: str, status: str, duration_seconds: int | None) -> None:
+    """Record a finished/declined/missed call as a real Message (message_type
+    "call") so it shows up in the thread and thread-list preview just like
+    any other event, same pattern as voice notes/updates. `status` is one of
+    "completed" | "declined" | "missed" | "unavailable" and becomes the body
+    the frontend renders a call-log bubble from (e.g. "Missed call")."""
+    message = Message(
+        project_id=project_id,
+        sender_id=caller_id,
+        recipient_id=callee_id,
+        body=status,
+        message_type="call",
+        duration_seconds=duration_seconds,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    out = _to_out(message, caller_id).model_dump(mode="json")
+    await manager.send_to(project_id, callee_id, out)
+    await manager.send_to(project_id, caller_id, out)
+
 @router.websocket("/ws/projects/{project_id}/messages")
 async def messages_websocket(websocket: WebSocket, project_id: str, token: str = Query(...)):
     """Live push channel for a project's message thread. The frontend still
     polls on a long interval as a fallback in case this connection drops or
-    a proxy in front of the API doesn't support WebSocket upgrades."""
+    a proxy in front of the API doesn't support WebSocket upgrades.
+
+    Also carries voice-call signaling (WebRTC offer/answer/ICE relay) between
+    the client and the assigned professional — piggybacking on the same
+    authenticated socket rather than opening a second connection. This process
+    never inspects/stores the SDP or media itself, it's a pure relay; the
+    audio stream itself goes directly peer-to-peer between the two browsers."""
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         await websocket.close(code=4401)
@@ -542,7 +582,11 @@ async def messages_websocket(websocket: WebSocket, project_id: str, token: str =
                 data = json.loads(raw)
             except Exception:
                 continue
-            if isinstance(data, dict) and data.get("type") == "typing":
+            if not isinstance(data, dict):
+                continue
+
+            msg_type = data.get("type")
+            if msg_type == "typing":
                 db2 = SessionLocal()
                 try:
                     project = db2.get(Project, project_id)
@@ -554,6 +598,48 @@ async def messages_websocket(websocket: WebSocket, project_id: str, token: str =
                         )
                         if other_id:
                             await manager.send_to(project_id, other_id, {"event": "typing", "user_id": user_id})
+                finally:
+                    db2.close()
+            elif msg_type in _CALL_SIGNAL_TYPES:
+                db2 = SessionLocal()
+                try:
+                    project = db2.get(Project, project_id)
+                    if not project:
+                        continue
+                    # Calls are restricted to the two fixed project parties
+                    # (client + assigned professional) — not the broader
+                    # messaging-eligible bidder set — since a call implies an
+                    # active 1:1 session between the two people actually
+                    # working the project together.
+                    other_id = (
+                        project.assigned_professional_id
+                        if user_id == project.client_id
+                        else project.client_id
+                    )
+                    if not other_id or user_id not in (project.client_id, project.assigned_professional_id):
+                        await manager.send_to(project_id, user_id, {"event": "call:busy", "from": user_id})
+                        continue
+
+                    if msg_type == "call:end":
+                        await manager.send_to(project_id, other_id, {"event": "call:end", "from": user_id})
+                        status = data.get("status") or "completed"
+                        duration = data.get("duration_seconds")
+                        duration = int(duration) if isinstance(duration, (int, float)) else None
+                        caller_id = data.get("caller_id") or user_id
+                        callee_id = other_id if caller_id == user_id else user_id
+                        await _log_call_message(db2, project_id, caller_id, callee_id, status, duration)
+                    elif msg_type == "call:reject":
+                        await manager.send_to(project_id, other_id, {"event": "call:reject", "from": user_id})
+                        await _log_call_message(db2, project_id, other_id, user_id, "declined", None)
+                    else:
+                        event = {"event": msg_type, "from": user_id}
+                        if "sdp" in data:
+                            event["sdp"] = data["sdp"]
+                        if "candidate" in data:
+                            event["candidate"] = data["candidate"]
+                        online = await manager.send_to_if_online(project_id, other_id, event)
+                        if msg_type == "call:offer" and not online:
+                            await manager.send_to(project_id, user_id, {"event": "call:busy", "from": other_id})
                 finally:
                     db2.close()
     except WebSocketDisconnect:
