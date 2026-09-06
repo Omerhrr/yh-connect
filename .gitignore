@@ -11,6 +11,7 @@ docs
 .env.local
 .env.local.example
 .env.*.local
+.env.docker
 backend/.env
 
 # Next.js

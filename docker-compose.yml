@@ -1,0 +1,72 @@
+## Base compose file: Postgres + API + web, all reachable on plain HTTP ports
+## (8000 / 3000) with no reverse proxy or TLS. Good for local dev, staging,
+## or a first smoke-test on the VPS before wiring up a domain.
+##
+## For the real VPS deployment behind a domain with automatic HTTPS, layer
+## docker-compose.prod.yml on top (adds Caddy) — see docs/DOCKER.md.
+##
+## Usage:
+##   cp .env.docker.example .env.docker   # then fill in real secrets
+##   docker compose --env-file .env.docker up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yhconnect}
+      POSTGRES_USER: ${POSTGRES_USER:-yhconnect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yhconnect}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENV: ${ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-yhconnect}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-yhconnect}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env.docker}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-["http://localhost:3000"]}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      KYC_ENFORCEMENT_ENABLED: ${KYC_ENFORCEMENT_ENABLED:-false}
+      SEED_SECRET: ${SEED_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-YH Connect <no-reply@yhconnect.ng>}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
+    volumes:
+      - api_uploads:/app/uploads
+    ports:
+      - "8000:8000"
+
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  db_data:
+  api_uploads:

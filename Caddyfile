@@ -1,0 +1,23 @@
+# Replace with your real domain — Caddy auto-provisions and renews a
+# Let's Encrypt certificate for it the first time it starts, no certbot/cron
+# needed. Point the domain's A record at the VPS's IP before starting this.
+yourdomain.example {
+	# FastAPI's uploaded files (portfolio images, ID documents, etc.) — the
+	# backend mounts these itself at /uploads (see app/main.py), so proxy
+	# straight through to it.
+	handle /uploads/* {
+		reverse_proxy api:8000
+	}
+
+	# Backend API.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else — the Next.js frontend.
+	handle {
+		reverse_proxy web:3000
+	}
+
+	encode gzip
+}

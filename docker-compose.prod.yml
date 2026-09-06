@@ -1,0 +1,91 @@
+## Production compose file for the VPS: same three services as
+## docker-compose.yml, but api/web are not published directly to the host —
+## Caddy is the only thing listening on 80/443, terminates TLS automatically
+## (Let's Encrypt) for the domain in Caddyfile, and reverse-proxies to the
+## web and api containers over the internal network.
+##
+## This is a standalone file (not layered on top of docker-compose.yml) so
+## the port/network differences don't have to fight compose's merge rules.
+##
+## Usage on the VPS:
+##   cp .env.docker.example .env.docker   # fill in real secrets + domain
+##   edit Caddyfile: replace yourdomain.example with your real domain
+##   docker compose -f docker-compose.prod.yml --env-file .env.docker up -d --build
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yhconnect}
+      POSTGRES_USER: ${POSTGRES_USER:-yhconnect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yhconnect}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-yhconnect}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-yhconnect}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env.docker}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:?e.g. ["https://yourdomain.example"]}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?e.g. https://yourdomain.example}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?e.g. https://yourdomain.example/api}
+      KYC_ENFORCEMENT_ENABLED: ${KYC_ENFORCEMENT_ENABLED:-false}
+      SEED_SECRET: ${SEED_SECRET:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-YH Connect <no-reply@yhconnect.ng>}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
+    volumes:
+      - api_uploads:/app/uploads
+    expose:
+      - "8000"
+
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?e.g. https://yourdomain.example/api/v1}
+    restart: unless-stopped
+    depends_on:
+      - api
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  db_data:
+  api_uploads:
+  caddy_data:
+  caddy_config:
