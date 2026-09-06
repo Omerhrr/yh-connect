@@ -1,13 +1,20 @@
-## Base compose file: Postgres + API + web, all reachable on plain HTTP ports
-## (8000 / 3000) with no reverse proxy or TLS. Good for local dev, staging,
-## or a first smoke-test on the VPS before wiring up a domain.
+## The stack: Postgres + API + web + Caddy (automatic HTTPS reverse proxy).
+## Caddy is the only thing published on the host (80/443); db/api/web talk to
+## each other over Docker's internal network only.
 ##
-## For the real VPS deployment behind a domain with automatic HTTPS, layer
-## docker-compose.prod.yml on top (adds Caddy) — see docs/DOCKER.md.
+## Reads its config from a plain ".env" file in this same directory — Docker
+## Compose loads that automatically, so no --env-file flag is needed:
 ##
-## Usage:
-##   cp .env.docker.example .env.docker   # then fill in real secrets
-##   docker compose --env-file .env.docker up -d --build
+##   cp .env.example .env        # fill in real secrets + domain
+##   edit Caddyfile: replace yourdomain.example with your real domain
+##   docker compose up -d --build
+##
+## Everyday commands, once it's running:
+##   docker compose ps
+##   docker compose logs -f caddy
+##   docker compose down            # stop (keeps volumes/data)
+##   docker compose down -v         # stop AND wipe all data
+##   docker compose restart api
 
 services:
   db:
@@ -16,7 +23,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-yhconnect}
       POSTGRES_USER: ${POSTGRES_USER:-yhconnect}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.docker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -35,10 +42,10 @@ services:
     environment:
       ENV: ${ENV:-production}
       DATABASE_URL: postgresql://${POSTGRES_USER:-yhconnect}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-yhconnect}
-      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env.docker}
-      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-["http://localhost:3000"]}
-      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:?e.g. ["https://yourdomain.example"]}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:?e.g. https://yourdomain.example}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?e.g. https://yourdomain.example/api}
       KYC_ENFORCEMENT_ENABLED: ${KYC_ENFORCEMENT_ENABLED:-false}
       SEED_SECRET: ${SEED_SECRET:-}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
@@ -53,20 +60,36 @@ services:
       MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
     volumes:
       - api_uploads:/app/uploads
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
 
   web:
     build:
       context: .
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?e.g. https://yourdomain.example/api/v1}
     restart: unless-stopped
     depends_on:
       - api
+    expose:
+      - "3000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
     ports:
-      - "3000:3000"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
   db_data:
   api_uploads:
+  caddy_data:
+  caddy_config:
