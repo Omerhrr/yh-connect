@@ -1145,7 +1145,7 @@ export function VerifyEmailPage() {
   // that scanner visit alone would consume the single-use token, so the
   // real click a moment later finds it already invalidated and shows
   // "invalid or expired" even though nothing was wrong with the link.
-  const [status, setStatus] = useState<"confirm" | "verifying" | "success" | "error" | "awaiting">(
+  const [status, setStatus] = useState<"confirm" | "verifying" | "success" | "error" | "retry" | "awaiting">(
     token ? "confirm" : "awaiting"
   );
   const [resending, setResending] = useState(false);
@@ -1164,7 +1164,13 @@ export function VerifyEmailPage() {
     api
       .verifyEmail(token)
       .then(() => refreshMe().finally(() => setStatus("success")))
-      .catch(() => setStatus("error"));
+      .catch((err) => {
+        // Only a 4xx from the API means the token itself is genuinely
+        // invalid/expired — anything else (network blip, 5xx) shouldn't
+        // tell the user their link is dead when a retry might just work.
+        const isRealTokenError = err instanceof ApiError && err.status >= 400 && err.status < 500;
+        setStatus(isRealTokenError ? "error" : "retry");
+      });
   };
 
   const resend = async () => {
@@ -1198,6 +1204,12 @@ export function VerifyEmailPage() {
         </div>
       )}
       {status === "verifying" && <p className="text-sm text-muted-foreground">Verifying your email...</p>}
+      {status === "retry" && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Something went wrong on our end. Your link is likely still valid — try again.</p>
+          <Button className="w-full" onClick={confirmVerify}>Try again</Button>
+        </div>
+      )}
       {status === "success" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">Your email has been verified.</p>
