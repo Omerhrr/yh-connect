@@ -193,7 +193,18 @@ class MonnifyClient:
             headers=self._headers(),
             timeout=15,
         )
-        resp.raise_for_status()
+        # Read Monnify's own responseMessage before raise_for_status() blows
+        # that away with a generic "Client error '4xx' for url ..." — a 4xx
+        # here almost always comes with a JSON body explaining exactly why
+        # (invalid bank code, account not found, etc.), which is far more
+        # useful to show the user than the bare HTTP status.
+        if resp.status_code >= 400:
+            try:
+                body = resp.json()
+                message = body.get("responseMessage") or body.get("message")
+            except ValueError:
+                message = None
+            raise MonnifyError(message or f"Monnify returned {resp.status_code} with no further detail")
         data = resp.json()
         if not data.get("requestSuccessful"):
             raise MonnifyError(data.get("responseMessage", "Account resolution failed"))
