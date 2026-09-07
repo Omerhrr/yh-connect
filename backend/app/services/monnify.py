@@ -157,6 +157,16 @@ class MonnifyClient:
         if not self.is_configured:
             return {"simulated": True, "found": True, "firstName": None, "lastName": None}
 
+        # Monnify's NIN endpoint is live-only — calling it against
+        # sandbox.monnify.com 404s/errors rather than working, unlike every
+        # other endpoint this client uses (which do have sandbox support).
+        # So even with sandbox credentials configured for wallet top-ups,
+        # keep NIN checks in the same safe "simulated" fallback rather than
+        # let real users' verification attempts fail against a nonexistent
+        # sandbox route.
+        if "sandbox" in self.base_url.lower():
+            return {"simulated": True, "found": True, "firstName": None, "lastName": None}
+
         resp = httpx.post(
             f"{self.base_url}/api/v1/vas/nin-details",
             headers=self._headers(),
