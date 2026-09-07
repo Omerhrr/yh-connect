@@ -1138,7 +1138,16 @@ export function VerifyEmailPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
-  const [status, setStatus] = useState<"pending" | "success" | "error" | "awaiting">("pending");
+  // "confirm" requires an explicit click before calling the API — email
+  // security scanners (Gmail/Outlook Safe Links, antivirus link-checkers,
+  // etc.) auto-visit links in emails to check them for malware before the
+  // real user ever clicks. If verification ran automatically on page load,
+  // that scanner visit alone would consume the single-use token, so the
+  // real click a moment later finds it already invalidated and shows
+  // "invalid or expired" even though nothing was wrong with the link.
+  const [status, setStatus] = useState<"confirm" | "verifying" | "success" | "error" | "awaiting">(
+    token ? "confirm" : "awaiting"
+  );
   const [resending, setResending] = useState(false);
   const user = useAuth((s) => s.user);
   const refreshMe = useAuth((s) => s.refreshMe);
@@ -1147,13 +1156,16 @@ export function VerifyEmailPage() {
   useEffect(() => {
     if (!token) {
       setStatus(user && !user.email_verified ? "awaiting" : "error");
-      return;
     }
+  }, [token, user]);
+
+  const confirmVerify = () => {
+    setStatus("verifying");
     api
       .verifyEmail(token)
       .then(() => refreshMe().finally(() => setStatus("success")))
       .catch(() => setStatus("error"));
-  }, [token, user]);
+  };
 
   const resend = async () => {
     setResending(true);
@@ -1179,7 +1191,13 @@ export function VerifyEmailPage() {
     <AuthCard>
       <AuthLogo />
       <h1 className="text-2xl font-bold mb-2">Email Verification</h1>
-      {status === "pending" && <p className="text-sm text-muted-foreground">Verifying your email...</p>}
+      {status === "confirm" && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">Click below to confirm your email address.</p>
+          <Button className="w-full" onClick={confirmVerify}>Verify my email</Button>
+        </div>
+      )}
+      {status === "verifying" && <p className="text-sm text-muted-foreground">Verifying your email...</p>}
       {status === "success" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">Your email has been verified.</p>
