@@ -46,8 +46,15 @@ export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean
       router.replace(user.role === "professional" ? "/talent/dashboard" : "/client/dashboard");
       return;
     }
+    // Email verification is a hard gate for client/talent — admins don't
+    // need it (created internally, not via public signup).
+    if (user.role !== "admin" && !user.email_verified) {
+      router.replace("/verify-email");
+      return;
+    }
   }, [enabled, hydrated, user, token, role, loginPath, router, refreshMe]);
 
-  const ready = hydrated && !recovering && !!user && user.role === role;
+  const ready =
+    hydrated && !recovering && !!user && user.role === role && (user.role === "admin" || user.email_verified);
   return { ready, user };
 }

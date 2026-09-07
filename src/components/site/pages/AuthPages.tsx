@@ -1135,21 +1135,45 @@ export function ResetPasswordPage() {
 }
 
 export function VerifyEmailPage() {
-  const { navigate } = useNav();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
-  const [status, setStatus] = useState<"pending" | "success" | "error">("pending");
+  const [status, setStatus] = useState<"pending" | "success" | "error" | "awaiting">("pending");
+  const [resending, setResending] = useState(false);
+  const user = useAuth((s) => s.user);
+  const refreshMe = useAuth((s) => s.refreshMe);
+  const logout = useAuth((s) => s.logout);
 
   useEffect(() => {
     if (!token) {
-      setStatus("error");
+      setStatus(user && !user.email_verified ? "awaiting" : "error");
       return;
     }
     api
       .verifyEmail(token)
-      .then(() => setStatus("success"))
+      .then(() => refreshMe().finally(() => setStatus("success")))
       .catch(() => setStatus("error"));
-  }, [token]);
+  }, [token, user]);
+
+  const resend = async () => {
+    setResending(true);
+    try {
+      await api.resendVerification();
+      toast.success("A new verification email has been sent.");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not resend the email. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  };
+
+  const dashboardHref = user
+    ? user.role === "admin"
+      ? "/admin"
+      : user.role === "professional"
+      ? "/talent/dashboard"
+      : "/client/dashboard"
+    : "/";
 
   return (
     <AuthCard>
@@ -1159,11 +1183,53 @@ export function VerifyEmailPage() {
       {status === "success" && (
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">Your email has been verified.</p>
-          <Button className="w-full" onClick={() => navigate("home")}>Continue</Button>
+          <Button className="w-full" onClick={() => router.replace(dashboardHref)}>Continue</Button>
+        </div>
+      )}
+      {status === "awaiting" && (
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            We sent a verification link to <strong>{user?.email}</strong>. Click it to unlock your dashboard.
+            Didn&apos;t get it? Check spam, or request a new one below.
+          </p>
+          <Button className="w-full" onClick={resend} disabled={resending}>
+            {resending ? "Sending..." : "Resend verification email"}
+          </Button>
+          <button
+            type="button"
+            onClick={() => {
+              logout();
+              router.push("/");
+            }}
+            className="text-xs text-muted-foreground hover:underline w-full text-center"
+          >
+            Log out
+          </button>
         </div>
       )}
       {status === "error" && (
-        <p className="text-sm text-muted-foreground">This verification link is invalid or has expired. You can request a new one from your account settings.</p>
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">This verification link is invalid or has expired.</p>
+          {user ? (
+            <Button className="w-full" onClick={resend} disabled={resending}>
+              {resending ? "Sending..." : "Send a new link"}
+            </Button>
+          ) : (
+            <p className="text-sm text-muted-foreground">Log in and request a new one from your dashboard.</p>
+          )}
+          {user && (
+            <button
+              type="button"
+              onClick={() => {
+                logout();
+                router.push("/");
+              }}
+              className="text-xs text-muted-foreground hover:underline w-full text-center"
+            >
+              Log out
+            </button>
+          )}
+        </div>
       )}
     </AuthCard>
   );

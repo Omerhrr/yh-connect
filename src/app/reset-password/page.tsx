@@ -3,7 +3,7 @@ import { ResetPasswordPage } from "@/components/site/pages/AuthPages";
 
 export default function Page() {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <ResetPasswordPage />
     </Suspense>
   );

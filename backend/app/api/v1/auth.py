@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -39,6 +40,8 @@ from app.schemas.user import (
 from app.services.email import send_password_reset_email, send_verification_email, send_welcome_email
 from app.services.username import is_username_taken, is_valid_username, normalize_username, suggest_usernames
 
+logger = logging.getLogger("yhconnect.auth")
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 def _issue_token(user: User) -> Token:
@@ -52,7 +55,13 @@ def _start_email_verification(user: User, db: Session) -> None:
     user.email_verification_sent_at = datetime.utcnow()
     db.commit()
     verify_url = f"{settings.FRONTEND_BASE_URL.rstrip('/')}/verify-email?token={token}"
-    send_verification_email(user.email, user.first_name, verify_url)
+    sent = send_verification_email(user.email, user.first_name, verify_url)
+    if not sent:
+        # send_email() swallows the actual SMTP/Resend exception internally
+        # (see app/services/email.py) and just returns False — surface that
+        # here so a broken mail provider shows up in logs/monitoring instead
+        # of registration silently "succeeding" with no email ever sent.
+        logger.warning("Verification email failed to send to %s (user_id=%s)", user.email, user.id)
 
 @router.post("/register/client", response_model=Token, status_code=201)
 @limiter.limit("10/hour")

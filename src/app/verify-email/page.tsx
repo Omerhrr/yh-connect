@@ -3,7 +3,7 @@ import { VerifyEmailPage } from "@/components/site/pages/AuthPages";
 
 export default function Page() {
   return (
-    <Suspense>
+    <Suspense fallback={null}>
       <VerifyEmailPage />
     </Suspense>
   );
