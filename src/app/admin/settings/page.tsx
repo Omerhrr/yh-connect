@@ -764,15 +764,11 @@ export default function AdminSettingsPage() {
           </SectionCard>
 
           <SectionCard icon={ShieldAlert} title="Account Security" description="Guardrails that slow down account takeover attempts.">
-            <NumberField
-              label="Profile Name-Change Cooldown"
-              help="How long a user must wait before changing their first/last name again. Mainly protects payouts: if an account is compromised, an intruder's first move is often renaming the profile to match a bank account they control — this cooldown blunts that. Set to 0 to disable."
-              value={valueFor("profile_name_change_cooldown_hours")}
-              onChange={(v) => setField("profile_name_change_cooldown_hours", v)}
-              min={0}
-              suffix="hours"
-              dirty={isDirty("profile_name_change_cooldown_hours")}
-            />
+            <p className="text-sm text-muted-foreground">
+              Users can change their first/last name exactly once, permanently. This isn't configurable: it's mainly
+              a payout protection, if an account is compromised, an intruder's first move is often renaming the
+              profile to match a bank account they control, so we don't allow it again after the first change.
+            </p>
           </SectionCard>
 
           <SectionCard icon={Sparkles} title="Homepage Highlights" description="Pin categories to the front of Browse by Category on the homepage with a Featured badge.">

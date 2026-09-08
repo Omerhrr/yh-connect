@@ -19,7 +19,6 @@ from app.models.auth_token import PasswordResetToken
 from app.models.category import Category
 from app.models.profile import ProfessionalProfile
 from app.models.user import User, UserRole
-from app.services.platform_settings import get_profile_name_change_cooldown_hours
 from app.schemas.user import (
     BecomeTalentRequest,
     ChangePasswordRequest,
@@ -175,19 +174,17 @@ def update_me(
         or ("last_name" in data and data["last_name"] != current_user.last_name)
     )
     if name_changing and current_user.name_changed_at:
-        cooldown_hours = get_profile_name_change_cooldown_hours(db)
-        elapsed = datetime.utcnow() - current_user.name_changed_at
-        remaining = timedelta(hours=cooldown_hours) - elapsed
-        if remaining.total_seconds() > 0:
-            remaining_hours = max(remaining.total_seconds() / 3600, 0.1)
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"Your name was changed recently. For account security (this slows down anyone who's "
-                    f"compromised your account and is trying to rename it to match a bank account they control), "
-                    f"you can change it again in about {remaining_hours:.1f} hour{'s' if remaining_hours >= 1.05 else ''}."
-                ),
-            )
+        # Name changes are allowed exactly once per account, permanently,
+        # not on a cooldown — this closes off the "compromise an account,
+        # rename it to match a bank account you control" attack for good
+        # rather than just slowing it down.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Your name has already been changed once and can't be changed again. "
+                "Contact support if you believe this is an error."
+            ),
+        )
     for field, value in data.items():
         setattr(current_user, field, value)
     if name_changing:

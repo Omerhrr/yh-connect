@@ -91,7 +91,7 @@ def test_multiple_accounts_and_set_default(client, professional_user):
     assert accounts[resp1.json()["id"]]["is_default"] is False
     assert accounts[resp2.json()["id"]]["is_default"] is True
 
-def test_name_change_cooldown_blocks_rapid_second_change(client, professional_user):
+def test_name_change_allowed_once_then_blocked_permanently(client, professional_user):
     headers = auth_headers(professional_user["access_token"])
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulo"}, headers=headers)
     assert resp.status_code == 200, resp.text
@@ -99,9 +99,11 @@ def test_name_change_cooldown_blocks_rapid_second_change(client, professional_us
 
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulinho"}, headers=headers)
     assert resp.status_code == 400, resp.text
-    assert "recently" in resp.json()["detail"].lower()
+    assert "already been changed" in resp.json()["detail"].lower()
 
-def test_name_change_cooldown_configurable_via_admin_settings(client, professional_user, admin_user):
+def test_name_change_still_blocked_regardless_of_admin_settings(client, professional_user, admin_user):
+    # The name-change limit is a hard one-time rule, not a configurable
+    # cooldown, so tweaking admin settings shouldn't reopen it.
     resp = client.patch(
         "/api/v1/admin/settings",
         json={"settings": {"profile_name_change_cooldown_hours": "0"}},
@@ -113,9 +115,9 @@ def test_name_change_cooldown_configurable_via_admin_settings(client, profession
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulo"}, headers=headers)
     assert resp.status_code == 200, resp.text
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulinho"}, headers=headers)
-    assert resp.status_code == 200, resp.text
+    assert resp.status_code == 400, resp.text
 
-def test_non_name_field_updates_unaffected_by_cooldown(client, professional_user):
+def test_non_name_field_updates_unaffected_by_name_change_limit(client, professional_user):
     headers = auth_headers(professional_user["access_token"])
     resp = client.patch("/api/v1/auth/me", json={"first_name": "Paulo"}, headers=headers)
     assert resp.status_code == 200, resp.text
