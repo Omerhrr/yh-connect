@@ -172,6 +172,33 @@ export type AuthResponse = {
   user: UserOut;
 };
 
+export type LedgerSummaryOut = {
+  balanced: boolean;
+  entry_sum: number;
+  totals: Record<string, number>;
+  account_counts: Record<string, number>;
+  client_liabilities: number;
+  talent_liabilities: number;
+  platform_escrow: number;
+  platform_holding: number;
+  platform_revenue: number;
+  monnify_settlement: number;
+  expected_settlement: number;
+  settlement_drift: number;
+  solvent: boolean;
+};
+
+export type LedgerTransactionOut = {
+  id: string;
+  type: string;
+  description: string;
+  reference?: string | null;
+  related_type?: string | null;
+  related_id?: string | null;
+  created_at: string;
+  entries: { account_id: string; amount: number }[];
+};
+
 export type CategoryOut = {
   id: string;
   label: string;
@@ -1183,6 +1210,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ active }),
     }),
+
+  adminLedgerSummary: () => request<LedgerSummaryOut>("/admin/ledger/summary"),
+  adminLedgerTransactions: (limit = 100, offset = 0) =>
+    request<LedgerTransactionOut[]>(`/admin/ledger/transactions?limit=${limit}&offset=${offset}`),
 
   professionals: (params?: { category_id?: string; location?: string; q?: string; min_rating?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(

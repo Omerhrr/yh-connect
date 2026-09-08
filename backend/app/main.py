@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import sys
@@ -15,6 +16,7 @@ from app.core.limiter import limiter
 from app.db.run_migrations import run_migrations
 from app.seed import run as seed_categories
 from app.seed import run_states as seed_states
+from app.services.scheduler import maintenance_loop
 import app.models
 
 logger = logging.getLogger("app.startup")
@@ -83,6 +85,8 @@ def on_startup():
         logger.info("startup: seed complete, mounting uploads dir...")
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+        logger.info("startup: starting background maintenance scheduler...")
+        app.state.maintenance_task = asyncio.create_task(maintenance_loop())
         logger.info("startup: complete.")
     except Exception:
         traceback.print_exc(file=sys.stderr)
@@ -90,6 +94,12 @@ def on_startup():
         sys.stdout.flush()
         logger.exception("startup failed")
         raise
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    task = getattr(app.state, "maintenance_task", None)
+    if task:
+        task.cancel()
 
 @app.get("/")
 def root():

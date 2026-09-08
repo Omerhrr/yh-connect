@@ -1,4 +1,5 @@
 import io
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -28,6 +29,8 @@ from app.schemas.wallet import (
     WalletWithdrawRequest,
     WalletWithdrawResponse,
 )
+from app.models.ledger import LedgerTransactionType
+from app.services import ledger
 from app.services.auto_release import release_due_withholds
 from app.services.disputes import has_blocking_dispute
 from app.services.monnify import monnify_client
@@ -41,6 +44,7 @@ from app.services.platform_settings import (
 from app.services.project_log import post_system_message
 
 router = APIRouter(tags=["wallet"])
+logger = logging.getLogger("app.wallet")
 
 def _tx_out(tx: WalletTransaction) -> WalletTransactionOut:
     out = WalletTransactionOut.model_validate(tx)
@@ -90,6 +94,13 @@ def topup_wallet(
     if result.get("simulated"):
         tx.status = WalletTransactionStatus.successful
         current_user.wallet_balance += payload.amount
+        wallet_acct = ledger.client_wallet_account(db, current_user.id) if is_client else ledger.talent_wallet_account(db, current_user.id)
+        ledger.post(
+            db, LedgerTransactionType.topup,
+            [(ledger.monnify_settlement_account(db), payload.amount), (wallet_acct, -payload.amount)],
+            description="Wallet top-up (simulated)", reference=reference,
+            related_type="wallet_transaction", related_id=tx.id,
+        )
 
     db.commit()
     db.refresh(tx)
@@ -120,6 +131,22 @@ def withdraw_wallet(
         raise HTTPException(
             status_code=400,
             detail=f"Insufficient wallet balance. You have ₦{current_user.wallet_balance:,.2f} available.",
+        )
+    # Belt-and-braces check against what the platform's ledger says is
+    # actually sitting at Monnify — if the wallet_balance ledger ever drifts
+    # ahead of real cash held (a bug, a reconciliation gap, a missed
+    # webhook), this stops a withdrawal from paying out money the platform
+    # doesn't have, instead of trusting wallet_balance alone.
+    settlement_balance = ledger.monnify_settlement_account(db).balance
+    if payload.amount > settlement_balance:
+        logger.warning(
+            "Withdrawal blocked: requested ₦%.2f exceeds monnify_settlement balance of ₦%.2f (user %s) — "
+            "this indicates ledger drift and needs investigation.",
+            payload.amount, settlement_balance, current_user.id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Withdrawals are temporarily unavailable, please try again shortly or contact support.",
         )
 
     account = (
@@ -167,6 +194,15 @@ def withdraw_wallet(
         note="Wallet withdrawal to bank account",
     )
     db.add(tx)
+    ledger.post(
+        db, LedgerTransactionType.withdrawal,
+        [
+            (ledger.talent_wallet_account(db, current_user.id), payload.amount),
+            (ledger.monnify_settlement_account(db), -payload.amount),
+        ],
+        description="Wallet withdrawal to bank account", reference=result.get("reference"),
+        related_type="wallet_transaction", related_id=tx.id,
+    )
     db.commit()
     db.refresh(tx)
     db.refresh(current_user)
@@ -233,6 +269,15 @@ def fund_milestone(
     db.add(tx)
     milestone.status = MilestoneStatus.funded
     post_system_message(db, project, current_user.id, f"💰 Milestone \"{milestone.title}\" funded — ₦{milestone.amount:,.2f} in escrow.")
+    ledger.post(
+        db, LedgerTransactionType.milestone_fund,
+        [
+            (ledger.client_wallet_account(db, current_user.id), milestone.amount),
+            (ledger.platform_escrow_account(db), -milestone.amount),
+        ],
+        description=f"Fund milestone '{milestone.title}'",
+        related_type="milestone", related_id=milestone.id,
+    )
 
     db.commit()
     db.refresh(tx)
@@ -277,6 +322,16 @@ async def monnify_webhook(request: Request, db: Session = Depends(get_db)):
             beneficiary = db.get(User, tx.client_id or tx.professional_id)
             if beneficiary:
                 beneficiary.wallet_balance += tx.amount
+                wallet_acct = (
+                    ledger.client_wallet_account(db, beneficiary.id) if tx.client_id
+                    else ledger.talent_wallet_account(db, beneficiary.id)
+                )
+                ledger.post(
+                    db, LedgerTransactionType.topup,
+                    [(ledger.monnify_settlement_account(db), tx.amount), (wallet_acct, -tx.amount)],
+                    description="Wallet top-up (Monnify webhook)", reference=reference,
+                    related_type="wallet_transaction", related_id=tx.id,
+                )
                 notify(
                     db, beneficiary.id, NotificationType.general,
                     f"₦{tx.amount:,.2f} added to your wallet",

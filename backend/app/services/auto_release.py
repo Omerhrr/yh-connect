@@ -14,10 +14,12 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.models.ledger import LedgerTransactionType
 from app.models.milestone import Milestone, MilestoneStatus
 from app.models.notification import NotificationType
 from app.models.project import Project
 from app.models.user import User
+from app.services import ledger
 from app.services.escrow import disburse_milestone, EscrowActionError
 from app.services.disputes import has_blocking_dispute
 from app.services.notify import notify
@@ -103,6 +105,15 @@ def release_due_withholds(db: Session, professional_id: str) -> None:
         amount = milestone.withheld_amount
         professional.wallet_balance += amount
         milestone.withheld_released_at = now
+        ledger.post(
+            db, LedgerTransactionType.withholding_release,
+            [
+                (ledger.platform_holding_account(db), amount),
+                (ledger.talent_wallet_account(db, professional_id), -amount),
+            ],
+            description=f"Withheld payout released for milestone '{milestone.title}'",
+            related_type="milestone", related_id=milestone.id,
+        )
         notify(
             db, professional_id, NotificationType.general,
             f"Held-back payment released for \"{milestone.title}\"",

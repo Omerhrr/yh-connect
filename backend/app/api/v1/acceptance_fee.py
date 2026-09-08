@@ -9,6 +9,8 @@ from app.models.notification import NotificationType
 from app.models.project import Project
 from app.models.user import User, UserRole
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
+from app.models.ledger import LedgerTransactionType
+from app.services import ledger
 from app.schemas.acceptance_fee import (
     AcceptanceFeePayResponse,
     AcceptanceFeeQuoteOut,
@@ -124,6 +126,15 @@ def pay_acceptance_fee(
         amount=amount, note=f"Acceptance fee for \"{project.title}\"",
     )
     db.add(tx)
+    ledger.post(
+        db, LedgerTransactionType.acceptance_fee,
+        [
+            (ledger.talent_wallet_account(db, current_user.id), amount),
+            (ledger.platform_revenue_account(db), -amount),
+        ],
+        description=f"Acceptance fee for '{project.title}'",
+        related_type="project", related_id=project.id,
+    )
     post_system_message(db, project, current_user.id, f"✅ Acceptance fee of ₦{amount:,.2f} paid — work can now begin.")
     notify(
         db, project.client_id, NotificationType.general,

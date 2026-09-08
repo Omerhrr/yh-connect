@@ -7,11 +7,13 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.models.ledger import LedgerTransactionType
 from app.models.milestone import Milestone, MilestoneStatus
 from app.models.notification import NotificationType
 from app.models.project import Project
 from app.models.user import User
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
+from app.services import ledger
 from app.services.notify import notify
 from app.services.platform_settings import (
     get_platform_fee_percent,
@@ -63,6 +65,20 @@ def disburse_milestone(db: Session, milestone: Milestone, project: Project, init
     db.add(tx)
     milestone.status = MilestoneStatus.paid
 
+    if milestone.amount > 0:
+        escrow_acct = ledger.platform_escrow_account(db)
+        talent_acct = ledger.talent_wallet_account(db, professional.id)
+        lines = [(escrow_acct, milestone.amount), (talent_acct, -released_now)]
+        if withheld_amount > 0:
+            lines.append((ledger.platform_holding_account(db), -withheld_amount))
+        if fee > 0:
+            lines.append((ledger.platform_revenue_account(db), -fee))
+        ledger.post(
+            db, LedgerTransactionType.milestone_release, lines,
+            description=f"Milestone release: {note}",
+            related_type="milestone", related_id=milestone.id,
+        )
+
     if withheld_amount > 0:
         release_date = milestone.withheld_release_at.strftime("%b %-d, %Y") if milestone.withheld_release_at else "soon"
         notify(
@@ -106,6 +122,9 @@ def split_milestone(
     fee = round(professional_amount * get_platform_fee_percent(db) / 100, 2)
     net_to_professional = professional_amount - fee
 
+    escrow_acct = ledger.platform_escrow_account(db)
+    split_lines = [(escrow_acct, milestone.amount)]
+
     release_tx = None
     if professional_amount > 0:
         if not project.assigned_professional_id:
@@ -126,6 +145,9 @@ def split_milestone(
             note=f"{note} (professional's share)",
         )
         db.add(release_tx)
+        split_lines.append((ledger.talent_wallet_account(db, professional.id), -net_to_professional))
+        if fee > 0:
+            split_lines.append((ledger.platform_revenue_account(db), -fee))
         notify(
             db, project.assigned_professional_id, NotificationType.milestone_released,
             f"Partial payout for \"{milestone.title}\"",
@@ -137,6 +159,12 @@ def split_milestone(
     if client_amount > 0:
         if project.client:
             project.client.wallet_balance += client_amount
+            split_lines.append((ledger.client_wallet_account(db, project.client.id), -client_amount))
+        else:
+            # Client record missing (shouldn't happen) — can't credit anyone,
+            # so keep the books balanced by leaving it as unattributed
+            # revenue rather than silently posting an unbalanced entry.
+            split_lines.append((ledger.platform_revenue_account(db), -client_amount))
         refund_tx = WalletTransaction(
             project_id=project.id,
             milestone_id=milestone.id,
@@ -157,6 +185,12 @@ def split_milestone(
         )
 
     milestone.status = MilestoneStatus.paid
+    if milestone.amount > 0:
+        ledger.post(
+            db, LedgerTransactionType.milestone_split, split_lines,
+            description=f"Milestone split: {note}",
+            related_type="milestone", related_id=milestone.id,
+        )
     return release_tx, refund_tx
 
 def refund_milestone(db: Session, milestone: Milestone, project: Project, initiated_by_id: str, note: str) -> WalletTransaction:
@@ -177,6 +211,21 @@ def refund_milestone(db: Session, milestone: Milestone, project: Project, initia
     if project.client:
         project.client.wallet_balance += milestone.amount
     milestone.status = MilestoneStatus.refunded
+
+    if milestone.amount > 0:
+        escrow_acct = ledger.platform_escrow_account(db)
+        if project.client:
+            credit_acct = ledger.client_wallet_account(db, project.client.id)
+        else:
+            # Client record missing (shouldn't happen) — keep books balanced.
+            credit_acct = ledger.platform_revenue_account(db)
+        ledger.post(
+            db, LedgerTransactionType.milestone_refund,
+            [(escrow_acct, milestone.amount), (credit_acct, -milestone.amount)],
+            description=f"Milestone refund: {note}",
+            related_type="milestone", related_id=milestone.id,
+        )
+
     notify(
         db, project.client_id, NotificationType.general,
         f"₦{milestone.amount:,.2f} refunded for \"{milestone.title}\"",

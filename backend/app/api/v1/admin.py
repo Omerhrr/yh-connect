@@ -16,6 +16,8 @@ from app.models.project import Project, ProjectStatus
 from app.models.user import User, UserRole
 from app.models.notification import NotificationType
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
+from app.models.ledger import LedgerTransactionType
+from app.services import ledger
 from app.services.escrow import refund_milestone
 from app.services.notify import notify
 from app.schemas.admin import (
@@ -341,6 +343,15 @@ def adjust_wallet(
     )
     db.add(tx)
     db.flush()
+    wallet_acct = (
+        ledger.client_wallet_account(db, user.id) if user.role == UserRole.client
+        else ledger.talent_wallet_account(db, user.id)
+    )
+    ledger.post(
+        db, LedgerTransactionType.admin_adjustment,
+        [(wallet_acct, -payload.amount), (ledger.platform_revenue_account(db), payload.amount)],
+        description=tx.note, related_type="wallet_transaction", related_id=tx.id,
+    )
     direction = "credited to" if payload.amount > 0 else "debited from"
     notify(
         db, user.id, NotificationType.general,
@@ -352,6 +363,50 @@ def adjust_wallet(
     db.commit()
     db.refresh(tx)
     return _wallet_tx_to_out(tx, db)
+
+@router.get("/ledger/summary")
+def admin_ledger_summary(current_user: User = Depends(require_role(UserRole.admin)), db: Session = Depends(get_db)):
+    """Double-entry reconciliation report: per-account totals, platform
+    revenue/escrow/holding at a glance, and the core audit invariant (every
+    ledger entry ever posted should sum to zero) plus a solvency check
+    (cash held at Monnify should equal everything owed out plus revenue
+    earned). See app/services/ledger.py for the underlying model."""
+    return ledger.reconciliation_report(db)
+
+@router.get("/ledger/transactions")
+def admin_ledger_transactions(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: User = Depends(require_role(UserRole.admin)),
+    db: Session = Depends(get_db),
+):
+    """Recent ledger postings for audit/tracing, newest first."""
+    from app.models.ledger import LedgerEntry, LedgerTransaction
+
+    txns = (
+        db.query(LedgerTransaction)
+        .order_by(LedgerTransaction.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    out = []
+    for t in txns:
+        entries = db.query(LedgerEntry).filter(LedgerEntry.transaction_id == t.id).all()
+        out.append({
+            "id": t.id,
+            "type": t.type,
+            "description": t.description,
+            "reference": t.reference,
+            "related_type": t.related_type,
+            "related_id": t.related_id,
+            "created_at": t.created_at,
+            "entries": [
+                {"account_id": e.account_id, "amount": e.amount}
+                for e in entries
+            ],
+        })
+    return out
 
 @router.post("/announcements", status_code=201)
 def send_announcement(
