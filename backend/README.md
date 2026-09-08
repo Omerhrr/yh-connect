@@ -82,10 +82,17 @@ alembic stamp head      # mark the DB as up to date without running DDL
 
 Escrow-style payments run through Monnify (`app/services/monnify.py`),
 currently in **simulated mode** until real API credentials are set in
-`.env` (`MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY`, `MONNIFY_CONTRACT_CODE`,
-`MONNIFY_WEBHOOK_SECRET`). In simulated mode, funding/disbursement calls
-succeed immediately without hitting Monnify's API — enough to exercise the
-full milestone → fund → approve → release flow end to end in development.
+`.env` (`MONNIFY_API_KEY`, `MONNIFY_SECRET_KEY`, `MONNIFY_CONTRACT_CODE`).
+In simulated mode, funding/disbursement calls succeed immediately without
+hitting Monnify's API — enough to exercise the full milestone → fund →
+approve → release flow end to end in development.
+
+Webhooks (`POST /webhooks/monnify`) are signature-verified using an HMAC
+SHA-512 digest of the raw request body, keyed with `MONNIFY_SECRET_KEY` —
+the same secret key used for API auth, not a separate webhook secret (Monnify
+doesn't issue one). Signature checks only run once all three Monnify
+credentials above are set; in production, starting the app without them now
+fails hard at boot instead of silently accepting unsigned webhook requests.
 
 ## Notes / next steps
 

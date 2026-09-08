@@ -26,7 +26,6 @@ class Settings(BaseSettings):
     MONNIFY_API_KEY: str = ""
     MONNIFY_SECRET_KEY: str = ""
     MONNIFY_CONTRACT_CODE: str = ""
-    MONNIFY_WEBHOOK_SECRET: str = ""
     PLATFORM_FEE_PERCENT: float = 5.0
 
     MILESTONE_AUTO_RELEASE_DAYS: float = 7.0

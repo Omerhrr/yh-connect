@@ -55,12 +55,21 @@ def _check_production_config():
             "starting the app."
         )
     if not settings.monnify_configured:
-        logger.warning(
-            "PRODUCTION WARNING: Monnify is not configured (MONNIFY_API_KEY/"
-            "SECRET_KEY/CONTRACT_CODE unset). Wallet top-ups will simulate "
-            "success and credit balance with no real payment taking place, "
-            "and any syntactically valid NIN will auto-verify identity "
-            "(Tier 2) with no real check taking place."
+        # This is a hard failure, not a warning: when Monnify isn't
+        # configured, MonnifyClient.verify_webhook_signature() short-circuits
+        # to `return True` for every request (so the local dev webhook
+        # simulator can exercise the flow without real credentials) — running
+        # that same behavior in production means the webhook endpoint
+        # accepts unsigned requests from anyone.
+        raise RuntimeError(
+            "Monnify is not configured (MONNIFY_API_KEY/MONNIFY_SECRET_KEY/"
+            "MONNIFY_CONTRACT_CODE unset) in a production environment "
+            "(ENV=production). Refusing to start: with Monnify unconfigured, "
+            "POST /webhooks/monnify accepts any request with no signature "
+            "check, letting anyone credit arbitrary wallet balances with "
+            "forged 'payment successful' webhooks, and wallet top-ups would "
+            "simulate success without any real payment taking place. Set "
+            "real Monnify credentials before starting the app in production."
         )
 
     if not settings.email_configured:

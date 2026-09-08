@@ -57,7 +57,6 @@ services:
       MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
       MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
       MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
-      MONNIFY_WEBHOOK_SECRET: ${MONNIFY_WEBHOOK_SECRET:-}
     volumes:
       - api_uploads:/app/uploads
     expose:
