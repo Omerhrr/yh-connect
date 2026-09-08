@@ -1746,6 +1746,19 @@ export function ProjectWorkspace({
   };
 
   useEffect(() => { load(); }, [project.id]);
+
+  useEffect(() => {
+    if (!isClient) return;
+    // Inspection-visit scheduling is a back-and-forth negotiation (propose ->
+    // counter -> accept) with no live push channel of its own — poll so a
+    // counter-proposal from the talent shows up without a manual refresh,
+    // same fallback pattern used for messages/disputes elsewhere.
+    const interval = setInterval(() => {
+      api.projectAccessRequests(project.id).then(setAccessRequests).catch(() => {});
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [project.id, isClient]);
+
   const closeProject = async () => {
     if (!confirm("Close this project? It will stop accepting bids and be marked as closed.")) return;
     try {
