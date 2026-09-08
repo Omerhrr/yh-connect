@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,8 +32,11 @@ export default function AdminProjectsPage() {
   const [q, setQ] = useState("");
   const [qDraft, setQDraft] = useState("");
 
+  const projectsLenRef = useRef(0);
+  projectsLenRef.current = projects.length;
+
   const load = useCallback((append = false) => {
-    const offset = append ? projects.length : 0;
+    const offset = append ? projectsLenRef.current : 0;
     setLoading(true);
     const filters = { status_filter: status || undefined, q: q || undefined, has_dispute: disputeOnly ? "true" : undefined };
     Promise.all([

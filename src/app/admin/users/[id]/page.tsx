@@ -10,6 +10,7 @@ import { api, ApiError, type AdminUserDetailOut, type AdminWalletTransactionOut 
 import { PROJECT_STATUS_COLORS, BID_STATUS_COLORS, WALLET_TX_TYPE_COLORS, WALLET_TX_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import { AdjustWalletDialog } from "@/components/admin/AdjustWalletDialog";
+import { SuspendUserDialog } from "@/components/admin/SuspendUserDialog";
 import { toast } from "sonner";
 import { BadgeCheck, Wallet, ArrowRight } from "lucide-react";
 
@@ -41,6 +42,7 @@ export default function AdminUserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
+  const [suspendOpen, setSuspendOpen] = useState(false);
 
   useEffect(() => {
     api.adminUserDetail(id).then(setData).catch(() => toast.error("Could not load user")).finally(() => setLoading(false));
@@ -49,13 +51,28 @@ export default function AdminUserDetailPage() {
       .catch(() => toast.error("Could not load wallet activity"));
   }, [id]);
 
-  const patchUser = async (payload: { is_active?: boolean; is_verified_business?: boolean }) => {
+  const patchUser = async (payload: { is_verified_business?: boolean }) => {
     if (!data) return;
     setBusy(true);
     try {
       await api.updateAdminUser(data.id, payload);
       toast.success("User updated");
       setData((prev) => (prev ? { ...prev, ...payload } : prev));
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update user");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unsuspend = async () => {
+    if (!data) return;
+    setBusy(true);
+    try {
+      await api.unsuspendUser(data.id);
+      toast.success("User reactivated");
+      const refreshed = await api.adminUserDetail(data.id);
+      setData(refreshed);
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not update user");
     } finally {
@@ -95,10 +112,7 @@ export default function AdminUserDetailPage() {
               size="sm"
               variant="outline"
               disabled={busy}
-              onClick={() => {
-                if (data.is_active && !confirm(`Suspend ${data.first_name} ${data.last_name}? This immediately ends their active sessions.`)) return;
-                patchUser({ is_active: !data.is_active });
-              }}
+              onClick={() => (data.is_active ? setSuspendOpen(true) : unsuspend())}
             >
               {data.is_active ? "Suspend" : "Reactivate"}
             </Button>
@@ -261,6 +275,13 @@ export default function AdminUserDetailPage() {
             api.adminUserDetail(id).then(setData).catch(() => undefined);
             api.adminWalletTransactions({ user_id: id, limit: 8 }).then(setWalletTxs).catch(() => undefined);
           }}
+        />
+      )}
+      {suspendOpen && (
+        <SuspendUserDialog
+          user={data}
+          onClose={() => setSuspendOpen(false)}
+          onDone={() => api.adminUserDetail(id).then(setData).catch(() => undefined)}
         />
       )}
     </div>
