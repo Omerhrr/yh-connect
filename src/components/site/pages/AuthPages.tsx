@@ -30,6 +30,14 @@ import { api, ApiError } from "@/lib/api";
 import { SKILLS, CATEGORIES } from "@/data/content";
 import { inferCategoryId } from "@/lib/categoryInference";
 import { toast } from "sonner";
+import { LocationPicker, type LocationValue } from "@/components/site/shared/LocationPicker";
+import {
+  clearGuestProjectDraft,
+  loadGuestProjectDraft,
+  saveGuestProjectDraft,
+  tryCreateProjectFromGuestDraft,
+  type GuestProjectDraft,
+} from "@/lib/guestProjectDraft";
 
 function PasswordInput({
   id,
@@ -247,7 +255,7 @@ export function ClientLoginPage() {
   );
 }
 
-const CLIENT_STEPS = ["What you need", "Project", "Budget", "Skills", "Name", "Email", "Password", "Terms"];
+const CLIENT_STEPS = ["What you need", "Category", "Project", "Budget", "Skills", "Name", "Email", "Password", "Terms"];
 
 export function ClientRegisterPage() {
   const { navigate, setClientAuth } = useNav();
@@ -263,10 +271,17 @@ export function ClientRegisterPage() {
   const inferredCategoryId = inferCategoryId(needText);
   const inferredCategoryLabel = CATEGORIES.find((c) => c.id === inferredCategoryId)?.label ?? "General Contracting & Building";
 
-  const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [categoryTouched, setCategoryTouched] = useState(false);
+  const effectiveCategoryId = categoryTouched && categoryId ? categoryId : inferredCategoryId;
 
+  const [title, setTitle] = useState("");
+  const [location, setLocation] = useState<LocationValue>({ state: "", lga: "", address: "" });
+
+  const [budgetUnknown, setBudgetUnknown] = useState(false);
   const [budget, setBudget] = useState("");
+  const [timeline, setTimeline] = useState("");
+  const [hiringDeadline, setHiringDeadline] = useState("");
 
   const [skills, setSkills] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
@@ -283,6 +298,46 @@ export function ClientRegisterPage() {
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
 
+  // Restore a draft left over from a previous, unfinished attempt (e.g. the
+  // user filled the wizard, registered, but hadn't verified their email yet
+  // when they came back). See src/lib/guestProjectDraft.ts.
+  const [restoredDraft, setRestoredDraft] = useState(false);
+  useEffect(() => {
+    const d = loadGuestProjectDraft();
+    if (!d) return;
+    setNeedText((prev) => prev || d.needText);
+    setTitle(d.title);
+    setLocation({ state: d.state, lga: d.lga, address: d.address });
+    setCategoryId(d.categoryId);
+    setCategoryTouched(d.categoryTouched);
+    setBudgetUnknown(d.budgetUnknown);
+    setBudget(d.budget);
+    setTimeline(d.timeline);
+    setHiringDeadline(d.hiringDeadline);
+    setSkills(d.skills);
+    setRestoredDraft(true);
+  }, []);
+
+  // Persist every keystroke to localStorage from the very first step, so the
+  // draft survives the user leaving to verify their email in another tab.
+  useEffect(() => {
+    const draft: GuestProjectDraft = {
+      needText,
+      title,
+      state: location.state,
+      lga: location.lga,
+      address: location.address,
+      categoryId: effectiveCategoryId,
+      categoryTouched,
+      budgetUnknown,
+      budget,
+      timeline,
+      hiringDeadline,
+      skills,
+    };
+    if (needText || title || skills.length) saveGuestProjectDraft(draft);
+  }, [needText, title, location, effectiveCategoryId, categoryTouched, budgetUnknown, budget, timeline, hiringDeadline, skills]);
+
   useEffect(() => {
     api.contentPage("client-project-terms")
       .then((p) => setProjectTerms({ title: p.title, body: p.body }))
@@ -291,12 +346,13 @@ export function ClientRegisterPage() {
 
   const goNext = () => {
     if (step === 0 && !needText.trim()) return toast.error("Please tell us what you need help with");
-    if (step === 1 && !title) return toast.error("Please enter a project title");
-    if (step === 2 && (!budget || Number(budget) <= 0)) return toast.error("Please enter your estimated budget");
-    if (step === 3 && skills.length === 0) return toast.error("Pick at least one skill from the suggestions or add your own");
-    if (step === 4 && (!firstName || !lastName)) return toast.error("Please enter your first and last name");
-    if (step === 5 && !email) return toast.error("Please enter your email address");
-    if (step === 6) {
+    if (step === 1 && !effectiveCategoryId) return toast.error("Please pick a category");
+    if (step === 2 && !title) return toast.error("Please enter a project title");
+    if (step === 3 && !budgetUnknown && (!budget || Number(budget) <= 0)) return toast.error("Please enter your estimated budget, or mark it as not set");
+    if (step === 4 && skills.length === 0) return toast.error("Pick at least one skill from the suggestions or add your own");
+    if (step === 5 && (!firstName || !lastName)) return toast.error("Please enter your first and last name");
+    if (step === 6 && !email) return toast.error("Please enter your email address");
+    if (step === 7) {
       if (!password || !confirmPassword) return toast.error("Please enter and confirm your password");
       if (password !== confirmPassword) return toast.error("Passwords do not match");
       if (password.length < 8) return toast.error("Password must be at least 8 characters");
@@ -321,9 +377,17 @@ export function ClientRegisterPage() {
 
     setLoading(true);
     try {
-      const budgetAmount = Number(budget);
-      const categoryId = inferredCategoryId;
-      const categoryLabel = inferredCategoryLabel;
+      const budgetAmount = budgetUnknown ? 0 : Number(budget);
+      const categoryId = effectiveCategoryId;
+      const categoryLabel = CATEGORIES.find((c) => c.id === categoryId)?.label ?? inferredCategoryLabel;
+
+      // Keep the draft in localStorage up to date right before we submit,
+      // in case account creation succeeds but the project post below fails
+      // because the account is still unverified — see guestProjectDraft.ts.
+      saveGuestProjectDraft({
+        needText, title, state: location.state, lga: location.lga, address: location.address,
+        categoryId, categoryTouched, budgetUnknown, budget, timeline, hiringDeadline, skills,
+      });
 
       const res = await api.registerClient({
         email,
@@ -340,16 +404,25 @@ export function ClientRegisterPage() {
           title,
           description: needText.trim() || `${title}. Needs a ${categoryLabel} professional. Required skills: ${skills.join(", ")}.`,
           category_id: categoryId,
-          location: location || undefined,
+          location: [location.lga, location.state].filter(Boolean).join(", ") || undefined,
+          state: location.state || undefined,
+          lga: location.lga || undefined,
+          address: location.address || undefined,
           budget_min: budgetAmount,
           budget_max: budgetAmount,
           budget_type: "fixed",
           skills,
+          timeline: timeline || undefined,
+          hiring_deadline: hiringDeadline ? new Date(hiringDeadline).toISOString() : undefined,
         });
         createdProjectId = project.id;
+        clearGuestProjectDraft();
         toast.success("Account created and project posted!", { description: "Your project is now live for professionals to bid on." });
       } catch {
-        toast.success("Account created!", { description: "We couldn't auto-post your project, you can post it from your dashboard." });
+        // Most likely: the account needs email verification before it can
+        // post. Don't lose the work — the draft stays in localStorage and
+        // gets auto-posted from the verify-email success screen.
+        toast.success("Account created!", { description: "Verify your email and we'll post your project automatically." });
       }
 
       if (next) {
@@ -424,29 +497,40 @@ export function ClientRegisterPage() {
 
             {step === 1 && (
               <div>
+                <ChatBubble>Which category best fits this? We guessed one from what you told us, feel free to change it.</ChatBubble>
+                <div className="space-y-1.5">
+                  <Label htmlFor="category">Category *</Label>
+                  <select
+                    id="category"
+                    value={effectiveCategoryId}
+                    onChange={(e) => { setCategoryId(e.target.value); setCategoryTouched(true); }}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] outline-none"
+                  >
+                    {CATEGORIES.map((c) => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {step === 2 && (
+              <div>
                 <ChatBubble>Good choice. What should we call this project, and where's it based?</ChatBubble>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <Label htmlFor="title">Project Title *</Label>
                     <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 3-bedroom bungalow renovation" />
                   </div>
+                  <LocationPicker value={location} onChange={setLocation} />
                   <div className="space-y-1.5">
-                    <Label htmlFor="location">Location</Label>
-                    <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" />
+                    <Label htmlFor="timeline">Expected Timeline</Label>
+                    <Input id="timeline" value={timeline} onChange={(e) => setTimeline(e.target.value)} placeholder="e.g. 2-3 months" />
                   </div>
-                </div>
-              </div>
-            )}
-
-            {}
-            {step === 2 && (
-              <div>
-                <ChatBubble>What's your estimated budget for this? A rough figure is fine, you can refine it later.</ChatBubble>
-                <div className="space-y-1.5">
-                  <Label htmlFor="budget">Estimated Budget (₦) *</Label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
-                    <Input id="budget" type="number" min="1" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="500000" className="pl-7" />
+                  <div className="space-y-1.5">
+                    <Label htmlFor="hiringDeadline">Hiring Deadline</Label>
+                    <Input id="hiringDeadline" type="date" value={hiringDeadline} onChange={(e) => setHiringDeadline(e.target.value)} />
+                    <p className="text-xs text-muted-foreground">Lets talents know how long you'll be accepting bids for.</p>
                   </div>
                 </div>
               </div>
@@ -454,6 +538,35 @@ export function ClientRegisterPage() {
 
 
             {step === 3 && (
+              <div>
+                <ChatBubble>What's your estimated budget for this? A rough figure is fine, you can refine it later.</ChatBubble>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="budget">Estimated Budget (₦) {!budgetUnknown && "*"}</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₦</span>
+                      <Input
+                        id="budget"
+                        type="number"
+                        min="1"
+                        value={budget}
+                        onChange={(e) => setBudget(e.target.value)}
+                        placeholder="500000"
+                        className="pl-7"
+                        disabled={budgetUnknown}
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <Checkbox checked={budgetUnknown} onCheckedChange={(v) => setBudgetUnknown(!!v)} />
+                    <span className="text-sm text-muted-foreground">I don't have a budget in mind yet</span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+
+            {step === 4 && (
               <div>
                 <ChatBubble>What skills should they bring to the table? Tap the ones you need, or add your own.</ChatBubble>
                 <div className="space-y-3">
@@ -504,7 +617,7 @@ export function ClientRegisterPage() {
             )}
 
 
-            {step === 4 && (
+            {step === 5 && (
               <div>
                 <ChatBubble>Almost there. Who am I speaking with?</ChatBubble>
                 <div className="grid grid-cols-2 gap-4">
@@ -524,7 +637,7 @@ export function ClientRegisterPage() {
             )}
 
 
-            {step === 5 && (
+            {step === 6 && (
               <div>
                 <ChatBubble>
                   {firstName ? `Nice to meet you, ${firstName}. What's your email address?` : "What's your email address?"}
@@ -540,7 +653,7 @@ export function ClientRegisterPage() {
             )}
 
 
-            {step === 6 && (
+            {step === 7 && (
               <div>
                 <ChatBubble>Last step, set a password to secure your account. We'll create it and post your project right after.</ChatBubble>
                 <div className="space-y-4">
@@ -560,7 +673,7 @@ export function ClientRegisterPage() {
             )}
 
 
-            {step === 7 && (
+            {step === 8 && (
               <div>
                 <ChatBubble>One last thing, please review and accept our project posting terms.</ChatBubble>
                 <div className="space-y-3">
@@ -1149,6 +1262,7 @@ export function VerifyEmailPage() {
     token ? "confirm" : "awaiting"
   );
   const [resending, setResending] = useState(false);
+  const [recoveredProjectId, setRecoveredProjectId] = useState<string | null>(null);
   const user = useAuth((s) => s.user);
   const refreshMe = useAuth((s) => s.refreshMe);
   const logout = useAuth((s) => s.logout);
@@ -1163,7 +1277,17 @@ export function VerifyEmailPage() {
     setStatus("verifying");
     api
       .verifyEmail(token)
-      .then(() => refreshMe().finally(() => setStatus("success")))
+      .then(() =>
+        refreshMe()
+          .then(() => tryCreateProjectFromGuestDraft())
+          .then((id) => {
+            if (id) {
+              setRecoveredProjectId(id);
+              toast.success("Your project from before you verified has been posted!");
+            }
+          })
+          .finally(() => setStatus("success"))
+      )
       .catch((err) => {
         // Only a 4xx from the API means the token itself is genuinely
         // invalid/expired — anything else (network blip, 5xx) shouldn't
@@ -1212,8 +1336,16 @@ export function VerifyEmailPage() {
       )}
       {status === "success" && (
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">Your email has been verified.</p>
-          <Button className="w-full" onClick={() => router.replace(dashboardHref)}>Continue</Button>
+          <p className="text-sm text-muted-foreground">
+            Your email has been verified.
+            {recoveredProjectId && " Your project has been posted and is now live."}
+          </p>
+          <Button
+            className="w-full"
+            onClick={() => router.replace(recoveredProjectId ? `/client/dashboard/projects/${recoveredProjectId}` : dashboardHref)}
+          >
+            Continue
+          </Button>
         </div>
       )}
       {status === "awaiting" && (

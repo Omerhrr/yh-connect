@@ -289,11 +289,15 @@ export type ProjectOut = {
   description: string;
   category: CategoryOut;
   location?: string | null;
+  state?: string | null;
+  lga?: string | null;
+  address?: string | null;
   budget_min: number;
   budget_max: number;
   budget_type: "fixed" | "hourly";
   skills: string[];
   timeline?: string | null;
+  hiring_deadline?: string | null;
   image_urls: string[];
   video_url?: string | null;
   status: "open" | "in_progress" | "review" | "completed" | "cancelled";
@@ -1170,6 +1174,16 @@ export const api = {
 
   categories: () => request<CategoryOut[]>("/categories"),
 
+  activeStates: () => request<{ name: string; active: boolean }[]>("/locations/states/active"),
+  allStates: () => request<{ name: string; active: boolean }[]>("/locations/states"),
+  lgasForState: (state: string) => request<string[]>(`/locations/states/${encodeURIComponent(state)}/lgas`),
+  adminListStates: () => request<{ name: string; active: boolean }[]>("/admin/states"),
+  adminToggleState: (name: string, active: boolean) =>
+    request<{ name: string; active: boolean }>(`/admin/states/${encodeURIComponent(name)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ active }),
+    }),
+
   professionals: (params?: { category_id?: string; location?: string; q?: string; min_rating?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {}).filter(([, v]) => v !== undefined && v !== null && v !== "").map(([k, v]) => [k, String(v)])
@@ -1225,11 +1239,15 @@ export const api = {
     description: string;
     category_id: string;
     location?: string;
+    state?: string;
+    lga?: string;
+    address?: string;
     budget_min: number;
     budget_max: number;
     budget_type: "fixed" | "hourly";
     skills: string[];
     timeline?: string;
+    hiring_deadline?: string;
     image_urls?: string[];
     video_url?: string | null;
   }) => request<ProjectOut>("/projects", { method: "POST", body: JSON.stringify(payload) }),
@@ -1244,12 +1262,16 @@ export const api = {
     title?: string;
     description?: string;
     location?: string;
+    state?: string;
+    lga?: string;
+    address?: string;
     category_id?: string;
     budget_min?: number;
     budget_max?: number;
     budget_type?: "fixed" | "hourly";
     skills?: string[];
     timeline?: string;
+    hiring_deadline?: string | null;
     image_urls?: string[];
     video_url?: string | null;
   }) => request<ProjectOut>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

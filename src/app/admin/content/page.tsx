@@ -24,7 +24,7 @@ import {
   type WhyChooseItem,
 } from "@/lib/siteContent";
 
-type Tab = "pages" | "blog" | "highlights" | "faq" | "categories" | "site-content";
+type Tab = "pages" | "blog" | "highlights" | "faq" | "categories" | "site-content" | "locations";
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -776,6 +776,69 @@ function CategoriesTab() {
   );
 }
 
+function LocationsTab() {
+  const [states, setStates] = useState<{ name: string; active: boolean }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [savingName, setSavingName] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+
+  const load = () => {
+    setLoading(true);
+    api.adminListStates().then(setStates).catch(() => toast.error("Could not load states")).finally(() => setLoading(false));
+  };
+
+  useEffect(load, []);
+
+  const toggle = async (s: { name: string; active: boolean }) => {
+    setSavingName(s.name);
+    setStates((prev) => prev.map((x) => (x.name === s.name ? { ...x, active: !x.active } : x)));
+    try {
+      await api.adminToggleState(s.name, !s.active);
+    } catch (err) {
+      setStates((prev) => prev.map((x) => (x.name === s.name ? { ...x, active: s.active } : x)));
+      toast.error(err instanceof ApiError ? err.message : "Could not update state");
+    } finally {
+      setSavingName(null);
+    }
+  };
+
+  const filtered = states.filter((s) => s.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const activeCount = states.filter((s) => s.active).length;
+
+  if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border bg-background p-5 space-y-1">
+        <p className="text-sm font-medium">Selectable states</p>
+        <p className="text-xs text-muted-foreground">
+          Only active states appear in the state dropdown when a client sets a project&apos;s location. {activeCount} of {states.length} states are currently active.
+        </p>
+      </div>
+      <Input placeholder="Search states…" value={query} onChange={(e) => setQuery(e.target.value)} className="max-w-xs" />
+      <div className="rounded-xl border bg-background divide-y max-h-[32rem] overflow-y-auto">
+        {filtered.map((s) => (
+          <div key={s.name} className="flex items-center justify-between gap-3 p-3.5">
+            <span className="text-sm font-medium">{s.name}</span>
+            <button
+              onClick={() => toggle(s)}
+              disabled={savingName === s.name}
+              className={`text-xs rounded-full px-3 py-1 border transition-colors ${
+                s.active
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-background text-muted-foreground hover:bg-muted"
+              }`}
+            >
+              {savingName === s.name ? "Saving…" : s.active ? "Active" : "Inactive"}
+            </button>
+          </div>
+        ))}
+        {filtered.length === 0 && <p className="p-4 text-sm text-muted-foreground">No states match.</p>}
+      </div>
+    </div>
+  );
+}
+
 const SITE_CONTENT_SECTIONS: { key: SiteContentKey; label: string }[] = [
   { key: "header", label: "Header" },
   { key: "footer", label: "Footer" },
@@ -1228,6 +1291,7 @@ export default function AdminContentPage() {
         <TabButton active={tab === "highlights"} onClick={() => setTab("highlights")}>Highlights</TabButton>
         <TabButton active={tab === "faq"} onClick={() => setTab("faq")}>FAQ</TabButton>
         <TabButton active={tab === "categories"} onClick={() => setTab("categories")}>Categories</TabButton>
+        <TabButton active={tab === "locations"} onClick={() => setTab("locations")}>Locations</TabButton>
       </div>
 
       {tab === "pages" && <PagesTab />}
@@ -1236,6 +1300,7 @@ export default function AdminContentPage() {
       {tab === "highlights" && <HighlightsTab />}
       {tab === "faq" && <FaqTab />}
       {tab === "categories" && <CategoriesTab />}
+      {tab === "locations" && <LocationsTab />}
     </div>
   );
 }

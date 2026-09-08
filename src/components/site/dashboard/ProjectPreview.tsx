@@ -437,6 +437,15 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
                 <p className="font-medium flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {project.timeline}</p>
               </div>
             )}
+            {project.hiring_deadline && (
+              <div>
+                <p className="text-xs text-muted-foreground">Hiring closes</p>
+                <p className="font-medium flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" />
+                  {new Date(project.hiring_deadline).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </div>
+            )}
           </div>
 
           {project.image_urls?.length > 0 && (

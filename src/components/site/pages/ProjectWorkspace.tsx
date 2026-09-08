@@ -52,6 +52,7 @@ import {
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
 import { CATEGORIES } from "@/data/content";
+import { LocationPicker, type LocationValue } from "@/components/site/shared/LocationPicker";
 import { MILESTONE_STATUS_COLORS, BID_STATUS_COLORS, PROJECT_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import { ProjectChat } from "@/components/site/chat/ProjectChat";
@@ -898,7 +899,14 @@ function EditProjectDialog({
 }) {
   const [title, setTitle] = useState(project.title);
   const [description, setDescription] = useState(project.description);
-  const [location, setLocation] = useState(project.location || "");
+  const [location, setLocation] = useState<LocationValue>({
+    state: project.state || "",
+    lga: project.lga || "",
+    address: project.address || "",
+  });
+  const [hiringDeadline, setHiringDeadline] = useState(
+    project.hiring_deadline ? project.hiring_deadline.slice(0, 10) : ""
+  );
   const [categoryId, setCategoryId] = useState(project.category.id);
   const budgetUnset = project.budget_min === 0 && project.budget_max === 0;
   const [budgetUnknown, setBudgetUnknown] = useState(budgetUnset);
@@ -963,13 +971,17 @@ function EditProjectDialog({
       await api.updateProject(project.id, {
         title: title.trim(),
         description: description.trim(),
-        location: location.trim() || undefined,
+        location: [location.lga, location.state].filter(Boolean).join(", ") || undefined,
+        state: location.state || undefined,
+        lga: location.lga || undefined,
+        address: location.address || undefined,
         category_id: categoryId,
         budget_min: min,
         budget_max: max,
         budget_type: budgetType,
         skills: skills.split(",").map((s) => s.trim()).filter(Boolean),
         timeline: timeline.trim() || undefined,
+        hiring_deadline: hiringDeadline ? new Date(hiringDeadline).toISOString() : null,
         image_urls: imageUrls,
         video_url: videoUrl.trim() || undefined,
       });
@@ -1003,21 +1015,22 @@ function EditProjectDialog({
             className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm resize-none"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Category *</label>
-            <select
-              value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium">Location</label>
-            <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" />
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Category *</label>
+          <select
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </div>
+
+        <LocationPicker value={location} onChange={setLocation} />
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Hiring Deadline</label>
+          <Input type="date" value={hiringDeadline} onChange={(e) => setHiringDeadline(e.target.value)} />
         </div>
 
         <div className="space-y-2">

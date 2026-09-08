@@ -107,6 +107,7 @@ import { Inbox } from "lucide-react";
 import { ReviewCard } from "@/components/site/shared/ReviewCard";
 import { ProfessionalProfileView, StatsBar, WorkHistoryFeed } from "@/components/site/pages/ProfessionalProfileView";
 import { TierTag, CertificationBadges } from "@/components/site/shared/TalentTier";
+import { LocationPicker, type LocationValue } from "@/components/site/shared/LocationPicker";
 
 function UnreadBadge({ count }: { count: number }) {
   if (count <= 0) return null;
@@ -766,7 +767,9 @@ type PostProjectDraft = {
   step: number;
   needText: string;
   title: string;
-  location: string;
+  state: string;
+  lga: string;
+  address: string;
   categoryId: string;
   categoryTouched: boolean;
   budgetType: "fixed" | "hourly";
@@ -775,6 +778,7 @@ type PostProjectDraft = {
   hourlyMax: string;
   skills: string[];
   timeline: string;
+  hiringDeadline: string;
   termsAgreed: boolean;
 };
 
@@ -782,13 +786,15 @@ function loadPostDraft(): PostProjectDraft | null {
   try {
     const raw = localStorage.getItem(POST_DRAFT_KEY);
     if (!raw) return null;
-    const d = JSON.parse(raw) as Partial<PostProjectDraft>;
+    const d = JSON.parse(raw) as Partial<PostProjectDraft> & { location?: string };
     if (typeof d !== "object" || d === null) return null;
     return {
       step: typeof d.step === "number" && d.step >= 0 && d.step < POST_PROJECT_STEPS.length ? d.step : 0,
       needText: typeof d.needText === "string" ? d.needText : "",
       title: typeof d.title === "string" ? d.title : "",
-      location: typeof d.location === "string" ? d.location : "",
+      state: typeof d.state === "string" ? d.state : "",
+      lga: typeof d.lga === "string" ? d.lga : "",
+      address: typeof d.address === "string" ? d.address : (typeof d.location === "string" ? d.location : ""),
       categoryId: typeof d.categoryId === "string" ? d.categoryId : "",
       categoryTouched: !!d.categoryTouched,
       budgetType: d.budgetType === "hourly" ? "hourly" : "fixed",
@@ -797,6 +803,7 @@ function loadPostDraft(): PostProjectDraft | null {
       hourlyMax: typeof d.hourlyMax === "string" ? d.hourlyMax : "",
       skills: Array.isArray(d.skills) ? d.skills.filter((s): s is string => typeof s === "string") : [],
       timeline: typeof d.timeline === "string" ? d.timeline : "",
+      hiringDeadline: typeof d.hiringDeadline === "string" ? d.hiringDeadline : "",
       termsAgreed: !!d.termsAgreed,
     };
   } catch {
@@ -805,7 +812,7 @@ function loadPostDraft(): PostProjectDraft | null {
 }
 
 function isEmptyPostDraft(d: PostProjectDraft): boolean {
-  return !d.needText && !d.title && !d.budgetAmount && !d.hourlyMin && !d.hourlyMax && !d.location && d.skills.length === 0;
+  return !d.needText && !d.title && !d.budgetAmount && !d.hourlyMin && !d.hourlyMax && !d.state && !d.address && d.skills.length === 0;
 }
 
 export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
@@ -815,7 +822,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
 
   const [needText, setNeedText] = useState("");
   const [title, setTitle] = useState("");
-  const [location, setLocation] = useState("");
+  const [location, setLocation] = useState<LocationValue>({ state: "", lga: "", address: "" });
   const [categoryId, setCategoryId] = useState("");
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [budgetType, setBudgetType] = useState<"fixed" | "hourly">("fixed");
@@ -825,6 +832,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   const [skills, setSkills] = useState<string[]>([]);
   const [customSkill, setCustomSkill] = useState("");
   const [timeline, setTimeline] = useState("");
+  const [hiringDeadline, setHiringDeadline] = useState("");
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [mediaSettings, setMediaSettings] = useState<ProjectMediaSettingsOut | null>(null);
@@ -845,7 +853,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setStep(draft.step);
       setNeedText(draft.needText);
       setTitle(draft.title);
-      setLocation(draft.location);
+      setLocation({ state: draft.state, lga: draft.lga, address: draft.address });
       setCategoryId(draft.categoryId);
       setCategoryTouched(draft.categoryTouched);
       setBudgetType(draft.budgetType);
@@ -854,13 +862,14 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMax(draft.hourlyMax);
       setSkills(draft.skills);
       setTimeline(draft.timeline);
+      setHiringDeadline(draft.hiringDeadline);
       setTermsAgreed(draft.termsAgreed);
       setRestoredDraft(true);
     } else {
       setStep(0);
       setNeedText("");
       setTitle("");
-      setLocation("");
+      setLocation({ state: "", lga: "", address: "" });
       setCategoryId("");
       setCategoryTouched(false);
       setBudgetType("fixed");
@@ -869,6 +878,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMax("");
       setSkills([]);
       setTimeline("");
+      setHiringDeadline("");
       setTermsAgreed(false);
       setRestoredDraft(false);
     }
@@ -903,7 +913,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setStep(draft.step);
       setNeedText(draft.needText);
       setTitle(draft.title);
-      setLocation(draft.location);
+      setLocation({ state: draft.state, lga: draft.lga, address: draft.address });
       setCategoryId(draft.categoryId);
       setCategoryTouched(draft.categoryTouched);
       setBudgetType(draft.budgetType);
@@ -912,6 +922,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       setHourlyMax(draft.hourlyMax);
       setSkills(draft.skills);
       setTimeline(draft.timeline);
+      setHiringDeadline(draft.hiringDeadline);
       setTermsAgreed(draft.termsAgreed);
       setRestoredDraft(true);
     };
@@ -925,7 +936,9 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       step,
       needText,
       title,
-      location,
+      state: location.state,
+      lga: location.lga,
+      address: location.address,
       categoryId,
       categoryTouched,
       budgetType,
@@ -934,6 +947,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       hourlyMax,
       skills,
       timeline,
+      hiringDeadline,
       termsAgreed,
     };
     if (isEmptyPostDraft(draft)) {
@@ -942,7 +956,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
       localStorage.setItem(POST_DRAFT_KEY, JSON.stringify(draft));
     }
     draftChannelRef.current?.postMessage(draft);
-  }, [open, step, needText, title, location, categoryId, categoryTouched, budgetType, budgetAmount, hourlyMin, hourlyMax, skills, timeline, termsAgreed]);
+  }, [open, step, needText, title, location, categoryId, categoryTouched, budgetType, budgetAmount, hourlyMin, hourlyMax, skills, timeline, hiringDeadline, termsAgreed]);
 
   const inferredCategoryId = inferCategoryId(needText);
   const inferredCategoryLabel = CATEGORIES.find((c) => c.id === inferredCategoryId)?.label ?? "General Contracting & Building";
@@ -999,7 +1013,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     setStep(0);
     setNeedText("");
     setTitle("");
-    setLocation("");
+    setLocation({ state: "", lga: "", address: "" });
     setCategoryId("");
     setCategoryTouched(false);
     setBudgetType("fixed");
@@ -1009,6 +1023,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
     setSkills([]);
     setCustomSkill("");
     setTimeline("");
+    setHiringDeadline("");
     setTermsAgreed(false);
     toast.success("Draft cleared, starting fresh");
   };
@@ -1025,12 +1040,16 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
         title: title.trim(),
         description: needText.trim(),
         category_id: effectiveCategoryId,
-        location: location.trim() || undefined,
+        location: [location.lga, location.state].filter(Boolean).join(", ") || undefined,
+        state: location.state || undefined,
+        lga: location.lga || undefined,
+        address: location.address || undefined,
         budget_min: budgetMin,
         budget_max: budgetMax,
         budget_type: budgetType,
         skills,
         timeline: timeline.trim() || undefined,
+        hiring_deadline: hiringDeadline ? new Date(hiringDeadline).toISOString() : undefined,
         image_urls: imageUrls,
         video_url: videoUrl.trim() || undefined,
       });
@@ -1176,9 +1195,11 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                   <label className="text-sm font-medium" htmlFor="pp-title">Project Title *</label>
                   <Input id="pp-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 3-bedroom bungalow renovation" />
                 </div>
+                <LocationPicker value={location} onChange={setLocation} />
                 <div className="space-y-1.5">
-                  <label className="text-sm font-medium" htmlFor="pp-location">Location</label>
-                  <Input id="pp-location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Lekki, Lagos" />
+                  <label className="text-sm font-medium" htmlFor="pp-hiring-deadline">Hiring Deadline</label>
+                  <Input id="pp-hiring-deadline" type="date" value={hiringDeadline} onChange={(e) => setHiringDeadline(e.target.value)} />
+                  <p className="text-xs text-muted-foreground">Lets talents know how long you'll be accepting bids for.</p>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium" htmlFor="pp-category">Category</label>
@@ -1390,7 +1411,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                 <div className="rounded-xl border divide-y text-sm">
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Title</span><span className="font-medium text-right">{title}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Category</span><span className="font-medium text-right">{categoryLabel}</span></div>
-                  <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Location</span><span className="font-medium text-right">{location || "-"}</span></div>
+                  <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Location</span><span className="font-medium text-right">{[location.lga, location.state].filter(Boolean).join(", ") || "-"}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Budget</span><span className="font-medium text-right">{budgetSummary}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Skills</span><span className="font-medium text-right">{skills.length ? skills.join(", ") : "-"}</span></div>
                   <div className="flex justify-between gap-3 p-3"><span className="text-muted-foreground shrink-0">Timeline</span><span className="font-medium text-right">{timeline || "-"}</span></div>
