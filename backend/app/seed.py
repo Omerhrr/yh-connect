@@ -4,6 +4,8 @@ Run with: python -m app.seed
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.models.category import Category
+from app.models.state_setting import StateSetting
+from app.data.nigeria_states import STATE_NAMES
 import app.models
 
 CATEGORIES = [
@@ -33,5 +35,21 @@ def run():
     finally:
         db.close()
 
+
+def run_states():
+    """Seed the state_settings table with all Nigerian states + FCT.
+    Only Kaduna defaults to active; admins can activate others later."""
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        for name in STATE_NAMES:
+            if not db.get(StateSetting, name):
+                db.add(StateSetting(name=name, active=(name == "Kaduna")))
+        db.commit()
+        print(f"Seeded {len(STATE_NAMES)} state settings.")
+    finally:
+        db.close()
+
 if __name__ == "__main__":
     run()
+    run_states()

@@ -32,12 +32,16 @@ class Project(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     location: Mapped[str | None] = mapped_column(String, nullable=True)
+    state: Mapped[str | None] = mapped_column(String, nullable=True)
+    lga: Mapped[str | None] = mapped_column(String, nullable=True)
+    address: Mapped[str | None] = mapped_column(String, nullable=True)
     budget_min: Mapped[float] = mapped_column(Float, nullable=False)
     budget_max: Mapped[float] = mapped_column(Float, nullable=False)
     budget_type: Mapped[BudgetType] = mapped_column(Enum(BudgetType), default=BudgetType.fixed)
     skills: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     timeline: Mapped[str | None] = mapped_column(String, nullable=True)
+    hiring_deadline: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[ProjectStatus] = mapped_column(Enum(ProjectStatus), default=ProjectStatus.open)
     progress: Mapped[int] = mapped_column(Integer, default=0)
 

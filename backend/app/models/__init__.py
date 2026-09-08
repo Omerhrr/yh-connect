@@ -23,6 +23,7 @@ from app.models.certification import Certification
 from app.models.project_report import ProjectReport
 from app.models.project_access_request import ProjectAccessRequest, AccessRequestType, AccessRequestStatus
 from app.models.contract import Contract, ContractStatus
+from app.models.state_setting import StateSetting
 
 __all__ = [
     "User",

@@ -11,6 +11,9 @@ class ProjectCreate(BaseModel):
     description: str
     category_id: str
     location: Optional[str] = None
+    state: Optional[str] = None
+    lga: Optional[str] = None
+    address: Optional[str] = None
 
     budget_min: float = 0
     budget_max: float = 0
@@ -18,6 +21,7 @@ class ProjectCreate(BaseModel):
     skills: list[str] = []
 
     timeline: Optional[str] = None
+    hiring_deadline: Optional[datetime] = None
 
     image_urls: list[str] = []
     video_url: Optional[str] = None
@@ -29,12 +33,16 @@ class ProjectUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     location: Optional[str] = None
+    state: Optional[str] = None
+    lga: Optional[str] = None
+    address: Optional[str] = None
     category_id: Optional[str] = None
     budget_min: Optional[float] = None
     budget_max: Optional[float] = None
     budget_type: Optional[BudgetType] = None
     skills: Optional[list[str]] = None
     timeline: Optional[str] = None
+    hiring_deadline: Optional[datetime] = None
     image_urls: Optional[list[str]] = None
     video_url: Optional[str] = None
     status: Optional[ProjectStatus] = None
@@ -48,11 +56,15 @@ class ProjectOut(BaseModel):
     description: str
     category: CategoryOut
     location: Optional[str] = None
+    state: Optional[str] = None
+    lga: Optional[str] = None
+    address: Optional[str] = None
     budget_min: float
     budget_max: float
     budget_type: BudgetType
     skills: list[str] = []
     timeline: Optional[str] = None
+    hiring_deadline: Optional[datetime] = None
     image_urls: list[str] = []
     video_url: Optional[str] = None
     status: ProjectStatus

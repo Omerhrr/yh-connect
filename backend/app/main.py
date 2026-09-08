@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.limiter import limiter
 from app.db.run_migrations import run_migrations
 from app.seed import run as seed_categories
+from app.seed import run_states as seed_states
 import app.models
 
 logger = logging.getLogger("app.startup")
@@ -78,6 +79,7 @@ def on_startup():
         run_migrations()
         logger.info("startup: migrations complete, seeding categories...")
         seed_categories()
+        seed_states()
         logger.info("startup: seed complete, mounting uploads dir...")
         os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
         app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")

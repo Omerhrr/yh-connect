@@ -13,6 +13,7 @@ from app.api.v1 import (
     favorites,
     internal,
     invites,
+    locations,
     messages,
     milestones,
     notifications,
@@ -32,6 +33,8 @@ api_router.include_router(auth.router)
 api_router.include_router(admin.router)
 api_router.include_router(content.router)
 api_router.include_router(categories.router)
+api_router.include_router(locations.router)
+api_router.include_router(locations.admin_router)
 api_router.include_router(professionals.router)
 api_router.include_router(portfolio.router)
 api_router.include_router(profile_sections.router)

@@ -317,6 +317,21 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
     loadMyRequests();
   }, [projectId, user]);
 
+  // The inspection-request/schedule fields only load once on mount — if the
+  // talent already had this page open when the client approved and proposed
+  // a visit time, they'd never see it without a manual reload. Refresh on
+  // window focus and a slow background poll so it shows up live instead.
+  useEffect(() => {
+    if (!user || user.role !== "professional") return;
+    const onFocus = () => loadMyRequests();
+    window.addEventListener("focus", onFocus);
+    const interval = setInterval(loadMyRequests, 30000);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
+  }, [projectId, user]);
+
   const inspectionRequest = myRequests.find((r) => r.request_type === "inspection");
   const chatRequest = myRequests.find((r) => r.request_type === "chat");
   const anyApproved = myRequests.find((r) => r.status === "approved");
