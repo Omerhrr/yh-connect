@@ -36,15 +36,15 @@ export function Header() {
   const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href + "/"));
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
         {}
         <button
           onClick={() => go("home")}
           className="flex items-center gap-2 font-bold text-xl shrink-0"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Zap className="h-4 w-4" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-blue-600 text-primary-foreground shadow-md shadow-primary/25">
+            <Zap className="h-4.5 w-4.5" />
           </div>
           <span>
             YH <span className="text-primary">Connect</span>
@@ -52,12 +52,12 @@ export function Header() {
         </button>
 
         {}
-        <nav className="hidden lg:flex items-center gap-4 xl:gap-5">
+        <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
           {navLinks.map((link) => (
             <SmartLink
               key={link.label + link.href}
               href={link.href}
-              className={`text-sm font-medium whitespace-nowrap transition-colors hover:text-primary ${isActive(link.href) ? "text-primary" : "text-muted-foreground"}`}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors hover:text-primary hover:bg-primary/5 ${isActive(link.href) ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
             >
               {link.label}
             </SmartLink>
@@ -65,20 +65,37 @@ export function Header() {
         </nav>
 
         {}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {clientAuthed ? (
             <Button variant="ghost" size="sm" className="hidden lg:inline-flex whitespace-nowrap" onClick={() => go("client-dashboard")}>
               <Briefcase className="h-4 w-4 mr-1" /> My Dashboard
             </Button>
-          ) : null}
-          {talentAuthed ? (
+          ) : talentAuthed ? (
             <Button size="sm" className="hidden lg:inline-flex whitespace-nowrap" onClick={() => go("talent-dashboard")}>
               <User className="h-4 w-4 mr-1" /> My Profile
             </Button>
-          ) : null}
+          ) : (
+            <div className="hidden md:flex items-center gap-2 mr-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="whitespace-nowrap rounded-full border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
+                onClick={() => go("client-login")}
+              >
+                <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Client Login
+              </Button>
+              <Button
+                size="sm"
+                className="whitespace-nowrap rounded-full shadow-sm shadow-primary/20"
+                onClick={() => go("talent-login")}
+              >
+                <User className="h-3.5 w-3.5 mr-1.5" /> Talent Login
+              </Button>
+            </div>
+          )}
           <ThemeToggle />
           <button
-            className="p-2"
+            className="p-2 rounded-full hover:bg-muted transition-colors"
             onClick={() => setMenuOpen((o) => !o)}
             aria-label="Toggle menu"
           >
