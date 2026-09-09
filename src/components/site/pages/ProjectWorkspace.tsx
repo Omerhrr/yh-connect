@@ -2114,6 +2114,13 @@ export function ProjectWorkspace({
                   messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
                   mapAddress={activeInspection?.address}
                   mapDetails={activeInspection ? { phone: activeInspection.phone, details: activeInspection.details } : undefined}
+                  schedule={activeInspection ? {
+                    scheduleStatus: activeInspection.schedule_status,
+                    proposedDatetime: activeInspection.proposed_datetime,
+                    proposedBy: activeInspection.proposed_by,
+                    scheduledDatetime: activeInspection.scheduled_datetime,
+                  } : undefined}
+                  onRespondToSchedule={(action, datetime) => activeInspection && respondToSchedule(activeInspection.id, action, datetime)}
                   onActivity={loadUnread}
                   onClose={() => {
                     setActiveThread(null);
@@ -2155,6 +2162,13 @@ export function ProjectWorkspace({
                   messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
                   mapAddress={activeInspection?.address}
                   mapDetails={activeInspection ? { phone: activeInspection.phone, details: activeInspection.details } : undefined}
+                  schedule={activeInspection ? {
+                    scheduleStatus: activeInspection.schedule_status,
+                    proposedDatetime: activeInspection.proposed_datetime,
+                    proposedBy: activeInspection.proposed_by,
+                    scheduledDatetime: activeInspection.scheduled_datetime,
+                  } : undefined}
+                  onRespondToSchedule={(action, datetime) => activeInspection && respondToSchedule(activeInspection.id, action, datetime)}
                   onActivity={loadUnread}
                   onClose={() => {
                     setActiveThread(null);

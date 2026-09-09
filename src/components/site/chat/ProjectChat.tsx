@@ -211,6 +211,8 @@ export function ProjectChat({
   onBack,
   mapAddress,
   mapDetails,
+  schedule,
+  onRespondToSchedule,
 }: {
   projectId: string;
   otherUserId: string;
@@ -220,6 +222,13 @@ export function ProjectChat({
 
   mapAddress?: string | null;
   mapDetails?: { phone?: string | null; details?: string | null };
+  schedule?: {
+    scheduleStatus?: "awaiting_talent" | "awaiting_client" | "agreed" | null;
+    proposedDatetime?: string | null;
+    proposedBy?: "client" | "professional" | null;
+    scheduledDatetime?: string | null;
+  } | null;
+  onRespondToSchedule?: (action: "accept" | "counter", datetime?: string) => void | Promise<void>;
 
   onBack?: () => void;
 
@@ -245,6 +254,21 @@ export function ProjectChat({
   const [editText, setEditText] = useState("");
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [composingUpdate, setComposingUpdate] = useState(false);
+
+  const [scheduleBusy, setScheduleBusy] = useState(false);
+  const [counterOpen, setCounterOpen] = useState(false);
+  const [counterAt, setCounterAt] = useState("");
+  const myScheduleTurn = user?.role === "client" ? "awaiting_client" : "awaiting_talent";
+  const runScheduleAction = async (action: "accept" | "counter", datetime?: string) => {
+    if (!onRespondToSchedule) return;
+    setScheduleBusy(true);
+    try {
+      await onRespondToSchedule(action, datetime);
+      setCounterOpen(false);
+    } finally {
+      setScheduleBusy(false);
+    }
+  };
 
   const [callStatus, setCallStatus] = useState<CallStatus>("idle");
   const [callMuted, setCallMuted] = useState(false);
@@ -848,6 +872,39 @@ export function ProjectChat({
             {mapDetails?.phone && <p><span className="font-medium text-foreground">Phone:</span> {mapDetails.phone}</p>}
             {mapDetails?.details && <p><span className="font-medium text-foreground">Notes:</span> {mapDetails.details}</p>}
           </div>
+
+          {}
+          {schedule?.scheduleStatus === "agreed" && (
+            <p className="px-3 py-2 text-xs font-medium text-emerald-700 bg-emerald-50 dark:bg-emerald-950/30">
+              Visit agreed for {schedule.scheduledDatetime ? new Date(schedule.scheduledDatetime).toLocaleString() : ""}
+            </p>
+          )}
+          {schedule?.scheduleStatus && schedule.scheduleStatus !== "agreed" && (
+            <div className="px-3 py-2 bg-amber-50 dark:bg-amber-950/20 space-y-1.5">
+              <p className="text-xs text-amber-800 dark:text-amber-300">
+                Proposed by {schedule.proposedBy === user?.role ? "you" : "the other party"}:{" "}
+                {schedule.proposedDatetime ? new Date(schedule.proposedDatetime).toLocaleString() : "—"}
+                {schedule.scheduleStatus !== myScheduleTurn && " — waiting on the other party"}
+              </p>
+              {schedule.scheduleStatus === myScheduleTurn && onRespondToSchedule && !counterOpen && (
+                <div className="flex gap-2">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-7 text-xs" disabled={scheduleBusy} onClick={() => runScheduleAction("accept")}>
+                    Confirm this time
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={scheduleBusy} onClick={() => setCounterOpen(true)}>
+                    Propose different time
+                  </Button>
+                </div>
+              )}
+              {schedule.scheduleStatus === myScheduleTurn && onRespondToSchedule && counterOpen && (
+                <div className="flex gap-2 items-center">
+                  <Input type="datetime-local" value={counterAt} onChange={(e) => setCounterAt(e.target.value)} className="h-7 text-xs" />
+                  <Button size="sm" className="h-7 text-xs" disabled={scheduleBusy || !counterAt} onClick={() => runScheduleAction("counter", counterAt)}>Send</Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setCounterOpen(false)}>Cancel</Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

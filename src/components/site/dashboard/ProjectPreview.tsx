@@ -622,6 +622,13 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
               onClose={() => setChatOpen(false)}
               mapAddress={inspectionRequest?.status === "approved" ? inspectionRequest.address : null}
               mapDetails={inspectionRequest?.status === "approved" ? { phone: inspectionRequest.phone, details: inspectionRequest.details } : undefined}
+              schedule={inspectionRequest?.status === "approved" ? {
+                scheduleStatus: inspectionRequest.schedule_status,
+                proposedDatetime: inspectionRequest.proposed_datetime,
+                proposedBy: inspectionRequest.proposed_by,
+                scheduledDatetime: inspectionRequest.scheduled_datetime,
+              } : undefined}
+              onRespondToSchedule={(action, datetime) => respondToSchedule(action, datetime)}
             />
           </div>
         </div>
