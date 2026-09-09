@@ -20,11 +20,19 @@ Two operations:
 
 Usage (run inside the api container):
 
+    docker compose exec api python -m app.scripts.reset_data --all --dry-run
     docker compose exec api python -m app.scripts.reset_data --all --yes
+    docker compose exec api python -m app.scripts.reset_data --user someone@example.com --dry-run
     docker compose exec api python -m app.scripts.reset_data --user someone@example.com --yes
 
+Add --dry-run to either command to preview what would be deleted (row
+counts per table) without changing anything — nothing is committed, and the
+whole thing runs inside a transaction that gets rolled back at the end. Use
+this first.
+
 Omit --yes to get an interactive confirmation prompt instead (recommended
-the first time you run this against a real deployment).
+the first time you run this against a real deployment). --dry-run implies
+no confirmation is needed since nothing is written.
 """
 import argparse
 import sys
@@ -84,7 +92,24 @@ PRESERVED_TABLES = [
 ]
 
 
-def wipe_all_except_admins(db: Session) -> None:
+def wipe_all_except_admins(db: Session, dry_run: bool = False) -> None:
+    if dry_run:
+        print("DRY RUN — nothing will be deleted. Row counts that WOULD be wiped:\n")
+        total = 0
+        for table in WIPE_TABLES:
+            count = db.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
+            total += count
+            print(f"  {table:<28} {count}")
+        non_admins = db.execute(
+            text("SELECT COUNT(*) FROM users WHERE role != :admin_role"),
+            {"admin_role": UserRole.admin.value},
+        ).scalar_one()
+        print(f"  {'users (non-admin)':<28} {non_admins}")
+        print(f"\nTotal rows: {total + non_admins}")
+        print(f"Preserved (untouched): {', '.join(PRESERVED_TABLES)}, plus admin accounts.")
+        db.rollback()
+        return
+
     table_list = ", ".join(WIPE_TABLES)
     db.execute(text(f"TRUNCATE TABLE {table_list} CASCADE"))
     result = db.execute(text("DELETE FROM users WHERE role != :admin_role"), {"admin_role": UserRole.admin.value})
@@ -99,7 +124,7 @@ def _find_user(db: Session, identifier: str) -> User | None:
     return db.get(User, identifier)
 
 
-def delete_user(db: Session, identifier: str) -> None:
+def delete_user(db: Session, identifier: str, dry_run: bool = False) -> None:
     user = _find_user(db, identifier)
     if not user:
         raise SystemExit(f"No user found matching '{identifier}'")
@@ -109,125 +134,143 @@ def delete_user(db: Session, identifier: str) -> None:
 
     uid = user.id
     p = {"uid": uid}
+    counts: dict[str, int] = {}
+
+    def run(label: str, sql: str, params: dict = p) -> None:
+        result = db.execute(text(sql), params)
+        counts[label] = counts.get(label, 0) + (result.rowcount or 0)
 
     if user.role == UserRole.client:
         # A client's own projects are deleted in full, including every
         # other party's activity on them (bids, messages, disputes, etc.)
         # -- that data has no meaning once the project it's about is gone.
-        db.execute(text("""
+        run("dispute_messages", """
             DELETE FROM dispute_messages WHERE dispute_id IN (
                 SELECT id FROM disputes WHERE project_id IN (
                     SELECT id FROM projects WHERE client_id = :uid))
-        """), p)
-        db.execute(text("""
+        """)
+        run("dispute_events", """
             DELETE FROM dispute_events WHERE dispute_id IN (
                 SELECT id FROM disputes WHERE project_id IN (
                     SELECT id FROM projects WHERE client_id = :uid))
-        """), p)
-        db.execute(text("DELETE FROM disputes WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM messages WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("""
+        """)
+        run("disputes", "DELETE FROM disputes WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("messages", "DELETE FROM messages WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("milestone_updates", """
             DELETE FROM milestone_updates WHERE milestone_id IN (
                 SELECT id FROM milestones WHERE project_id IN (
                     SELECT id FROM projects WHERE client_id = :uid))
-        """), p)
-        db.execute(text("DELETE FROM change_orders WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM milestones WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM contracts WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM bids WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM project_invites WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM project_access_requests WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM reviews WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
-        db.execute(text("DELETE FROM project_reports WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)"), p)
+        """)
+        run("change_orders", "DELETE FROM change_orders WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("milestones", "DELETE FROM milestones WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("contracts", "DELETE FROM contracts WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("bids", "DELETE FROM bids WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("project_invites", "DELETE FROM project_invites WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("project_access_requests", "DELETE FROM project_access_requests WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("reviews", "DELETE FROM reviews WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
+        run("project_reports (by project)", "DELETE FROM project_reports WHERE project_id IN (SELECT id FROM projects WHERE client_id = :uid)")
 
         # Ledger: remove whole transactions this client's wallet was party
         # to (both sides of each transaction, so the books stay balanced —
         # partial removal would leave dangling unbalanced entries on the
         # platform-side accounts).
-        db.execute(text("""
+        run("ledger_entries", """
             DELETE FROM ledger_entries WHERE transaction_id IN (
                 SELECT le.transaction_id FROM ledger_entries le
                 JOIN ledger_accounts la ON la.id = le.account_id
                 WHERE la.user_id = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("ledger_transactions", """
             DELETE FROM ledger_transactions WHERE id NOT IN (SELECT DISTINCT transaction_id FROM ledger_entries)
-        """))
-        db.execute(text("DELETE FROM ledger_accounts WHERE user_id = :uid"), p)
+        """, {})
+        run("ledger_accounts", "DELETE FROM ledger_accounts WHERE user_id = :uid")
 
-        db.execute(text("DELETE FROM wallet_transactions WHERE client_id = :uid"), p)
-        db.execute(text("DELETE FROM projects WHERE client_id = :uid"), p)
+        run("wallet_transactions", "DELETE FROM wallet_transactions WHERE client_id = :uid")
+        run("projects", "DELETE FROM projects WHERE client_id = :uid")
 
     else:  # professional
         # This professional's fingerprints on OTHER clients' (kept)
         # projects are removed surgically: null the nullable pointers,
         # delete the rows that can't be nulled (NOT NULL FK to users.id).
-        db.execute(text("UPDATE projects SET assigned_professional_id = NULL WHERE assigned_professional_id = :uid"), p)
-        db.execute(text("UPDATE milestones SET created_by = NULL WHERE created_by = :uid"), p)
-        db.execute(text("UPDATE disputes SET resolved_by = NULL WHERE resolved_by = :uid"), p)
-        db.execute(text("UPDATE disputes SET proposed_by = NULL WHERE proposed_by = :uid"), p)
-        db.execute(text("UPDATE dispute_events SET actor_id = NULL WHERE actor_id = :uid"), p)
-        db.execute(text("UPDATE wallet_transactions SET professional_id = NULL WHERE professional_id = :uid"), p)
+        run("projects.assigned_professional_id -> NULL", "UPDATE projects SET assigned_professional_id = NULL WHERE assigned_professional_id = :uid")
+        run("milestones.created_by -> NULL", "UPDATE milestones SET created_by = NULL WHERE created_by = :uid")
+        run("disputes.resolved_by -> NULL", "UPDATE disputes SET resolved_by = NULL WHERE resolved_by = :uid")
+        run("disputes.proposed_by -> NULL", "UPDATE disputes SET proposed_by = NULL WHERE proposed_by = :uid")
+        run("dispute_events.actor_id -> NULL", "UPDATE dispute_events SET actor_id = NULL WHERE actor_id = :uid")
+        run("wallet_transactions.professional_id -> NULL", "UPDATE wallet_transactions SET professional_id = NULL WHERE professional_id = :uid")
 
-        db.execute(text("""
+        run("dispute_messages (raised disputes)", """
             DELETE FROM dispute_messages WHERE dispute_id IN (
                 SELECT id FROM disputes WHERE raised_by = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("dispute_events (raised disputes)", """
             DELETE FROM dispute_events WHERE dispute_id IN (
                 SELECT id FROM disputes WHERE raised_by = :uid)
-        """), p)
-        db.execute(text("DELETE FROM disputes WHERE raised_by = :uid"), p)
-        db.execute(text("DELETE FROM dispute_messages WHERE sender_id = :uid"), p)
+        """)
+        run("disputes (raised_by)", "DELETE FROM disputes WHERE raised_by = :uid")
+        run("dispute_messages (sender)", "DELETE FROM dispute_messages WHERE sender_id = :uid")
 
-        db.execute(text("DELETE FROM change_orders WHERE proposed_by = :uid"), p)
-        db.execute(text("DELETE FROM contracts WHERE professional_id = :uid"), p)
-        db.execute(text("DELETE FROM bids WHERE professional_id = :uid"), p)
-        db.execute(text("DELETE FROM project_invites WHERE professional_id = :uid"), p)
-        db.execute(text("DELETE FROM project_access_requests WHERE professional_id = :uid"), p)
-        db.execute(text("DELETE FROM payout_accounts WHERE professional_id = :uid"), p)
-        db.execute(text("DELETE FROM messages WHERE sender_id = :uid OR recipient_id = :uid"), p)
-        db.execute(text("DELETE FROM reviews WHERE reviewer_id = :uid OR reviewee_id = :uid"), p)
+        run("change_orders", "DELETE FROM change_orders WHERE proposed_by = :uid")
+        run("contracts", "DELETE FROM contracts WHERE professional_id = :uid")
+        run("bids", "DELETE FROM bids WHERE professional_id = :uid")
+        run("project_invites", "DELETE FROM project_invites WHERE professional_id = :uid")
+        run("project_access_requests", "DELETE FROM project_access_requests WHERE professional_id = :uid")
+        run("payout_accounts", "DELETE FROM payout_accounts WHERE professional_id = :uid")
+        run("messages", "DELETE FROM messages WHERE sender_id = :uid OR recipient_id = :uid")
+        run("reviews", "DELETE FROM reviews WHERE reviewer_id = :uid OR reviewee_id = :uid")
 
-        db.execute(text("""
+        run("ledger_entries", """
             DELETE FROM ledger_entries WHERE transaction_id IN (
                 SELECT le.transaction_id FROM ledger_entries le
                 JOIN ledger_accounts la ON la.id = le.account_id
                 WHERE la.user_id = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("ledger_transactions", """
             DELETE FROM ledger_transactions WHERE id NOT IN (SELECT DISTINCT transaction_id FROM ledger_entries)
-        """))
-        db.execute(text("DELETE FROM ledger_accounts WHERE user_id = :uid"), p)
+        """, {})
+        run("ledger_accounts", "DELETE FROM ledger_accounts WHERE user_id = :uid")
 
         # professional_profiles cascades portfolio_items/certifications/
         # employment_history/educations (all FK on profile_id).
-        db.execute(text("""
+        run("portfolio_items", """
             DELETE FROM portfolio_items WHERE profile_id IN (
                 SELECT id FROM professional_profiles WHERE user_id = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("certifications", """
             DELETE FROM certifications WHERE profile_id IN (
                 SELECT id FROM professional_profiles WHERE user_id = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("employment_history", """
             DELETE FROM employment_history WHERE profile_id IN (
                 SELECT id FROM professional_profiles WHERE user_id = :uid)
-        """), p)
-        db.execute(text("""
+        """)
+        run("educations", """
             DELETE FROM educations WHERE profile_id IN (
                 SELECT id FROM professional_profiles WHERE user_id = :uid)
-        """), p)
-        db.execute(text("DELETE FROM professional_profiles WHERE user_id = :uid"), p)
+        """)
+        run("professional_profiles", "DELETE FROM professional_profiles WHERE user_id = :uid")
 
     # Common to both roles.
-    db.execute(text("DELETE FROM message_reactions WHERE user_id = :uid"), p)
-    db.execute(text("DELETE FROM favorites WHERE user_id = :uid"), p)
-    db.execute(text("DELETE FROM notifications WHERE user_id = :uid"), p)
-    db.execute(text("DELETE FROM password_reset_tokens WHERE user_id = :uid"), p)
-    db.execute(text("DELETE FROM project_reports WHERE reporter_id = :uid"), p)
+    run("message_reactions", "DELETE FROM message_reactions WHERE user_id = :uid")
+    run("favorites", "DELETE FROM favorites WHERE user_id = :uid")
+    run("notifications", "DELETE FROM notifications WHERE user_id = :uid")
+    run("password_reset_tokens", "DELETE FROM password_reset_tokens WHERE user_id = :uid")
+    run("project_reports (by reporter)", "DELETE FROM project_reports WHERE reporter_id = :uid")
 
-    db.execute(text("DELETE FROM users WHERE id = :uid"), p)
+    run("users", "DELETE FROM users WHERE id = :uid")
+
+    if dry_run:
+        db.rollback()
+        print(f"DRY RUN — nothing will be deleted. Rows that WOULD be affected for "
+              f"{user.email} ({user.role.value}, id={uid}):\n")
+        total = 0
+        for label, n in counts.items():
+            if n:
+                total += n
+                print(f"  {label:<32} {n}")
+        print(f"\nTotal rows affected: {total}")
+        return
+
     db.commit()
     print(f"Deleted user {user.email} ({user.role.value}, id={uid}) and all of their data.")
 
@@ -238,9 +281,10 @@ def main() -> None:
     group.add_argument("--all", action="store_true", help="Wipe all non-admin data.")
     group.add_argument("--user", metavar="EMAIL_OR_ID", help="Delete one user and their data.")
     parser.add_argument("--yes", action="store_true", help="Skip the interactive confirmation prompt.")
+    parser.add_argument("--dry-run", action="store_true", help="Preview row counts without deleting anything.")
     args = parser.parse_args()
 
-    if not args.yes:
+    if not args.dry_run and not args.yes:
         target = "ALL non-admin data" if args.all else f"user '{args.user}' and all their data"
         confirm = input(f"This will permanently delete {target}. Type 'yes' to continue: ")
         if confirm.strip().lower() != "yes":
@@ -250,9 +294,9 @@ def main() -> None:
     db = SessionLocal()
     try:
         if args.all:
-            wipe_all_except_admins(db)
+            wipe_all_except_admins(db, dry_run=args.dry_run)
         else:
-            delete_user(db, args.user)
+            delete_user(db, args.user, dry_run=args.dry_run)
     except Exception:
         db.rollback()
         raise
