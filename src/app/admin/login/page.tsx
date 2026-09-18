@@ -130,7 +130,7 @@ export default function AdminLoginPage() {
             </span>
           </div>
 
-          <div className="bg-white rounded-2xl border shadow-xl p-8">
+          <div className="bg-white dark:bg-slate-900 dark:border-slate-800 rounded-2xl border shadow-xl p-8">
             <div className="mb-6">
               <h2 className="text-lg font-bold flex items-center gap-2">
                 <KeyRound className="h-4.5 w-4.5 text-slate-500" /> Administrator sign in

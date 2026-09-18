@@ -21,7 +21,13 @@ export function SuspendUserDialog({
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
-    if (mode === "forever" && !confirm(`This permanently deletes ${user.first_name} ${user.last_name}'s account — they can never log in again. This can't be undone. Continue?`)) return;
+    const confirmMsg =
+      mode === "forever"
+        ? `This permanently deletes ${user.first_name} ${user.last_name}'s account — they can never log in again. This can't be undone. Continue?`
+        : mode === "notice"
+        ? `Suspend ${user.first_name} ${user.last_name} until further notice? They'll be logged out immediately and can't sign back in until you manually unsuspend them.`
+        : `Suspend ${user.first_name} ${user.last_name} for ${Math.max(1, parseInt(days) || 1)} day${Math.max(1, parseInt(days) || 1) === 1 ? "" : "s"}? They'll be logged out immediately and can't sign back in until it expires.`;
+    if (!confirm(confirmMsg)) return;
     setSubmitting(true);
     try {
       const payload =

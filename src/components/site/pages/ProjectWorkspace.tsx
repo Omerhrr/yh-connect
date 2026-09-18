@@ -247,6 +247,8 @@ function MilestoneCard({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
   const statusCopy = milestoneStatusCopy(milestone, isClient);
 
   const act = async (fn: () => Promise<unknown>, successMsg: string) => {
@@ -299,7 +301,7 @@ function MilestoneCard({
       )}
 
       {disputed && (
-        <p className="text-xs bg-red-50 text-red-700 rounded-md p-2 flex items-center gap-1.5">
+        <p className="text-xs bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300 rounded-md p-2 flex items-center gap-1.5">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> This milestone has an open dispute. Funds are on hold until it's resolved.
         </p>
       )}
@@ -328,7 +330,15 @@ function MilestoneCard({
           <PostUpdateForm milestoneId={milestone.id} onPosted={onChanged} />
         )}
         {isProfessional && milestone.status === "funded" && (
-          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => act(() => api.submitMilestone(milestone.id), "Submitted for approval")}>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700"
+            disabled={busy}
+            onClick={() => {
+              if (!confirm(`Submit "${milestone.title}" for the client's approval?\n\nThey'll be notified to review your work and release payment.`)) return;
+              act(() => api.submitMilestone(milestone.id), "Submitted for approval");
+            }}
+          >
             <Send className="h-3.5 w-3.5 mr-1" /> {milestone.submitted_at ? "Resubmit" : "Submit for Approval"}
           </Button>
         )}
@@ -354,18 +364,11 @@ function MilestoneCard({
           <Button
             size="sm"
             variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 border-red-200"
             disabled={busy}
             onClick={() => {
-              const funded = milestone.status === "funded";
-              const note = prompt(
-                funded
-                  ? `Why are you rejecting "${milestone.title}"? ${fmtNaira(milestone.amount)} will be refunded to your wallet, and the professional will see this note.`
-                  : `Why are you rejecting "${milestone.title}"? The professional will see this note.`
-              );
-              if (note === null) return;
-              if (!note.trim()) return toast.error("A note is required to reject a milestone");
-              act(() => api.rejectMilestone(milestone.id, note.trim()), funded ? "Milestone rejected — funds refunded to your wallet" : "Milestone rejected");
+              setRejectNote("");
+              setRejectOpen(true);
             }}
           >
             <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
@@ -375,7 +378,7 @@ function MilestoneCard({
           walletBalance != null &&
           (milestone.status === "pending" || milestone.status === "in_progress") &&
           walletBalance < milestone.amount && (
-            <p className="w-full text-xs text-amber-700 bg-amber-50 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+            <p className="w-full text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
               <span>Wallet balance {fmtNaira(walletBalance)}, need {fmtNaira(milestone.amount)}.</span>
               <Link href="/client/dashboard/payments" className="ml-auto underline font-medium shrink-0">Top up</Link>
@@ -395,6 +398,44 @@ function MilestoneCard({
           </Button>
         )}
       </div>
+
+      {rejectOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setRejectOpen(false)}>
+          <div className="bg-background rounded-2xl border shadow-lg p-5 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-sm">Reject "{milestone.title}"</h3>
+            <p className="text-xs text-muted-foreground">
+              {milestone.status === "funded"
+                ? `${fmtNaira(milestone.amount)} will be refunded to your wallet, and the professional will see this note.`
+                : "The professional will see this note."}
+            </p>
+            <textarea
+              autoFocus
+              className="w-full min-h-[90px] rounded-lg border bg-background p-2.5 text-sm"
+              placeholder="Explain why you're rejecting this milestone…"
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button size="sm" variant="outline" disabled={busy} onClick={() => setRejectOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                disabled={busy}
+                onClick={() => {
+                  if (!rejectNote.trim()) return toast.error("A note is required to reject a milestone");
+                  const funded = milestone.status === "funded";
+                  act(() => api.rejectMilestone(milestone.id, rejectNote.trim()), funded ? "Milestone rejected — funds refunded to your wallet" : "Milestone rejected");
+                  setRejectOpen(false);
+                }}
+              >
+                Reject Milestone
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -689,7 +730,7 @@ function BidCard({
       </div>
 
       {bid.status === "offered" && (
-        <p className="text-xs bg-purple-50 text-purple-700 rounded-md p-2">
+        <p className="text-xs bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 rounded-md p-2">
           You offered {fmtNaira(bid.offered_amount || 0)} — waiting on their confirmation.
         </p>
       )}
@@ -1215,11 +1256,11 @@ function FinalReviewSection({
 
   if (isClient) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:p-5 space-y-3">
-        <h2 className="font-semibold flex items-center gap-2 text-amber-900">
+      <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/30 p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2 text-amber-900 dark:text-amber-300">
           <CheckCircle2 className="h-4 w-4" /> Final review
         </h2>
-        <p className="text-sm text-amber-900/80">
+        <p className="text-sm text-amber-900/80 dark:text-amber-300/80">
           All milestones are closed out. Do a final check, then confirm completion to unlock reviews.
         </p>
         {project.closing_note ? (
@@ -1243,11 +1284,11 @@ function FinalReviewSection({
   }
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 md:p-5 space-y-3">
-      <h2 className="font-semibold flex items-center gap-2 text-amber-900">
+    <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/60 dark:bg-amber-950/30 p-4 md:p-5 space-y-3">
+      <h2 className="font-semibold flex items-center gap-2 text-amber-900 dark:text-amber-300">
         <Clock className="h-4 w-4" /> Under final review
       </h2>
-      <p className="text-sm text-amber-900/80">
+      <p className="text-sm text-amber-900/80 dark:text-amber-300/80">
         The client has moved this project to final review. Leave a closing note (or flag any remaining issues) before they sign off.
       </p>
       <textarea
@@ -1528,14 +1569,22 @@ function AcceptanceFeeSection({ projectId }: { projectId: string }) {
 
   if (!quote || quote.paid) {
     return quote?.paid ? (
-      <div className="rounded-xl border bg-emerald-50 border-emerald-200 p-4 flex items-center gap-2">
-        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-        <p className="text-sm text-emerald-700">Acceptance fee paid — you're clear to begin work.</p>
+      <div className="rounded-xl border bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900/50 p-4 flex items-center gap-2">
+        <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        <p className="text-sm text-emerald-700 dark:text-emerald-300">Acceptance fee paid — you're clear to begin work.</p>
       </div>
     ) : null;
   }
 
   const pay = async () => {
+    if (
+      !confirm(
+        quote.amount > 0
+          ? `Pay the ${fmtNaira(quote.amount)} acceptance fee from your wallet balance? This is required before you can start work.`
+          : "Confirm and begin work on this project?"
+      )
+    )
+      return;
     setBusy(true);
     try {
       await api.payAcceptanceFee(projectId);
@@ -1705,6 +1754,8 @@ export function ProjectWorkspace({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [bidsTab, setBidsTab] = useState<"all" | "shortlisted">("all");
   const [editOpen, setEditOpen] = useState(false);
+  const [offerModal, setOfferModal] = useState<{ bidId: string; currentAmount: number; professionalName?: string } | null>(null);
+  const [offerAmount, setOfferAmount] = useState("");
   const [activeThread, setActiveThread] = useState<{ id: string; name: string } | null>(null);
 
   const { threads, loadUnread } = useProjectUnread();
@@ -1841,14 +1892,19 @@ export function ProjectWorkspace({
     }
   };
 
-  const offerBid = async (bidId: string, currentAmount: number, professionalName?: string) => {
-    const input = prompt(`Send ${professionalName || "the professional"} an offer at a different final amount (₦). They'll need to confirm it before the project locks in.`, String(currentAmount));
-    if (input === null) return;
-    const amount = Number(input);
+  const openOfferModal = (bidId: string, currentAmount: number, professionalName?: string) => {
+    setOfferModal({ bidId, currentAmount, professionalName });
+    setOfferAmount(String(currentAmount));
+  };
+
+  const submitOffer = async () => {
+    if (!offerModal) return;
+    const amount = Number(offerAmount);
     if (!amount || amount <= 0) return toast.error("Enter a valid amount");
     try {
-      await api.updateBid(bidId, "accepted", { offered_amount: amount });
+      await api.updateBid(offerModal.bidId, "accepted", { offered_amount: amount });
       toast.success("Offer sent — waiting on their confirmation");
+      setOfferModal(null);
       load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not send offer");
@@ -1956,9 +2012,9 @@ export function ProjectWorkspace({
             )}
             {}
             {project.remaining_unallocated != null && Math.abs(project.remaining_unallocated) > 0.01 && (
-              <div className={`flex items-center gap-2 mt-2 rounded-md px-2.5 py-1.5 ${project.remaining_unallocated > 0 ? "bg-amber-50" : "bg-red-50"}`}>
-                <AlertTriangle className={`h-4 w-4 shrink-0 ${project.remaining_unallocated > 0 ? "text-amber-600" : "text-red-600"}`} />
-                <span className={`text-xs ${project.remaining_unallocated > 0 ? "text-amber-700" : "text-red-700"}`}>
+              <div className={`flex items-center gap-2 mt-2 rounded-md px-2.5 py-1.5 ${project.remaining_unallocated > 0 ? "bg-amber-50 dark:bg-amber-950/40" : "bg-red-50 dark:bg-red-950/40"}`}>
+                <AlertTriangle className={`h-4 w-4 shrink-0 ${project.remaining_unallocated > 0 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`} />
+                <span className={`text-xs ${project.remaining_unallocated > 0 ? "text-amber-700 dark:text-amber-300" : "text-red-700 dark:text-red-300"}`}>
                   {project.remaining_unallocated > 0
                     ? `${fmtNaira(project.remaining_unallocated)} of the contract hasn't been milestoned yet — expect more milestones later for the remaining work.`
                     : `Milestones total ${fmtNaira(Math.abs(project.remaining_unallocated))} more than the agreed contract amount.`}
@@ -2157,7 +2213,7 @@ export function ProjectWorkspace({
                   bid={b}
                   onShortlist={() => shortlistBid(b.id)}
                   onAccept={() => acceptBid(b.id, b.professional_name || undefined)}
-                  onOffer={() => offerBid(b.id, b.amount, b.professional_name || undefined)}
+                  onOffer={() => openOfferModal(b.id, b.amount, b.professional_name || undefined)}
                   onMessage={() => setActiveThread({ id: b.professional_id, name: b.professional_name || "Professional" })}
                   unread={threadUnread[b.professional_id] || 0}
                 />
@@ -2392,6 +2448,35 @@ export function ProjectWorkspace({
 
       {editOpen && (
         <EditProjectDialog project={project} onClose={() => setEditOpen(false)} onSaved={load} />
+      )}
+
+      {offerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setOfferModal(null)}>
+          <div className="bg-background rounded-2xl border shadow-lg p-5 w-full max-w-md space-y-3" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-semibold text-sm">
+              Send {offerModal.professionalName || "the professional"} an offer
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Offer a different final amount (₦). They'll need to confirm it before the project locks in.
+            </p>
+            <input
+              autoFocus
+              type="number"
+              min={1}
+              className="w-full rounded-lg border bg-background p-2.5 text-sm"
+              value={offerAmount}
+              onChange={(e) => setOfferAmount(e.target.value)}
+            />
+            <div className="flex justify-end gap-2 pt-1">
+              <Button size="sm" variant="outline" onClick={() => setOfferModal(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={submitOffer}>
+                Send Offer
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

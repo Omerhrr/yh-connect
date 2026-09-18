@@ -126,6 +126,7 @@ export type UserOut = {
   company_website?: string | null;
   is_verified_business: boolean;
   business_verification_status?: "unverified" | "pending" | "verified" | "rejected";
+  business_verification_note?: string | null;
   preferred_categories?: string[] | null;
   is_verified: boolean;
   email_verified: boolean;

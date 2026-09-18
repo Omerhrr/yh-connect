@@ -923,7 +923,7 @@ export function TalentRegisterPage() {
 
         <StepIndicator steps={TALENT_STEPS} current={step} />
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={step === TALENT_STEPS.length - 1 ? handleSubmit : (e) => e.preventDefault()}>
 
           {step === 0 && (
             <div className="space-y-4">

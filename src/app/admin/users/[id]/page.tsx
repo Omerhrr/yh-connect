@@ -117,7 +117,23 @@ export default function AdminUserDetailPage() {
               {data.is_active ? "Suspend" : "Reactivate"}
             </Button>
             {data.company_name && (
-              <Button size="sm" variant="outline" disabled={busy} onClick={() => patchUser({ is_verified_business: !data.is_verified_business })}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  const granting = !data.is_verified_business;
+                  if (
+                    !confirm(
+                      granting
+                        ? `Grant ${data.first_name} ${data.last_name} the Verified Business badge? This is shown publicly on their profile.`
+                        : `Remove the Verified Business badge from ${data.first_name} ${data.last_name}?`
+                    )
+                  )
+                    return;
+                  patchUser({ is_verified_business: granting });
+                }}
+              >
                 <BadgeCheck className="h-3.5 w-3.5 mr-1" /> {data.is_verified_business ? "Remove Verified Business" : "Verify Business"}
               </Button>
             )}

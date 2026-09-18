@@ -247,9 +247,9 @@ function StatCard({ label, value, icon: Icon, change, color = "primary" }: {
 }) {
   const colorMap = {
     primary: "bg-primary/10 text-primary",
-    emerald: "bg-emerald-100 text-emerald-700",
-    amber: "bg-amber-100 text-amber-700",
-    blue: "bg-blue-100 text-blue-700",
+    emerald: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+    amber: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
+    blue: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300",
   };
   return (
     <div className="rounded-xl border bg-background p-5">
@@ -646,25 +646,25 @@ export function DisputeCaseView({ disputeId, backHref }: { disputeId: string; ba
         )}
 
         {dispute.status === "resolved" && (
-          <div className="rounded-lg bg-green-50 border border-green-200 p-3 text-sm">
-            <p className="font-medium text-green-800">
+          <div className="rounded-lg bg-green-50 border border-green-200 dark:bg-green-950/40 dark:border-green-900 p-3 text-sm">
+            <p className="font-medium text-green-800 dark:text-green-300">
               Resolved{dispute.outcome && ` — ${DISPUTE_OUTCOME_LABELS[dispute.outcome]}`}
             </p>
-            {dispute.resolution_note && <p className="text-green-700 mt-1">{dispute.resolution_note}</p>}
-            {dispute.resolved_by_name && <p className="text-xs text-green-700/70 mt-1">By {dispute.resolved_by_name}{dispute.resolved_at && ` on ${new Date(dispute.resolved_at).toLocaleDateString()}`}</p>}
+            {dispute.resolution_note && <p className="text-green-700 dark:text-green-400 mt-1">{dispute.resolution_note}</p>}
+            {dispute.resolved_by_name && <p className="text-xs text-green-700/70 dark:text-green-400/70 mt-1">By {dispute.resolved_by_name}{dispute.resolved_at && ` on ${new Date(dispute.resolved_at).toLocaleDateString()}`}</p>}
           </div>
         )}
 
         {!isClosed && dispute.proposal_status === "pending" && (
-          <div className="rounded-lg bg-purple-50 border border-purple-200 p-3 text-sm space-y-2">
-            <p className="font-medium text-purple-900">
+          <div className="rounded-lg bg-purple-50 border border-purple-200 dark:bg-purple-950/40 dark:border-purple-900 p-3 text-sm space-y-2">
+            <p className="font-medium text-purple-900 dark:text-purple-300">
               {dispute.proposed_by === user?.id ? "You proposed:" : `${dispute.proposed_by_name || "The other party"} proposed:`}{" "}
               {dispute.proposed_outcome && DISPUTE_OUTCOME_LABELS[dispute.proposed_outcome]}
               {dispute.proposed_outcome === "partial_split" && dispute.proposed_split_amount != null && ` (₦${dispute.proposed_split_amount.toLocaleString("en-NG")} to the professional)`}
             </p>
-            {dispute.proposal_note && <p className="text-purple-800">{dispute.proposal_note}</p>}
+            {dispute.proposal_note && <p className="text-purple-800 dark:text-purple-300">{dispute.proposal_note}</p>}
             {dispute.proposal_expires_at && (
-              <p className="text-xs text-purple-700/80">
+              <p className="text-xs text-purple-700/80 dark:text-purple-400/80">
                 Auto-accepts by {new Date(dispute.proposal_expires_at).toLocaleString()} if there's no response.
               </p>
             )}
@@ -2385,8 +2385,9 @@ export function ClientPayments() {
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        <StatCard label="Paid to Milestones" value={fmtNaira(totalPaid)} icon={CheckCircle2} color="emerald" />
+        <StatCard label="Committed to Milestones" value={fmtNaira(totalPaid)} icon={CheckCircle2} color="emerald" />
       </div>
+      <p className="text-xs text-muted-foreground -mt-3">Includes funds still held in escrow awaiting approval, not only what's already been released to professionals.</p>
 
       <div className="rounded-xl border bg-background">
         <div className="p-5 border-b">
@@ -2443,22 +2444,22 @@ export function ClientPayments() {
 const KYC_STATUS_COPY: Record<string, { label: string; color: string; blurb: string }> = {
   unverified: {
     label: "Not verified",
-    color: "bg-gray-100 text-gray-600",
-    blurb: "Verify your identity with your NIN before you can invite, message, or hire professionals. This protects professionals from unverified contacts.",
+    color: "bg-gray-100 text-gray-600 dark:bg-gray-800/60 dark:text-gray-300",
+    blurb: "Verify your identity with your NIN to earn a trust badge and build confidence with professionals.",
   },
   pending: {
     label: "Pending",
-    color: "bg-amber-100 text-amber-700",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300",
     blurb: "Your verification is being processed.",
   },
   verified: {
     label: "Verified",
-    color: "bg-emerald-100 text-emerald-700",
-    blurb: "Your identity is verified. You can invite, message, and hire professionals.",
+    color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
+    blurb: "Your identity is verified.",
   },
   rejected: {
     label: "Verification failed",
-    color: "bg-red-100 text-red-600",
+    color: "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300",
     blurb: "We couldn't verify that NIN. Double-check the number and try again.",
   },
 };
@@ -2511,7 +2512,7 @@ function ClientKycCard() {
       </div>
       <p className="text-xs text-muted-foreground">{copy.blurb}</p>
       {status === "rejected" && note && (
-        <p className="text-xs text-red-600 bg-red-50 rounded-md p-2">{note}</p>
+        <p className="text-xs text-red-600 bg-red-50 dark:bg-red-950/40 dark:text-red-300 rounded-md p-2">{note}</p>
       )}
       {status !== "verified" && (
         <div className="space-y-3">
@@ -2764,10 +2765,10 @@ function ClientCompanyTab() {
 }
 
 const BUSINESS_STATUS_COPY: Record<string, { label: string; color: string; blurb: string }> = {
-  unverified: { label: "Not submitted", color: "bg-gray-100 text-gray-600", blurb: "Submit your CAC registration to earn the Verified Business badge on your profile." },
-  pending: { label: "Under review", color: "bg-amber-100 text-amber-700", blurb: "Your CAC documentation is being reviewed by our team." },
-  verified: { label: "Verified", color: "bg-emerald-100 text-emerald-700", blurb: "Your business is verified. The badge now shows on your profile." },
-  rejected: { label: "Not approved", color: "bg-red-100 text-red-600", blurb: "Your submission wasn't approved. Review the note below and resubmit." },
+  unverified: { label: "Not submitted", color: "bg-gray-100 text-gray-600 dark:bg-gray-800/60 dark:text-gray-300", blurb: "Submit your CAC registration to earn the Verified Business badge on your profile." },
+  pending: { label: "Under review", color: "bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300", blurb: "Your CAC documentation is being reviewed by our team." },
+  verified: { label: "Verified", color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300", blurb: "Your business is verified. The badge now shows on your profile." },
+  rejected: { label: "Not approved", color: "bg-red-100 text-red-600 dark:bg-red-950/40 dark:text-red-300", blurb: "Your submission wasn't approved. Review the note below and resubmit." },
 };
 
 function ClientBusinessVerificationCard() {
@@ -2815,6 +2816,11 @@ function ClientBusinessVerificationCard() {
         <Badge className={`text-xs rounded-full ${copy.color}`}>{copy.label}</Badge>
       </div>
       <p className="text-xs text-muted-foreground">{copy.blurb}</p>
+      {status === "rejected" && user?.business_verification_note && (
+        <p className="text-xs rounded-lg border border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300 p-2.5">
+          {user.business_verification_note}
+        </p>
+      )}
       {status !== "verified" && status !== "pending" && (
         <div className="space-y-3">
           <div className="space-y-1.5">
@@ -2934,20 +2940,20 @@ function ClientPreferencesTab() {
       {}
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <h2 className="font-semibold">Communication</h2>
-        <p className="text-xs text-muted-foreground">Control how professionals can reach you.</p>
+        <p className="text-xs text-muted-foreground">How professionals can reach you, not yet configurable per-project.</p>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium">Allow direct messages</p>
             <p className="text-xs text-muted-foreground">Professionals can message you directly before being hired.</p>
           </div>
-          <div className="text-xs text-emerald-600 bg-emerald-50 rounded-full px-2.5 py-0.5">Enabled</div>
+          <div className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5">Always on</div>
         </div>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium">Show on marketplace</p>
             <p className="text-xs text-muted-foreground">Your projects are visible to all professionals in the marketplace.</p>
           </div>
-          <div className="text-xs text-emerald-600 bg-emerald-50 rounded-full px-2.5 py-0.5">Enabled</div>
+          <div className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5">Always on</div>
         </div>
       </div>
     </div>
@@ -3493,7 +3499,7 @@ export function ApplyDialog({ project, onClose, onApplied }: { project: ProjectO
               placeholder="Explain your approach, relevant experience, and timeline..."
             />
           </div>
-          <div className="rounded-lg bg-emerald-50 text-emerald-700 p-3 flex items-start gap-2 text-xs">
+          <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 p-3 flex items-start gap-2 text-xs">
             <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />
             <span>
               Work is paid milestone-by-milestone through escrow: the client funds each stage, and you get paid once they approve it. No chasing invoices.
@@ -3813,11 +3819,24 @@ export function TalentSavedProjects() {
 function WithdrawDialog({ balance, onClose, onWithdrawn }: { balance: number; onClose: () => void; onWithdrawn: () => void }) {
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [account, setAccount] = useState<PayoutAccountOut | null>(null);
+
+  useEffect(() => {
+    api.payoutAccounts().then((accts) => setAccount(accts.find((a) => a.is_default) || accts[0] || null)).catch(() => setAccount(null));
+  }, []);
 
   const submit = async () => {
     const n = Number(amount);
     if (!n || n <= 0) return toast.error("Enter an amount greater than zero");
     if (n > balance) return toast.error("Amount exceeds your available balance");
+    if (
+      !confirm(
+        account
+          ? `Withdraw ${fmtNaira(n)} to ${account.bank_name || "your bank"} account ${account.account_number} (${account.account_name})?`
+          : `Withdraw ${fmtNaira(n)} to your bank account?`
+      )
+    )
+      return;
     setSubmitting(true);
     try {
       await api.withdrawWallet(n);
@@ -3835,6 +3854,15 @@ function WithdrawDialog({ balance, onClose, onWithdrawn }: { balance: number; on
       <div className="w-full max-w-sm rounded-xl border bg-background p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
         <h2 className="text-lg font-bold flex items-center gap-2"><Wallet className="h-4 w-4" /> Withdraw to Bank</h2>
         <p className="text-sm text-muted-foreground">Available balance: <span className="font-semibold text-foreground">{fmtNaira(balance)}</span></p>
+        {account ? (
+          <div className="rounded-lg border bg-muted/40 p-2.5 text-xs">
+            <p className="text-muted-foreground">Destination account</p>
+            <p className="font-medium text-foreground mt-0.5">{account.bank_name || "Bank"} · {account.account_number}</p>
+            <p className="text-muted-foreground">{account.account_name}</p>
+          </div>
+        ) : (
+          <p className="text-xs text-amber-600 dark:text-amber-400">No payout account on file yet — add one before withdrawing.</p>
+        )}
         <div className="space-y-1.5">
           <label className="text-sm font-medium">Amount (₦)</label>
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50000" />
@@ -3844,7 +3872,7 @@ function WithdrawDialog({ balance, onClose, onWithdrawn }: { balance: number; on
         </button>
         <div className="flex gap-2 pt-1">
           <Button variant="outline" className="flex-1" onClick={onClose} disabled={submitting}>Cancel</Button>
-          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={submitting || balance <= 0}>{submitting ? "Processing..." : "Withdraw"}</Button>
+          <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700" onClick={submit} disabled={submitting || balance <= 0 || !account}>{submitting ? "Processing..." : "Withdraw"}</Button>
         </div>
       </div>
     </div>
@@ -3913,10 +3941,10 @@ export function TalentEarnings() {
       )}
 
       {hasPayoutDetails === false && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-800">You haven&apos;t added bank details yet, withdrawals won&apos;t work until you do.</p>
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <p className="text-sm text-amber-800 dark:text-amber-300">You haven&apos;t added bank details yet, withdrawals won&apos;t work until you do.</p>
           <Link href="/talent/dashboard/settings?tab=payout">
-            <Button size="sm" variant="outline" className="border-amber-300 text-amber-800 hover:bg-amber-100 shrink-0">Add Bank Details</Button>
+            <Button size="sm" variant="outline" className="border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/40 shrink-0">Add Bank Details</Button>
           </Link>
         </div>
       )}
@@ -3928,9 +3956,9 @@ export function TalentEarnings() {
       </div>
 
       {!!policy && policy.withholding_percent > 0 && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-          <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-800">
+        <div className="flex items-start gap-2.5 rounded-lg border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/30 px-4 py-3">
+          <ShieldCheck className="h-4 w-4 text-blue-700 dark:text-blue-400 shrink-0 mt-0.5" />
+          <p className="text-sm text-blue-800 dark:text-blue-300">
             <span className="font-medium">Payment protection: </span>
             {policy.withholding_percent}% of every milestone payout is held back for {policy.withholding_release_days} day{policy.withholding_release_days === 1 ? "" : "s"} after release, then added to your wallet automatically. The rest lands instantly, as usual.
             {!!holdback && holdback.total_pending > 0 && (
@@ -4454,7 +4482,7 @@ export function TalentProfile() {
             </div>
             <button
               type="button"
-              onClick={async () => { try { await api.deleteCertification(c.id); toast.success("Removed"); load(); } catch { toast.error("Could not remove"); } }}
+              onClick={async () => { if (!confirm(`Remove "${c.name}" from your certifications?`)) return; try { await api.deleteCertification(c.id); toast.success("Removed"); load(); } catch { toast.error("Could not remove"); } }}
               className="text-muted-foreground hover:text-red-600 shrink-0"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -4569,7 +4597,7 @@ function PayoutDetailsForm() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">{a.account_name}</p>
                 {!a.name_match && (
-                  <p className="text-xs text-amber-700 bg-amber-50 rounded-md px-2 py-1 mt-1.5 flex items-start gap-1.5">
+                  <p className="text-xs text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 rounded-md px-2 py-1 mt-1.5 flex items-start gap-1.5">
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                     <span>This account&apos;s name doesn&apos;t match your profile name, so withdrawals are blocked to it. Make sure the account is really yours, or add one in your own name.</span>
                   </p>
@@ -4581,7 +4609,7 @@ function PayoutDetailsForm() {
                     Set Default
                   </Button>
                 )}
-                <Button size="sm" variant="ghost" className="text-xs h-7 text-red-600 hover:text-red-700 hover:bg-red-50" disabled={busyId === a.id} onClick={() => remove(a.id)}>
+                <Button size="sm" variant="ghost" className="text-xs h-7 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40" disabled={busyId === a.id} onClick={() => remove(a.id)}>
                   Remove
                 </Button>
               </div>
@@ -4781,16 +4809,16 @@ function VerificationForm() {
             Your identity is verified. You're on Tier 2, which lifts your daily bid and active-project caps.
           </p>
         ) : docPending ? (
-          <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm">
-            <p className="font-medium text-amber-800">Your identity document is under review</p>
-            <p className="text-amber-700 mt-1">Our team is reviewing the document you uploaded. You'll be notified once it's approved.</p>
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 p-3 text-sm">
+            <p className="font-medium text-amber-800 dark:text-amber-300">Your identity document is under review</p>
+            <p className="text-amber-700 dark:text-amber-300/80 mt-1">Our team is reviewing the document you uploaded. You'll be notified once it's approved.</p>
           </div>
         ) : (
           <>
             {docRejected && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm">
-                <p className="font-medium text-red-800">Your identity verification was not approved</p>
-                <p className="text-red-700 mt-1">{profile.verification_note || "Please review your details and resubmit."}</p>
+              <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-3 text-sm">
+                <p className="font-medium text-red-800 dark:text-red-300">Your identity verification was not approved</p>
+                <p className="text-red-700 dark:text-red-300/80 mt-1">{profile.verification_note || "Please review your details and resubmit."}</p>
               </div>
             )}
             <p className="text-sm text-muted-foreground">
@@ -4834,9 +4862,9 @@ function VerificationForm() {
         ) : (
           <>
             {addressStatus === "rejected" && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm">
-                <p className="font-medium text-red-800">Your proof of address was not approved</p>
-                <p className="text-red-700 mt-1">{profile.address_verification_note || "Please review and resubmit your document."}</p>
+              <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 p-3 text-sm">
+                <p className="font-medium text-red-800 dark:text-red-300">Your proof of address was not approved</p>
+                <p className="text-red-700 dark:text-red-300/80 mt-1">{profile.address_verification_note || "Please review and resubmit your document."}</p>
               </div>
             )}
             <p className="text-sm text-muted-foreground">
@@ -4888,7 +4916,7 @@ function VerificationForm() {
               </div>
               <button
                 type="button"
-                onClick={async () => { try { await api.deleteCertification(c.id); toast.success("Removed"); load(); } catch { toast.error("Could not remove"); } }}
+                onClick={async () => { if (!confirm(`Remove "${c.name}" from your certifications?`)) return; try { await api.deleteCertification(c.id); toast.success("Removed"); load(); } catch { toast.error("Could not remove"); } }}
                 className="text-muted-foreground hover:text-red-600 shrink-0"
                 aria-label={`Remove ${c.name}`}
               >
@@ -5291,7 +5319,7 @@ export function TalentBids() {
     if (!confirm(`Accept the client's offer of ${fmtNaira(b.offered_amount || 0)} for "${b.project_title}"? This assigns you to the project.`)) return;
     try {
       await api.confirmOffer(b.id);
-      toast.success("Offer confirmed. Define the milestone plan to start");
+      toast.success("Offer confirmed — the client will set up the milestone plan next");
       load();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not confirm offer");
@@ -5399,7 +5427,7 @@ export function TalentBids() {
               <div className="min-w-0">
                 <p className="font-semibold text-sm truncate group-hover:text-primary transition-colors">{b.project_title}</p>
                 {b.status === "offered" && b.offered_amount != null && (
-                  <p className="text-xs text-purple-700 bg-purple-50 rounded-md px-2 py-1 mt-1.5 inline-block">
+                  <p className="text-xs text-purple-700 bg-purple-50 dark:bg-purple-950/40 dark:text-purple-300 rounded-md px-2 py-1 mt-1.5 inline-block">
                     Client offered {fmtNaira(b.offered_amount)}{b.offer_note ? `: "${b.offer_note}"` : ""}
                   </p>
                 )}

@@ -121,6 +121,15 @@ export default function AdminUsersPage() {
   };
 
   const toggleVerifiedBusiness = async (user: AdminUserOut) => {
+    const granting = !user.is_verified_business;
+    if (
+      !confirm(
+        granting
+          ? `Grant ${user.first_name} ${user.last_name} the Verified Business badge? This is shown publicly on their profile.`
+          : `Remove the Verified Business badge from ${user.first_name} ${user.last_name}?`
+      )
+    )
+      return;
     setBusyId(user.id);
     try {
       await api.updateAdminUser(user.id, { is_verified_business: !user.is_verified_business });

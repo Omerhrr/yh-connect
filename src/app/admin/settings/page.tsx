@@ -700,9 +700,12 @@ export default function AdminSettingsPage() {
         </button>
       </div>
 
-      {tab === "receipts" && <ReceiptBrandingSection />}
-      {tab === "project-media" && <ProjectMediaSection />}
-      {tab === "acceptance-fee" && <AcceptanceFeeSection />}
+      {/* Every tab stays mounted (just hidden) once visited, instead of
+          being torn down on tab switch — unmounting a section wiped out
+          any unsaved edits in its local draft state with no warning. */}
+      <div className={tab === "receipts" ? "" : "hidden"}><ReceiptBrandingSection /></div>
+      <div className={tab === "project-media" ? "" : "hidden"}><ProjectMediaSection /></div>
+      <div className={tab === "acceptance-fee" ? "" : "hidden"}><AcceptanceFeeSection /></div>
 
       {tab === "platform" && (
       <>

@@ -34,14 +34,25 @@ def run_maintenance_once() -> None:
     resilience in auto_release.py."""
     db = SessionLocal()
     try:
-        projects = (
-            db.query(Project)
-            .join(Milestone, Milestone.project_id == Project.id)
-            .filter(Milestone.status.in_([MilestoneStatus.funded, MilestoneStatus.approved]))
-            .filter(Milestone.submitted_at.isnot(None))
-            .distinct()
-            .all()
-        )
+        # Select just the ids under DISTINCT, then load full rows separately.
+        # Project has a plain JSON column (image_urls) — Postgres's `json`
+        # type has no equality operator, so `.distinct()` on the full
+        # Project entity fails with "could not identify an equality
+        # operator for type json" on every run. Distinct-ing a single
+        # String column (id) sidesteps that; jsonb wouldn't have this
+        # problem, but that's a migration, not a fix for this sweep.
+        project_ids = [
+            row[0]
+            for row in (
+                db.query(Project.id)
+                .join(Milestone, Milestone.project_id == Project.id)
+                .filter(Milestone.status.in_([MilestoneStatus.funded, MilestoneStatus.approved]))
+                .filter(Milestone.submitted_at.isnot(None))
+                .distinct()
+                .all()
+            )
+        ]
+        projects = db.query(Project).filter(Project.id.in_(project_ids)).all() if project_ids else []
         for project in projects:
             try:
                 check_project_auto_release(db, project)

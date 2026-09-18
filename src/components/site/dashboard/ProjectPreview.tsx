@@ -507,9 +507,15 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
               {bidStatus === "withdrawn" ? "Apply again" : "Apply now"}
             </Button>
           )}
-          {project.status !== "open" && (
+          {project.status !== "open" && bidStatus === "accepted" ? (
+            <Link href={`/talent/dashboard/active/${project.id}`}>
+              <Button className="w-full bg-emerald-600 hover:bg-emerald-700">
+                Go to active job
+              </Button>
+            </Link>
+          ) : project.status !== "open" ? (
             <p className="text-xs text-muted-foreground">This project is no longer accepting bids.</p>
-          )}
+          ) : null}
 
           {user?.role === "professional" && (
             <div className="space-y-2 pt-1 border-t">

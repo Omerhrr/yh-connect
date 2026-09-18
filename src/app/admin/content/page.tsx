@@ -1296,13 +1296,16 @@ export default function AdminContentPage() {
         <TabButton active={tab === "locations"} onClick={() => setTab("locations")}>Locations</TabButton>
       </div>
 
-      {tab === "pages" && <PagesTab />}
-      {tab === "site-content" && <SiteContentTab />}
-      {tab === "blog" && <BlogTab />}
-      {tab === "highlights" && <HighlightsTab />}
-      {tab === "faq" && <FaqTab />}
-      {tab === "categories" && <CategoriesTab />}
-      {tab === "locations" && <LocationsTab />}
+      {/* Every tab stays mounted (just hidden) once the page loads, instead
+          of being torn down on tab switch — unmounting a tab wiped out any
+          unsaved edits in its local state with no warning. */}
+      <div className={tab === "pages" ? "" : "hidden"}><PagesTab /></div>
+      <div className={tab === "site-content" ? "" : "hidden"}><SiteContentTab /></div>
+      <div className={tab === "blog" ? "" : "hidden"}><BlogTab /></div>
+      <div className={tab === "highlights" ? "" : "hidden"}><HighlightsTab /></div>
+      <div className={tab === "faq" ? "" : "hidden"}><FaqTab /></div>
+      <div className={tab === "categories" ? "" : "hidden"}><CategoriesTab /></div>
+      <div className={tab === "locations" ? "" : "hidden"}><LocationsTab /></div>
     </div>
   );
 }

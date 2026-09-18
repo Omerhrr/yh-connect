@@ -42,6 +42,7 @@ class UserOut(UserBase):
     company_website: Optional[str] = None
     is_verified_business: bool = False
     business_verification_status: str = "unverified"
+    business_verification_note: Optional[str] = None
     preferred_categories: Optional[list[str]] = None
     is_verified: bool
     email_verified: bool = False

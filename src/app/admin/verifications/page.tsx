@@ -142,7 +142,15 @@ function ReviewList<T>({
                   <Button size="sm" variant="outline" disabled={busyId === id} onClick={() => onReject(item)}>
                     <ShieldX className="h-3.5 w-3.5 mr-1" /> Reject
                   </Button>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busyId === id} onClick={() => onApprove(item)}>
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    disabled={busyId === id}
+                    onClick={() => {
+                      if (!confirm("Approve this verification? The applicant will be notified and their tier/badge updated immediately.")) return;
+                      onApprove(item);
+                    }}
+                  >
                     <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Approve
                   </Button>
                 </div>

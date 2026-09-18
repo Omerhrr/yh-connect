@@ -326,6 +326,15 @@ def adjust_wallet(
         raise HTTPException(status_code=404, detail="User not found")
     if payload.amount == 0:
         raise HTTPException(status_code=400, detail="Amount must not be zero")
+    # Server-side sanity cap — the admin UI warns above this too, but that's
+    # only a confirm() dialog and does nothing to stop a direct API call, so
+    # the real limit has to live here.
+    WALLET_ADJUST_SANITY_CAP = 5_000_000
+    if abs(payload.amount) > WALLET_ADJUST_SANITY_CAP:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Amount exceeds the {WALLET_ADJUST_SANITY_CAP:,.0f} single-adjustment cap. Split large corrections into multiple adjustments if this is intentional.",
+        )
     if user.wallet_balance + payload.amount < 0:
         raise HTTPException(
             status_code=400,
