@@ -5,11 +5,15 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_role
 from app.db.session import get_db
+from app.models.bid import Bid, BidStatus
 from app.models.contract import Contract, ContractStatus
+from app.models.milestone import Milestone
 from app.models.notification import NotificationType
+from app.models.project import Project
 from app.models.user import User, UserRole
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
 from app.schemas.contract import ContractOut, ContractUpdate
+from app.services.contracts import generate_contract_content
 from app.services.notify import notify
 from app.services.reminders import check_contract_reminder, check_contract_escalation, CONTRACT_REMINDER_AFTER
 
@@ -40,6 +44,71 @@ def get_project_contract(project_id: str, current_user: User = Depends(get_curre
     _authorize(contract, current_user)
     check_contract_reminder(db, contract)
     check_contract_escalation(db, contract)
+    return _to_out(contract)
+
+
+@router.post("/projects/{project_id}/contract/generate", response_model=ContractOut, status_code=201)
+def generate_contract(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """The client generates the contract once the milestone plan is in
+    place. Milestones must be created first (see create_milestone in
+    api/v1/milestones.py) so the generated contract can embed the agreed
+    payment schedule — see generate_contract_content."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id and current_user.role != UserRole.admin:
+        raise HTTPException(status_code=403, detail="Only the client can generate the contract")
+    if not project.assigned_professional_id:
+        raise HTTPException(status_code=400, detail="This project doesn't have a hired professional yet")
+
+    existing = db.query(Contract).filter(Contract.project_id == project_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A contract has already been generated for this project")
+
+    milestones = (
+        db.query(Milestone)
+        .filter(Milestone.project_id == project_id)
+        .order_by(Milestone.sort_order)
+        .all()
+    )
+    if not milestones:
+        raise HTTPException(
+            status_code=400,
+            detail="Add at least one milestone to the plan before generating the contract",
+        )
+
+    bid = (
+        db.query(Bid)
+        .filter(
+            Bid.project_id == project_id,
+            Bid.professional_id == project.assigned_professional_id,
+            Bid.status == BidStatus.accepted,
+        )
+        .first()
+    )
+
+    contract = Contract(
+        project_id=project.id,
+        bid_id=bid.id if bid else None,
+        client_id=project.client_id,
+        professional_id=project.assigned_professional_id,
+        content=generate_contract_content(project, bid, milestones),
+        status=ContractStatus.sent_to_professional,
+    )
+    db.add(contract)
+    db.flush()
+    notify(
+        db, project.assigned_professional_id, NotificationType.general,
+        f"Contract ready for your review — \"{project.title}\"",
+        body="The client generated the contract with the milestone plan included. Review and approve it.",
+        link=f"/talent/dashboard/find-work/{project.id}", email_also=True,
+    )
+    db.commit()
+    db.refresh(contract)
     return _to_out(contract)
 
 

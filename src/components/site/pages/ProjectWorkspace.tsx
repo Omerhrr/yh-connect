@@ -1317,13 +1317,14 @@ function OnboardingStrip({ project, milestones }: { project: ProjectOut; milesto
 }
 
 function ContractSection({
-  project, isClient, isProfessional,
-}: { project: ProjectOut; isClient: boolean; isProfessional: boolean }) {
+  project, isClient, isProfessional, milestoneCount,
+}: { project: ProjectOut; isClient: boolean; isProfessional: boolean; milestoneCount: number }) {
   const [contract, setContract] = useState<ContractOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ContractHistoryEntry[] | null>(null);
   const role: "client" | "professional" = isClient ? "client" : "professional";
@@ -1337,7 +1338,43 @@ function ContractSection({
   useEffect(() => { load(); }, [project.id]);
 
   if (loading) return null;
-  if (!contract) return null;
+
+  if (!contract) {
+    const generateContract = async () => {
+      setGenerating(true);
+      try {
+        const created = await api.generateContract(project.id);
+        setContract(created);
+        toast.success("Contract generated with the milestone plan — send it for review");
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : "Could not generate the contract");
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    return (
+      <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">
+        <h2 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" /> Contract</h2>
+        {isClient ? (
+          <>
+            <p className="text-sm text-muted-foreground">
+              {milestoneCount > 0
+                ? "Your milestone plan is ready. Generate the contract, it'll include the milestone plan above."
+                : "Define your milestone plan above first, it'll be included in the contract once you generate it."}
+            </p>
+            <Button size="sm" disabled={milestoneCount === 0 || generating} onClick={generateContract}>
+              {generating ? "Generating..." : "Generate Contract"}
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Waiting for the client to define the milestone plan and generate the contract for your review.
+          </p>
+        )}
+      </div>
+    );
+  }
 
   const startEdit = () => { setDraft(contract.content); setEditing(true); };
 
@@ -1403,13 +1440,13 @@ function ContractSection({
       </div>
       <div className="p-4 md:p-5 space-y-3">
         {}
-        <div className="rounded-lg border shadow-sm bg-[#fbfbf9] p-5 md:p-8 font-serif text-sm leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto">
+        <div className="rounded-lg border shadow-sm bg-[#fbfbf9] text-neutral-900 p-5 md:p-8 font-serif text-sm leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto">
           {editing ? (
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               rows={18}
-              className="w-full bg-transparent border rounded-md p-3 font-serif text-sm resize-y focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full bg-white text-neutral-900 border rounded-md p-3 font-serif text-sm resize-y focus:outline-none focus:ring-1 focus:ring-primary"
             />
           ) : (
             contract.content
@@ -2013,11 +2050,54 @@ export function ProjectWorkspace({
           )}
 
           {}
+          {project.status !== "open" && (
+            <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="font-semibold flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted-foreground" /> Milestone Plan</h2>
+                {project.status === "in_progress" && isClient && (
+                  <AddMilestoneForm projectId={project.id} onAdded={load} />
+                )}
+              </div>
+              {milestones.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{closedCount} of {milestones.length} milestone{milestones.length === 1 ? "" : "s"} closed · {progressPct}% complete</p>
+                </div>
+              )}
+              {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+              {!loading && milestones.length === 0 && (
+                <div className="rounded-lg border border-dashed py-8 text-center">
+                  <ListChecks className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {isClient
+                      ? "No milestones yet. Define your milestone plan here first, then generate the contract below — it'll include this plan."
+                      : "No milestones yet. The client defines the payment plan first, then generates the contract."}
+                  </p>
+                </div>
+              )}
+              {milestones.map((m) => (
+                <MilestoneCard
+                  key={m.id}
+                  milestone={m}
+                  isClient={isClient}
+                  isProfessional={isProfessional}
+                  assignedProfessionalId={project.assigned_professional_id}
+                  disputed={hasProjectWideDispute || disputedMilestoneIds.has(m.id)}
+                  walletBalance={user?.wallet_balance}
+                  onChanged={load}
+                />
+              ))}
+            </div>
+          )}
+
+          {}
           {project.assigned_professional_id && (isClient || isProfessional) && (
             <OnboardingStrip project={project} milestones={milestones} />
           )}
           {project.assigned_professional_id && (isClient || isProfessional) && (
-            <ContractSection project={project} isClient={isClient} isProfessional={isProfessional} />
+            <ContractSection project={project} isClient={isClient} isProfessional={isProfessional} milestoneCount={milestones.length} />
           )}
           {project.assigned_professional_id && isProfessional && (
             <AcceptanceFeeSection projectId={project.id} />
@@ -2177,49 +2257,6 @@ export function ProjectWorkspace({
                   className="h-[26rem]"
                 />
               )}
-            </div>
-          )}
-
-          {}
-          {project.status !== "open" && (
-            <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted-foreground" /> Milestones</h2>
-                {project.status === "in_progress" && isClient && (
-                  <AddMilestoneForm projectId={project.id} onAdded={load} />
-                )}
-              </div>
-              {milestones.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
-                  </div>
-                  <p className="text-xs text-muted-foreground">{closedCount} of {milestones.length} milestone{milestones.length === 1 ? "" : "s"} closed · {progressPct}% complete</p>
-                </div>
-              )}
-              {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
-              {!loading && milestones.length === 0 && (
-                <div className="rounded-lg border border-dashed py-8 text-center">
-                  <ListChecks className="h-6 w-6 text-muted-foreground/50 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    {isClient
-                      ? "No milestones yet. Add one to define the payment schedule, or approve your professional's bid by funding it."
-                      : "No milestones yet. Propose one to set up the payment schedule (the client funds it to approve)."}
-                  </p>
-                </div>
-              )}
-              {milestones.map((m) => (
-                <MilestoneCard
-                  key={m.id}
-                  milestone={m}
-                  isClient={isClient}
-                  isProfessional={isProfessional}
-                  assignedProfessionalId={project.assigned_professional_id}
-                  disputed={hasProjectWideDispute || disputedMilestoneIds.has(m.id)}
-                  walletBalance={user?.wallet_balance}
-                  onChanged={load}
-                />
-              ))}
             </div>
           )}
 

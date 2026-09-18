@@ -1338,6 +1338,8 @@ export const api = {
     request<AccessRequestOut>(`/access-requests/${requestId}/schedule`, { method: "POST", body: JSON.stringify(payload) }),
 
   getProjectContract: (projectId: string) => request<ContractOut>(`/projects/${projectId}/contract`),
+  generateContract: (projectId: string) =>
+    request<ContractOut>(`/projects/${projectId}/contract/generate`, { method: "POST" }),
   editContract: (contractId: string, content: string) =>
     request<ContractOut>(`/contracts/${contractId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
   sendContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/send`, { method: "POST" }),
