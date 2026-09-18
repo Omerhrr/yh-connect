@@ -489,7 +489,7 @@ function ChangeOrdersSection({
   };
 
   return (
-    <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
+    <div id="change-orders" className="rounded-xl border bg-background p-4 md:p-5 space-y-4 scroll-mt-24">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-semibold flex items-center gap-2"><FileEdit className="h-4 w-4 text-muted-foreground" /> Change Orders</h2>
         {(isClient || isProfessional) && active && <ProposeChangeOrderForm projectId={projectId} onAdded={load} />}
@@ -1272,12 +1272,10 @@ function FinalReviewSection({
   );
 }
 
-function OnboardingStrip({ project, milestones }: { project: ProjectOut; milestones: MilestoneOut[] }) {
-  const [contract, setContract] = useState<ContractOut | null>(null);
+function OnboardingStrip({ project, milestones, contract }: { project: ProjectOut; milestones: MilestoneOut[]; contract: ContractOut | null }) {
   const [fee, setFee] = useState<AcceptanceFeeQuote | null>(null);
 
   useEffect(() => {
-    api.getProjectContract(project.id).then(setContract).catch(() => setContract(null));
     api.getAcceptanceFeeQuote(project.id).then(setFee).catch(() => setFee(null));
   }, [project.id]);
 
@@ -1317,10 +1315,15 @@ function OnboardingStrip({ project, milestones }: { project: ProjectOut; milesto
 }
 
 function ContractSection({
-  project, isClient, isProfessional, milestoneCount,
-}: { project: ProjectOut; isClient: boolean; isProfessional: boolean; milestoneCount: number }) {
-  const [contract, setContract] = useState<ContractOut | null>(null);
-  const [loading, setLoading] = useState(true);
+  project, isClient, isProfessional, milestoneCount, contract, onContractChange,
+}: {
+  project: ProjectOut;
+  isClient: boolean;
+  isProfessional: boolean;
+  milestoneCount: number;
+  contract: ContractOut | null;
+  onContractChange: (c: ContractOut | null) => void;
+}) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1331,20 +1334,12 @@ function ContractSection({
   const myApproval = contract ? (isClient ? contract.client_approved : contract.professional_approved) : false;
   const otherApproval = contract ? (isClient ? contract.professional_approved : contract.client_approved) : false;
 
-  const load = () => {
-    setLoading(true);
-    api.getProjectContract(project.id).then(setContract).catch(() => setContract(null)).finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, [project.id]);
-
-  if (loading) return null;
-
   if (!contract) {
     const generateContract = async () => {
       setGenerating(true);
       try {
         const created = await api.generateContract(project.id);
-        setContract(created);
+        onContractChange(created);
         toast.success("Contract generated with the milestone plan — send it for review");
       } catch (err) {
         toast.error(err instanceof ApiError ? err.message : "Could not generate the contract");
@@ -1387,7 +1382,7 @@ function ContractSection({
     setBusy(true);
     try {
       const updated = await api.editContract(contract.id, draft);
-      setContract(updated);
+      onContractChange(updated);
       setEditing(false);
       toast.success("Contract updated — the other party needs to review and approve it again");
     } catch (err) {
@@ -1401,7 +1396,7 @@ function ContractSection({
     setBusy(true);
     try {
       const updated = await api.sendContract(contract.id);
-      setContract(updated);
+      onContractChange(updated);
       toast.success("Sent for the other party's review");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not send the contract");
@@ -1414,7 +1409,7 @@ function ContractSection({
     setBusy(true);
     try {
       const updated = await api.approveContract(contract.id);
-      setContract(updated);
+      onContractChange(updated);
       toast.success(updated.status === "approved" ? "Contract fully approved — work can start once the acceptance fee is paid" : "Approved — waiting on the other party");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not approve the contract");
@@ -1698,6 +1693,7 @@ export function ProjectWorkspace({
   const [project, setProject] = useState(initialProject);
   useEffect(() => { setProject(initialProject); }, [initialProject]);
   const [milestones, setMilestones] = useState<MilestoneOut[]>([]);
+  const [contract, setContract] = useState<ContractOut | null>(null);
   const [bids, setBids] = useState<BidOut[]>([]);
   const [invites, setInvites] = useState<InviteOut[]>([]);
   const [accessRequests, setAccessRequests] = useState<AccessRequestOut[]>([]);
@@ -1741,6 +1737,9 @@ export function ProjectWorkspace({
       api.milestones(project.id).then(setMilestones),
       api.myDisputes().then(setDisputes).catch(() => {}),
     ];
+    if (project.assigned_professional_id) {
+      calls.push(api.getProjectContract(project.id).then(setContract).catch(() => setContract(null)));
+    }
     if (isClient && project.status === "open") {
       calls.push(api.projectBids(project.id).then(setBids));
       calls.push(api.projectInvites(project.id).then(setInvites).catch(() => {}));
@@ -2054,7 +2053,7 @@ export function ProjectWorkspace({
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="font-semibold flex items-center gap-2"><ListChecks className="h-4 w-4 text-muted-foreground" /> Milestone Plan</h2>
-                {project.status === "in_progress" && isClient && (
+                {project.status === "in_progress" && isClient && !contract && (
                   <AddMilestoneForm projectId={project.id} onAdded={load} />
                 )}
               </div>
@@ -2077,6 +2076,12 @@ export function ProjectWorkspace({
                   </p>
                 </div>
               )}
+              {!loading && milestones.length > 0 && contract && (
+                <p className="text-xs text-muted-foreground border rounded-lg px-3 py-2 bg-muted/20">
+                  This plan is locked into the contract below. To add or change scope now, propose a{" "}
+                  <a href="#change-orders" className="underline underline-offset-2">change order</a> so both sides agree to it.
+                </p>
+              )}
               {milestones.map((m) => (
                 <MilestoneCard
                   key={m.id}
@@ -2094,10 +2099,17 @@ export function ProjectWorkspace({
 
           {}
           {project.assigned_professional_id && (isClient || isProfessional) && (
-            <OnboardingStrip project={project} milestones={milestones} />
+            <OnboardingStrip project={project} milestones={milestones} contract={contract} />
           )}
           {project.assigned_professional_id && (isClient || isProfessional) && (
-            <ContractSection project={project} isClient={isClient} isProfessional={isProfessional} milestoneCount={milestones.length} />
+            <ContractSection
+              project={project}
+              isClient={isClient}
+              isProfessional={isProfessional}
+              milestoneCount={milestones.length}
+              contract={contract}
+              onContractChange={setContract}
+            />
           )}
           {project.assigned_professional_id && isProfessional && (
             <AcceptanceFeeSection projectId={project.id} />
