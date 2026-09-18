@@ -27,8 +27,30 @@ export function getToken(): string | null {
 
 export function setToken(token: string | null) {
   if (typeof window === "undefined") return;
-  if (token) window.localStorage.setItem(TOKEN_KEY, token);
-  else window.localStorage.removeItem(TOKEN_KEY);
+  if (token) {
+    window.localStorage.setItem(TOKEN_KEY, token);
+    // A fresh token means a new session — allow the unauthorized handler
+    // to fire again if this one later goes stale too.
+    unauthorizedTriggered = false;
+  } else {
+    window.localStorage.removeItem(TOKEN_KEY);
+  }
+}
+
+// Fires when an authenticated request comes back 401 — i.e. the token we
+// sent was rejected (expired, or the account behind it no longer matches,
+// e.g. deleted/reset via the CLI reset_data script, or the session was
+// invalidated server-side). Without this, a page that was left open for
+// days would keep rendering its cached dashboard shell from localStorage
+// while every data fetch silently failed with a generic "Could not load
+// ..." toast, forcing a manual logout/login to recover. The dashboard
+// layouts register a handler (see useAuthGuard) that clears the session
+// and redirects to login instead.
+let unauthorizedHandler: (() => void) | null = null;
+let unauthorizedTriggered = false;
+
+export function setUnauthorizedHandler(fn: (() => void) | null) {
+  unauthorizedHandler = fn;
 }
 
 export class ApiError extends Error {
@@ -65,6 +87,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         const data = await res.json();
         message = data.detail || message;
       } catch {
+      }
+      // Only an authenticated request (one that sent a token) going 401
+      // means the session itself is invalid — a 401 with no token attached
+      // is just a failed login attempt, not a stale session.
+      if (res.status === 401 && token && !unauthorizedTriggered) {
+        unauthorizedTriggered = true;
+        unauthorizedHandler?.();
       }
       throw new ApiError(res.status, message);
     }
@@ -1529,6 +1558,10 @@ export const api = {
         const data = await res.json();
         message = data.detail || message;
       } catch {
+      }
+      if (res.status === 401 && token && !unauthorizedTriggered) {
+        unauthorizedTriggered = true;
+        unauthorizedHandler?.();
       }
       throw new ApiError(res.status, message);
     }

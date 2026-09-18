@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { useAuth } from "@/store/auth";
-import type { UserRole } from "@/lib/api";
+import { setUnauthorizedHandler, type UserRole } from "@/lib/api";
 
 export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean = true) {
   const router = useRouter();
@@ -16,6 +17,24 @@ export function useAuthGuard(role: UserRole, loginPath: string, enabled: boolean
   // the server this mount, so a genuinely-unverified user doesn't refetch
   // on every render — see the effect below for why this check exists.
   const recheckedRef = useRef(false);
+
+  // A page can sit open for days with a cached user/token in localStorage.
+  // If that session goes stale server-side (expired token, or the account
+  // behind it was reset/deleted, e.g. via the reset_data CLI script), every
+  // subsequent data fetch on the page starts 401ing while the dashboard
+  // shell keeps rendering from the cached user — previously that just
+  // produced a wall of "Could not load ..." toasts until the person
+  // manually logged out and back in. Registering this here clears the
+  // stale session and sends them to login the moment the first 401 for an
+  // authenticated request comes back.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      useAuth.getState().logout();
+      toast.error("Your session has expired. Please log in again.");
+      router.replace(loginPath);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [loginPath, router]);
 
   useEffect(() => {
     if (hydrated) return;

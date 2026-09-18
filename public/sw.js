@@ -1,4 +1,3 @@
-// Minimal service worker: caches the app shell for offline/installable PWA support.
 const CACHE_NAME = "yhc-shell-v1";
 const SHELL_URLS = ["/", "/manifest.json", "/icons/icon-192.png", "/icons/icon-512.png"];
 
@@ -18,13 +17,12 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first for navigation/API, cache-first fallback for the app shell.
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  if (url.pathname.startsWith("/api/")) return; // never cache API calls
+  if (url.pathname.startsWith("/api/")) return;
 
   event.respondWith(
     fetch(request)
