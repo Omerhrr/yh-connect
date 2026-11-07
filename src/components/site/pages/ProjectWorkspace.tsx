@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { diffLines, type DiffGroup } from "@/lib/diff";
 import {
   X,
   Plus,
@@ -256,6 +257,8 @@ function MilestoneCard({
     try {
       await fn();
       toast.success(successMsg);
+      // Money may have moved — re-sync the cached wallet balance.
+      useAuth.getState().refreshMe();
       onChanged();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
@@ -1355,6 +1358,72 @@ function OnboardingStrip({ project, milestones, contract }: { project: ProjectOu
   );
 }
 
+/** Redline view: previous version vs current, with a clickable change index. */
+function ContractDiffView({ oldText, newText, oldLabel }: { oldText: string; newText: string; oldLabel: string }) {
+  const { rows, groups } = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<number | null>(null);
+
+  const jump = (g: DiffGroup) => {
+    setActive(g.id);
+    const el = boxRef.current?.querySelector<HTMLElement>(`[data-group-start="${g.id}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => setActive((a) => (a === g.id ? null : a)), 1800);
+  };
+
+  if (groups.length === 0) {
+    return <p className="text-xs text-muted-foreground">No differences from {oldLabel}.</p>;
+  }
+  const totalAdd = groups.reduce((s, g) => s + g.added, 0);
+  const totalDel = groups.reduce((s, g) => s + g.removed, 0);
+
+  return (
+    <div className="space-y-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="font-medium">Changes since {oldLabel}</span>
+        <span className="rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5">+{totalAdd} added</span>
+        <span className="rounded-full bg-red-100 text-red-700 px-2 py-0.5">−{totalDel} removed</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {groups.map((g) => (
+          <button
+            key={g.id}
+            onClick={() => jump(g)}
+            title={g.preview}
+            className="text-xs rounded-md border px-2 py-1 bg-background hover:bg-muted transition-colors max-w-[220px] truncate"
+          >
+            <span className="font-semibold">Line {g.newLine}</span>
+            <span className="text-emerald-600"> +{g.added}</span>
+            <span className="text-red-600"> −{g.removed}</span>
+            {g.preview && <span className="text-muted-foreground"> · {g.preview}</span>}
+          </button>
+        ))}
+      </div>
+      <div ref={boxRef} className="rounded-lg border shadow-sm bg-[#fbfbf9] text-neutral-900 font-mono text-[13px] leading-relaxed max-h-[420px] overflow-y-auto">
+        {rows.map((r, idx) => {
+          const start = r.group !== null && groups[r.group].rowIndex === idx;
+          const flash = r.group !== null && r.group === active;
+          return (
+            <div
+              key={idx}
+              {...(start ? { "data-group-start": r.group! } : {})}
+              className={`flex gap-2 px-2 whitespace-pre-wrap ${
+                r.kind === "add" ? "bg-emerald-100 text-emerald-900"
+                : r.kind === "del" ? "bg-red-100 text-red-900 line-through decoration-red-400/60"
+                : ""
+              } ${flash ? "ring-2 ring-amber-400 ring-inset" : ""}`}
+            >
+              <span className="w-7 shrink-0 text-right text-neutral-400 select-none">{r.newNo ?? ""}</span>
+              <span className="w-3 shrink-0 select-none font-bold">{r.kind === "add" ? "+" : r.kind === "del" ? "−" : ""}</span>
+              <span className="min-w-0 flex-1 break-words">{r.text || " "}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ContractSection({
   project, isClient, isProfessional, milestoneCount, contract, onContractChange,
 }: {
@@ -1371,6 +1440,15 @@ function ContractSection({
   const [generating, setGenerating] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ContractHistoryEntry[] | null>(null);
+  const [showDiff, setShowDiff] = useState(true);
+  const contractId = contract?.id;
+  const contractVersion = contract?.version ?? 1;
+  useEffect(() => {
+    if (contractId && contractVersion > 1) {
+      api.contractHistory(contractId).then(setHistory).catch(() => setHistory([]));
+    }
+  }, [contractId, contractVersion]);
+  const prev = history && history.length > 0 ? history[history.length - 1] : null;
   const role: "client" | "professional" = isClient ? "client" : "professional";
   const myApproval = contract ? (isClient ? contract.client_approved : contract.professional_approved) : false;
   const otherApproval = contract ? (isClient ? contract.professional_approved : contract.client_approved) : false;
@@ -1475,7 +1553,22 @@ function ContractSection({
         </div>
       </div>
       <div className="p-4 md:p-5 space-y-3">
-        {}
+        {prev && !editing && (
+          <div className="flex gap-1 text-xs">
+            <button onClick={() => setShowDiff(true)} className={`rounded-md px-2.5 py-1 border ${showDiff ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>Changes</button>
+            <button onClick={() => setShowDiff(false)} className={`rounded-md px-2.5 py-1 border ${!showDiff ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}>Clean copy</button>
+          </div>
+        )}
+        {editing && draft !== contract.content && (
+          <ContractDiffView oldText={contract.content} newText={draft} oldLabel="the current version" />
+        )}
+        {prev && !editing && showDiff ? (
+          <ContractDiffView
+            oldText={prev.content}
+            newText={contract.content}
+            oldLabel={`v${prev.version} (${prev.edited_by === "client" ? "client" : prev.edited_by === "professional" ? "talent" : "system"})`}
+          />
+        ) : (
         <div className="rounded-lg border shadow-sm bg-[#fbfbf9] text-neutral-900 p-5 md:p-8 font-serif text-sm leading-relaxed whitespace-pre-wrap max-h-[420px] overflow-y-auto">
           {editing ? (
             <textarea
@@ -1488,6 +1581,7 @@ function ContractSection({
             contract.content
           )}
         </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span className={contract.client_approved ? "text-emerald-700 font-medium" : ""}>
@@ -1499,6 +1593,16 @@ function ContractSection({
           </span>
         </div>
 
+        {contract.status !== "approved" && contract.amounts_tally === false && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-900/50 px-3 py-2.5 text-sm text-amber-900 dark:text-amber-300">
+            <p className="font-medium">Milestones don&apos;t add up to the agreed price</p>
+            <p className="text-xs mt-0.5">
+              Agreed {fmtNaira(contract.agreed_amount ?? 0)} · milestones total {fmtNaira(contract.milestone_total ?? 0)}
+              {" "}({fmtNaira(Math.abs((contract.agreed_amount ?? 0) - (contract.milestone_total ?? 0)))} {(contract.agreed_amount ?? 0) > (contract.milestone_total ?? 0) ? "unallocated" : "over"}).
+              Adjust the milestones so every naira is accounted for. The contract can&apos;t be approved until they match.
+            </p>
+          </div>
+        )}
         {contract.status !== "approved" && (isClient || isProfessional) && (
           <div className="flex flex-wrap gap-2 pt-1">
             {editing ? (
@@ -1516,7 +1620,7 @@ function ContractSection({
                 <Button size="sm" variant="outline" disabled={busy} onClick={sendForApproval}>
                   <Send className="h-3.5 w-3.5 mr-1" /> Send to {role === "client" ? "talent" : "client"}
                 </Button>
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy || myApproval} onClick={approve}>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy || myApproval || contract.amounts_tally === false} onClick={approve}>
                   {myApproval ? "You approved this" : "Approve contract"}
                 </Button>
               </>
@@ -1929,6 +2033,12 @@ export function ProjectWorkspace({
         : { id: project.client_id, name: "Client" }
     );
 
+  // The project chat is always open for the two participants.
+  const defaultThread = isClient
+    ? (project.assigned_professional_id ? { id: project.assigned_professional_id, name: "Professional" } : null)
+    : { id: project.client_id, name: "Client" };
+  const chatThread = activeThread ?? defaultThread;
+
   return (
     <div className="-mx-4 -mt-4 md:-mx-6 md:-mt-6 min-h-full bg-muted/30">
       {}
@@ -2284,30 +2394,21 @@ export function ProjectWorkspace({
           {project.status !== "open" && (isClient || isProfessional) && (
             <div className="rounded-xl border bg-background p-4 md:p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4 text-muted-foreground" /> Messages</h2>
-                {!activeThread && (
-                  <Button size="sm" variant="outline" onClick={openChatWith}>
-                    <MessageSquare className="h-3.5 w-3.5 mr-1" /> Open Chat
-                    {projectUnread > 0 && (
-                      <span className="ml-1.5 h-4 min-w-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
-                        {projectUnread > 9 ? "9+" : projectUnread}
-                      </span>
-                    )}
-                  </Button>
+                <h2 className="font-semibold flex items-center gap-2"><MessageSquare className="h-4 w-4 text-muted-foreground" /> Project chat</h2>
+                {projectUnread > 0 && (
+                  <span className="h-5 min-w-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[11px] flex items-center justify-center">
+                    {projectUnread > 9 ? "9+" : projectUnread}
+                  </span>
                 )}
               </div>
-              {!activeThread && (
-                <div className="rounded-lg border border-dashed py-6 text-center">
-                  <p className="text-sm text-muted-foreground">Open the chat to message {isClient ? "your professional" : "the client"} about this project.</p>
-                </div>
-              )}
-              {activeThread && (
+              {!chatThread && <p className="text-sm text-muted-foreground">No one to message yet.</p>}
+              {chatThread && (
                 <ProjectChat
                   projectId={project.id}
-                  otherUserId={activeThread.id}
-                  otherUserName={activeThread.name}
+                  otherUserId={chatThread.id}
+                  otherUserName={chatThread.name}
                   subtitle={project.title}
-                  messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${activeThread.id}&name=${encodeURIComponent(activeThread.name)}&title=${encodeURIComponent(project.title)}`}
+                  messagesHref={`/${rolePath}/dashboard/messages?project=${project.id}&user=${chatThread.id}&name=${encodeURIComponent(chatThread.name)}&title=${encodeURIComponent(project.title)}`}
                   mapAddress={activeInspection?.address}
                   mapDetails={activeInspection ? { phone: activeInspection.phone, details: activeInspection.details } : undefined}
                   schedule={activeInspection ? {
@@ -2329,7 +2430,8 @@ export function ProjectWorkspace({
           )}
 
           {}
-          {project.status !== "open" && (isClient || isProfessional) && (
+          {/* Change orders are intentionally not rendered for now (code kept). */}
+          {false && project.status !== "open" && (isClient || isProfessional) && (
             <ChangeOrdersSection
               projectId={project.id}
               currentUserId={user?.id}
@@ -2399,9 +2501,13 @@ export function ProjectWorkspace({
                   size="sm"
                   className="w-full justify-start text-emerald-700 hover:text-emerald-800 border-emerald-200 hover:bg-emerald-50"
                   onClick={completeProject}
+                  disabled={milestones.some((m) => m.status !== "paid" && m.status !== "refunded")}
                 >
                   <CheckCircle2 className="h-3.5 w-3.5 mr-2" /> Start Final Review
                 </Button>
+              )}
+              {isClient && project.status === "in_progress" && milestones.some((m) => m.status !== "paid" && m.status !== "refunded") && (
+                <p className="text-xs text-muted-foreground">All milestones must be fully paid before the project can be completed.</p>
               )}
               {project.status !== "open" && !activeThread && (
                 <Button variant="outline" size="sm" className="w-full justify-start" onClick={openChatWith}>

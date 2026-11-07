@@ -1470,13 +1470,79 @@ function BackToTop() {
   );
 }
 
+/** Facts about the platform itself (no invented traction numbers). */
+function PlatformFacts() {
+  const facts = [
+    { icon: Hammer, value: "12", label: "Construction trade categories", tone: "text-primary bg-primary/10" },
+    { icon: MapPin, value: "36 + FCT", label: "States covered across Nigeria", tone: "text-emerald-600 bg-emerald-500/10" },
+    { icon: Lock, value: "100%", label: "Milestone payments held in escrow", tone: "text-amber-600 bg-amber-500/10" },
+    { icon: BadgeCheck, value: "ID + Licence", label: "Verification for professionals", tone: "text-violet-600 bg-violet-500/10" },
+  ];
+  return (
+    <section className="py-10 border-y bg-background">
+      <div className="container mx-auto px-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {facts.map((f) => (
+          <div key={f.label} className="flex items-center gap-3 rounded-xl border bg-card p-4 hover:shadow-md transition-shadow">
+            <div className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center ${f.tone}`}>
+              <f.icon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xl font-bold leading-tight">{f.value}</p>
+              <p className="text-xs text-muted-foreground">{f.label}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Visual explainer of how money moves, the platform's key trust feature. */
+function EscrowInfographic() {
+  const steps = [
+    { icon: Wallet, title: "Client funds a milestone", desc: "Money moves from the client's wallet into secure escrow.", tone: "bg-primary text-primary-foreground" },
+    { icon: Lock, title: "Held safely", desc: "Neither side can touch it while work is in progress.", tone: "bg-amber-500 text-white" },
+    { icon: HardHat, title: "Work is delivered", desc: "Talent submits the milestone with files and photos.", tone: "bg-violet-600 text-white" },
+    { icon: BadgeCheck, title: "Client approves", desc: "Funds are released straight into the talent's wallet.", tone: "bg-emerald-600 text-white" },
+  ];
+  return (
+    <section className="py-20 bg-muted/20">
+      <div className="container mx-auto px-4">
+        <div className="text-center mb-12">
+          <Badge variant="secondary" className="rounded-full mb-3">Secure payments</Badge>
+          <h2 className="text-3xl font-bold">Your money moves only when the work does</h2>
+          <p className="mt-3 text-muted-foreground max-w-xl mx-auto">Every milestone follows the same protected path, so clients never pay for work they haven&apos;t received and talent never works unpaid.</p>
+        </div>
+        <div className="grid md:grid-cols-4 gap-4 relative">
+          {steps.map((s, i) => (
+            <div key={s.title} className="relative rounded-2xl border bg-card p-5 text-center hover:-translate-y-1 hover:shadow-lg transition-all">
+              <div className={`mx-auto h-14 w-14 rounded-2xl flex items-center justify-center shadow-md ${s.tone}`}>
+                <s.icon className="h-6 w-6" />
+              </div>
+              <span className="absolute top-3 left-3 text-xs font-bold text-muted-foreground">0{i + 1}</span>
+              <h3 className="mt-4 font-semibold">{s.title}</h3>
+              <p className="mt-1.5 text-sm text-muted-foreground">{s.desc}</p>
+              {i < steps.length - 1 && (
+                <ArrowRight className="hidden md:block absolute -right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground z-10 bg-background rounded-full" />
+              )}
+            </div>
+          ))}
+        </div>
+        <p className="mt-6 text-center text-xs text-muted-foreground">Disagreement? Either side can open a dispute and the YH Connect team reviews the evidence.</p>
+      </div>
+    </section>
+  );
+}
+
 export function HomePage() {
   return (
     <>
       <Hero />
+      <PlatformFacts />
       <Highlights />
       <Categories />
       <HowItWorks />
+      <EscrowInfographic />
       <FeaturedTalent />
       <RecentProjects />
       <WhyChoose />

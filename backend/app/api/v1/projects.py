@@ -417,6 +417,22 @@ def complete_project(
                 "Release or refund them (or open a dispute) before completing the project."
             ),
         )
+    unpaid = (
+        db.query(Milestone)
+        .filter(
+            Milestone.project_id == project.id,
+            Milestone.status.notin_([MilestoneStatus.paid, MilestoneStatus.refunded]),
+        )
+        .count()
+    )
+    if unpaid:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"{unpaid} milestone{'s are' if unpaid != 1 else ' is'} not fully paid yet. "
+                "Every milestone must be paid before the project can be completed."
+            ),
+        )
     project.status = ProjectStatus.review
     if project.assigned_professional_id:
         notify(
@@ -448,6 +464,12 @@ def confirm_project(
         raise HTTPException(status_code=400, detail="Only projects under final review can be confirmed complete")
     if has_any_blocking_dispute(db, project.id):
         raise HTTPException(status_code=400, detail="Resolve the open dispute before confirming completion")
+    if (
+        db.query(Milestone)
+        .filter(Milestone.project_id == project.id, Milestone.status.notin_([MilestoneStatus.paid, MilestoneStatus.refunded]))
+        .count()
+    ):
+        raise HTTPException(status_code=400, detail="Every milestone must be fully paid before the project can be completed")
     project.status = ProjectStatus.completed
     project.completed_at = datetime.utcnow()
     notify(

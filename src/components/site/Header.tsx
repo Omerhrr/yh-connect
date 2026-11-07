@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   Menu,
@@ -28,6 +28,35 @@ export function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { nav_links: navLinks } = useSiteContent("header");
 
+  const menuRef = useRef<HTMLElement>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Close the menu on outside click / Escape / route change.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+
   const go = (v: Parameters<typeof navigate>[0]) => {
     navigate(v);
     setMenuOpen(false);
@@ -36,7 +65,7 @@ export function Header() {
   const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href + "/"));
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
+    <header ref={menuRef} className={`sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 transition-shadow ${scrolled ? "shadow-md" : "shadow-none"}`}>
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
         {}
         <button
@@ -77,19 +106,27 @@ export function Header() {
           ) : (
             <div className="hidden md:flex items-center gap-2 mr-1">
               <Button
+                variant="ghost"
+                size="sm"
+                className="whitespace-nowrap rounded-full text-muted-foreground hover:text-primary"
+                onClick={() => go("talent-login")}
+              >
+                <LogIn className="h-3.5 w-3.5 mr-1.5" /> Log in
+              </Button>
+              <Button
                 variant="outline"
                 size="sm"
                 className="whitespace-nowrap rounded-full border-primary/30 text-primary hover:bg-primary/10 hover:text-primary"
-                onClick={() => go("client-login")}
+                onClick={() => go("talent-register")}
               >
-                <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Client Login
+                <Briefcase className="h-3.5 w-3.5 mr-1.5" /> Find work
               </Button>
               <Button
                 size="sm"
                 className="whitespace-nowrap rounded-full shadow-sm shadow-primary/20"
-                onClick={() => go("talent-login")}
+                onClick={() => go("client-register")}
               >
-                <User className="h-3.5 w-3.5 mr-1.5" /> Talent Login
+                <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Post a project
               </Button>
             </div>
           )}

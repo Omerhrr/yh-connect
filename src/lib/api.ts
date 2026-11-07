@@ -455,6 +455,9 @@ export type ContractOut = {
   client_approved: boolean;
   professional_approved: boolean;
   last_edited_by?: string | null;
+  agreed_amount?: number | null;
+  milestone_total?: number | null;
+  amounts_tally?: boolean | null;
   version: number;
   created_at: string;
   updated_at: string;

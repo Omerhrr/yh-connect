@@ -1,6 +1,6 @@
 "use client";
 
-import { Zap, Mail, Twitter, Linkedin, Instagram } from "lucide-react";
+import { Zap, Lock, BadgeCheck, Scale, Mail, Twitter, Linkedin, Instagram } from "lucide-react";
 import { SmartLink } from "@/components/site/SmartLink";
 import { useSiteContent } from "@/lib/siteContent";
 import { useNav } from "@/store/nav";
@@ -65,7 +65,19 @@ export function Footer() {
           ))}
         </div>
 
-        <div className="mt-10 pt-6 border-t text-center text-xs text-muted-foreground">
+        <div className="mt-10 flex flex-wrap justify-center gap-2">
+          {[
+            { icon: Lock, label: "Escrow-protected payments" },
+            { icon: BadgeCheck, label: "Verified professionals" },
+            { icon: Scale, label: "Fair dispute resolution" },
+          ].map((b) => (
+            <span key={b.label} className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1 text-xs text-muted-foreground">
+              <b.icon className="h-3.5 w-3.5 text-primary" /> {b.label}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-6 pt-6 border-t text-center text-xs text-muted-foreground">
           © {new Date().getFullYear()} {footer.copyright}
         </div>
       </div>

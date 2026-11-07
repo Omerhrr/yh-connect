@@ -3899,10 +3899,13 @@ export function TalentEarnings() {
     api.paymentPolicy().then(setPolicy).catch(() => undefined);
     api.pendingHoldbacks().then(setHoldback).catch(() => undefined);
   };
-  useEffect(load, []);
+  // The wallet balance lives in the persisted auth store; without a refresh on
+  // mount it shows whatever it was at login, while the "Total Earned" card is
+  // computed fresh from transactions — hence the mismatch after a payout.
+  useEffect(() => { refreshMe(); load(); }, []);
 
   const filtered = filterByDateRange(txs, datePreset, dateFrom, dateTo);
-  const paid = filtered.filter((t) => t.type === "release" && t.status === "successful").reduce((s, t) => s + t.amount, 0);
+  const paid =filtered.filter((t) => t.type === "release" && t.status === "successful").reduce((s, t) => s + t.amount, 0);
   const withdrawn = filtered.filter((t) => t.type === "withdrawal" && t.status === "successful").reduce((s, t) => s + t.amount, 0);
   const balance = user?.wallet_balance || 0;
   const hasDateFilter = datePreset !== "all" || !!dateFrom || !!dateTo;
@@ -3979,6 +3982,36 @@ export function TalentEarnings() {
           <StatCard label="Held Back" value={fmtNaira(holdback?.total_pending || 0)} icon={ShieldCheck} />
         )}
       </div>
+      {(() => {
+        const now = new Date();
+        const months = Array.from({ length: 6 }, (_, k) => {
+          const d = new Date(now.getFullYear(), now.getMonth() - (5 - k), 1);
+          return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleString(undefined, { month: "short" }), total: 0 };
+        });
+        txs.filter((t) => t.type === "release" && t.status === "successful").forEach((t) => {
+          const d = new Date(t.created_at);
+          const m = months.find((x) => x.key === `${d.getFullYear()}-${d.getMonth()}`);
+          if (m) m.total += t.amount;
+        });
+        const max = Math.max(...months.map((m) => m.total), 1);
+        return (
+          <div className="rounded-xl border bg-background p-5">
+            <p className="font-semibold mb-4">Earnings, last 6 months</p>
+            <div className="flex items-end gap-3 h-36">
+              {months.map((m) => (
+                <div key={m.key} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full" title={fmtNaira(m.total)}>
+                  <span className="text-[10px] text-muted-foreground">{m.total > 0 ? fmtNaira(m.total) : ""}</span>
+                  <div
+                    className="w-full rounded-t-md bg-gradient-to-t from-emerald-600 to-emerald-400 transition-all"
+                    style={{ height: `${Math.max((m.total / max) * 100, m.total > 0 ? 6 : 2)}%`, opacity: m.total > 0 ? 1 : 0.25 }}
+                  />
+                  <span className="text-xs text-muted-foreground">{m.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
       <div className="rounded-xl border bg-background">
         <div className="p-5 border-b">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">

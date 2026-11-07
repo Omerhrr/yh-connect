@@ -24,6 +24,9 @@ class ContractOut(BaseModel):
     updated_at: datetime
     approved_at: Optional[datetime] = None
     project_title: Optional[str] = None
+    agreed_amount: Optional[float] = None
+    milestone_total: Optional[float] = None
+    amounts_tally: Optional[bool] = None
 
     class Config:
         from_attributes = True

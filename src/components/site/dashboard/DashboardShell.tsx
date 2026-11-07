@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronRight, LogOut, Mail, Menu, MessageSquare, Search, Settings, User, X, Zap } from "lucide-react";
@@ -78,6 +78,30 @@ export function DashboardShell({
     const interval = setInterval(loadUnread, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // Close the notification / profile dropdowns on any outside click or Escape.
+  useEffect(() => {
+    if (!notifOpen && !profileMenuOpen) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const t = e.target as Node;
+      if (notifOpen && notifRef.current && !notifRef.current.contains(t)) setNotifOpen(false);
+      if (profileMenuOpen && profileRef.current && !profileRef.current.contains(t)) setProfileMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setNotifOpen(false); setProfileMenuOpen(false); }
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [notifOpen, profileMenuOpen]);
 
   const openNotifications = () => {
     setNotifOpen((o) => {
@@ -306,7 +330,7 @@ export function DashboardShell({
           </span>
           <div className="flex items-center gap-2 relative">
             <ThemeToggle />
-            <div className="relative">
+            <div className="relative" ref={notifRef}>
               <button
                 onClick={openNotifications}
                 className="relative p-2 text-muted-foreground hover:text-foreground"
@@ -363,7 +387,7 @@ export function DashboardShell({
                 </div>
               )}
             </div>
-            <div className="relative">
+            <div className="relative" ref={profileRef}>
               <button onClick={() => { setProfileMenuOpen((o) => !o); setNotifOpen(false); }}>
                 <UserAvatar avatarUrl={avatarUrl} name={name} className="h-8 w-8 cursor-pointer" fallbackClassName={accentClass} />
               </button>

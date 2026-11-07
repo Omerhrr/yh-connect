@@ -280,7 +280,15 @@ def reject_milestone(
     db.refresh(milestone)
     return _milestone_out(milestone, db)
 
-@router.post("/projects/{project_id}/change-orders", response_model=ChangeOrderOut, status_code=201)
+CHANGE_ORDERS_ENABLED = False  # flip to True to re-enable change orders
+
+
+def _require_change_orders_enabled():
+    if not CHANGE_ORDERS_ENABLED:
+        raise HTTPException(status_code=403, detail="Change orders are currently disabled")
+
+
+@router.post("/projects/{project_id}/change-orders", response_model=ChangeOrderOut, status_code=201, dependencies=[Depends(_require_change_orders_enabled)])
 def create_change_order(
     project_id: str,
     payload: ChangeOrderCreate,
@@ -310,7 +318,7 @@ def list_change_orders(project_id: str, current_user: User = Depends(get_current
     _require_project_party(project, current_user)
     return project.change_orders
 
-@router.patch("/change-orders/{change_order_id}", response_model=ChangeOrderOut)
+@router.patch("/change-orders/{change_order_id}", response_model=ChangeOrderOut, dependencies=[Depends(_require_change_orders_enabled)])
 def update_change_order(
     change_order_id: str,
     status: ChangeOrderStatus,

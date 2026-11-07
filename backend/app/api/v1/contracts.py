@@ -20,9 +20,33 @@ from app.services.reminders import check_contract_reminder, check_contract_escal
 router = APIRouter(tags=["contracts"])
 
 
-def _to_out(contract: Contract) -> ContractOut:
+def _amounts(db: Session, contract: Contract) -> tuple[float, float]:
+    """(agreed price, sum of milestones). Refunded milestones no longer
+    count toward the plan."""
+    bid = db.get(Bid, contract.bid_id) if contract.bid_id else None
+    project = contract.project
+    if bid:
+        agreed = bid.amount
+    else:
+        agreed = (project.budget_min + project.budget_max) / 2
+    total = sum(
+        m.amount for m in db.query(Milestone).filter(Milestone.project_id == contract.project_id).all()
+        if str(getattr(m.status, "value", m.status)) != "refunded"
+    )
+    return round(agreed, 2), round(total, 2)
+
+
+def _to_out(contract: Contract, db: Session | None = None) -> ContractOut:
     out = ContractOut.model_validate(contract)
     out.project_title = contract.project.title if contract.project else None
+    if db is None:
+        from sqlalchemy.orm import object_session
+        db = object_session(contract)
+    if db is not None:
+        agreed, total = _amounts(db, contract)
+        out.agreed_amount = agreed
+        out.milestone_total = total
+        out.amounts_tally = abs(agreed - total) < 0.01
     return out
 
 
@@ -294,6 +318,18 @@ def approve_contract(
     role = _authorize(contract, current_user)
     if role == "admin":
         raise HTTPException(status_code=403, detail="Only the client or professional can approve this contract")
+
+    agreed, total = _amounts(db, contract)
+    if abs(agreed - total) >= 0.01:
+        diff = agreed - total
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"The milestones total ₦{total:,.2f} but the agreed price is ₦{agreed:,.2f}. "
+                f"{'Add' if diff > 0 else 'Remove'} ₦{abs(diff):,.2f} across the milestones so they add up exactly, "
+                "then approve the contract."
+            ),
+        )
 
     if role == "client":
         contract.client_approved = True
