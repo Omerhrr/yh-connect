@@ -23,6 +23,11 @@ from app.models.certification import Certification
 from app.models.project_report import ProjectReport
 from app.models.project_access_request import ProjectAccessRequest, AccessRequestType, AccessRequestStatus
 from app.models.contract import Contract, ContractStatus
+from app.models.contract_addendum import ContractAddendum
+from app.models.guarantor import Guarantor
+from app.models.verifier import IssuingBody, VerifierAccount
+from app.models.admin_role import AdminRole
+from app.models.consultant import ConsultantApplication, ConsultantNote
 from app.models.state_setting import StateSetting
 from app.models.ledger import LedgerAccount, LedgerAccountKind, LedgerTransaction, LedgerTransactionType, LedgerEntry
 
@@ -74,6 +79,11 @@ __all__ = [
     "Contract",
     "ContractStatus",
     "StateSetting",
+    "ContractAddendum",
+    "Guarantor",
+    "IssuingBody",
+    "VerifierAccount",
+    "AdminRole",
     "LedgerAccount",
     "LedgerAccountKind",
     "LedgerTransaction",

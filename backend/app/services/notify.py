@@ -35,6 +35,23 @@ def notify(
     return n
 
 
+def notify_admins(
+    db: Session,
+    type: NotificationType,
+    title: str,
+    body: str | None = None,
+    link: str | None = None,
+    email_also: bool = True,
+) -> int:
+    """Notify every admin/support user. Returns how many were notified."""
+    from app.models.user import UserRole
+
+    admin_ids = [u.id for u in db.query(User.id).filter(User.role == UserRole.admin).all()]
+    for admin_id in admin_ids:
+        notify(db, admin_id, type, title, body=body, link=link, email_also=email_also)
+    return len(admin_ids)
+
+
 def notify_online_aware(
     db: Session,
     user_id: str,

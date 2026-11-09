@@ -26,6 +26,11 @@ class Certification(Base):
     verification_note: Mapped[str | None] = mapped_column(String, nullable=True)
     verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # Set when an external issuing body (ARCON, COREN, ...) signed this off via
+    # the verifier portal.
+    verified_by_body: Mapped[str | None] = mapped_column(String, nullable=True)
+    verified_by_name: Mapped[str | None] = mapped_column(String, nullable=True)
+
     badge_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Admin-assigned skill tier for this certification/badge, used to compute

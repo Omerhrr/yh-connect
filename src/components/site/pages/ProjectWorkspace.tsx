@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   Star,
   BadgeCheck,
+  Lock,
   MessageSquare,
   UserPlus,
   FileEdit,
@@ -48,12 +49,14 @@ import {
   type AccessRequestOut,
   type ProjectMediaSettingsOut,
   type ContractOut,
+  type ContractAddendumOut,
   type ContractHistoryEntry,
   type AcceptanceFeeQuote,
   DISPUTE_CATEGORY_LABELS,
 } from "@/lib/api";
 import { CATEGORIES } from "@/data/content";
 import { LocationPicker, type LocationValue } from "@/components/site/shared/LocationPicker";
+import { ConsultantPanel } from "@/components/site/shared/ConsultantPanel";
 import { MILESTONE_STATUS_COLORS, BID_STATUS_COLORS, PROJECT_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import { ProjectChat } from "@/components/site/chat/ProjectChat";
@@ -1358,6 +1361,109 @@ function OnboardingStrip({ project, milestones, contract }: { project: ProjectOu
   );
 }
 
+/** Amendments / out-of-scope work on an approved contract. Each addendum is its
+ *  own mini-contract, so the original agreement is never edited. */
+function ContractAddendaSection({
+  projectId, contract, currentUserId, isClient, active, onMilestoneCreated,
+}: {
+  projectId: string;
+  contract: ContractOut;
+  currentUserId?: string;
+  isClient: boolean;
+  active: boolean;
+  onMilestoneCreated: () => void;
+}) {
+  const [items, setItems] = useState<ContractAddendumOut[]>([]);
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [amount, setAmount] = useState("");
+  const [busy, setBusy] = useState(false);
+  const flexible = contract.contract_type === "flexible";
+
+  const load = () => { api.contractAddenda(projectId).then(setItems).catch(() => setItems([])); };
+  useEffect(() => { load(); }, [projectId]);
+
+  const run = async (fn: () => Promise<unknown>, msg: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(msg);
+      load();
+      onMilestoneCreated();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Action failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = () =>
+    run(async () => {
+      await api.createContractAddendum(projectId, { title, content, amount_delta: Number(amount) || 0 });
+      setOpen(false); setTitle(""); setContent(""); setAmount("");
+    }, "Addendum sent for the other party's approval");
+
+  return (
+    <div className="rounded-xl border bg-background p-4 md:p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold flex items-center gap-2"><FileText className="h-4 w-4 text-muted-foreground" /> Addenda &amp; extra work</h2>
+        <Badge variant="outline" className="text-xs rounded-full capitalize">{flexible ? "Flexible contract" : "Fixed contract"}</Badge>
+      </div>
+
+      {!flexible && (
+        <p className="text-sm text-muted-foreground">
+          This is a fixed contract, so its scope and price can&apos;t be changed. For substantial extra work, agree a new contract with the professional.
+        </p>
+      )}
+
+      {items.length === 0 && flexible && <p className="text-sm text-muted-foreground">No addenda yet. The original contract above is unchanged.</p>}
+
+      {items.map((a) => {
+        const mineApproved = isClient ? a.client_approved : a.professional_approved;
+        return (
+          <div key={a.id} className="rounded-lg border p-3 space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-sm font-medium">{a.title}</p>
+              <Badge className={`text-xs rounded-full capitalize ${a.status === "approved" ? "bg-emerald-100 text-emerald-700" : a.status === "rejected" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>{a.status}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap">{a.content}</p>
+            {a.amount_delta !== 0 && <p className="text-xs font-medium">{a.amount_delta > 0 ? "+" : ""}{fmtNaira(a.amount_delta)}</p>}
+            <p className="text-[11px] text-muted-foreground">
+              {new Date(a.created_at).toLocaleDateString()} · client {a.client_approved ? "✓" : "○"} · talent {a.professional_approved ? "✓" : "○"}
+            </p>
+            {a.status === "pending" && active && !mineApproved && (
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => run(() => api.approveContractAddendum(a.id), "Approved")}>Approve</Button>
+                <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => api.rejectContractAddendum(a.id), "Declined")}>Decline</Button>
+              </div>
+            )}
+            {a.status === "pending" && mineApproved && a.proposed_by === currentUserId && (
+              <p className="text-xs text-muted-foreground">Waiting for the other party.</p>
+            )}
+          </div>
+        );
+      })}
+
+      {flexible && active && (
+        open ? (
+          <div className="rounded-lg border p-3 space-y-2 bg-muted/20">
+            <input className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="Title, e.g. Additional bathroom tiling" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <textarea className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" rows={4} placeholder="Describe the change or extra work" value={content} onChange={(e) => setContent(e.target.value)} />
+            <input type="number" className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="Extra cost in ₦ (0 if none, becomes a new milestone)" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            <div className="flex gap-2">
+              <Button size="sm" disabled={busy || !title.trim() || !content.trim()} onClick={submit}>Send for approval</Button>
+              <Button size="sm" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)}>Propose an addendum</Button>
+        )
+      )}
+    </div>
+  );
+}
+
 /** Redline view: previous version vs current, with a clickable change index. */
 function ContractDiffView({ oldText, newText, oldLabel }: { oldText: string; newText: string; oldLabel: string }) {
   const { rows, groups } = useMemo(() => diffLines(oldText, newText), [oldText, newText]);
@@ -1441,6 +1547,7 @@ function ContractSection({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ContractHistoryEntry[] | null>(null);
   const [showDiff, setShowDiff] = useState(true);
+  const [contractType, setContractType] = useState<"fixed" | "flexible">("fixed");
   const contractId = contract?.id;
   const contractVersion = contract?.version ?? 1;
   useEffect(() => {
@@ -1457,7 +1564,7 @@ function ContractSection({
     const generateContract = async () => {
       setGenerating(true);
       try {
-        const created = await api.generateContract(project.id);
+        const created = await api.generateContract(project.id, contractType);
         onContractChange(created);
         toast.success("Contract generated with the milestone plan — send it for review");
       } catch (err) {
@@ -1477,6 +1584,22 @@ function ContractSection({
                 ? "Your milestone plan is ready. Generate the contract, it'll include the milestone plan above."
                 : "Define your milestone plan above first, it'll be included in the contract once you generate it."}
             </p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {([
+                { v: "fixed", t: "Fixed contract", d: "Scope and price are locked once approved. Extra work needs a new contract." },
+                { v: "flexible", t: "Flexible contract", d: "Can be amended later through separately-approved addenda. The original stays untouched." },
+              ] as const).map((o) => (
+                <button
+                  key={o.v}
+                  type="button"
+                  onClick={() => setContractType(o.v)}
+                  className={`text-left rounded-lg border p-3 transition-colors ${contractType === o.v ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+                >
+                  <p className="text-sm font-medium">{o.t}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{o.d}</p>
+                </button>
+              ))}
+            </div>
             <Button size="sm" disabled={milestoneCount === 0 || generating} onClick={generateContract}>
               {generating ? "Generating..." : "Generate Contract"}
             </Button>
@@ -2277,9 +2400,20 @@ export function ProjectWorkspace({
               onContractChange={setContract}
             />
           )}
+          {contract && contract.status === "approved" && (isClient || isProfessional) && (
+            <ContractAddendaSection
+              projectId={project.id}
+              contract={contract}
+              currentUserId={user?.id}
+              isClient={isClient}
+              active={project.status !== "completed" && project.status !== "cancelled"}
+              onMilestoneCreated={load}
+            />
+          )}
           {project.assigned_professional_id && isProfessional && (
             <AcceptanceFeeSection projectId={project.id} />
           )}
+          {(isClient || user?.id === project.consultant_id) && <ConsultantPanel project={project} />}
 
           {}
           {isClient && project.status === "open" && (
@@ -2485,6 +2619,27 @@ export function ProjectWorkspace({
                   <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setEditOpen(true)}>
                     <FileEdit className="h-3.5 w-3.5 mr-2" /> Edit Project
                   </Button>
+                  {(() => {
+                    const biddingClosed = !!project.hiring_deadline && new Date(project.hiring_deadline) <= new Date();
+                    return (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full justify-start"
+                        onClick={async () => {
+                          try {
+                            await (biddingClosed ? api.reopenBidding(project.id) : api.closeBidding(project.id));
+                            toast.success(biddingClosed ? "Proposals reopened" : "No longer accepting new proposals");
+                            load();
+                          } catch (err) {
+                            toast.error(err instanceof ApiError ? err.message : "Could not update");
+                          }
+                        }}
+                      >
+                        <Lock className="h-3.5 w-3.5 mr-2" /> {biddingClosed ? "Reopen proposals" : "I'm happy with the proposals, stop new ones"}
+                      </Button>
+                    );
+                  })()}
                   <Button
                     variant="outline"
                     size="sm"

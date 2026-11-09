@@ -14,6 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCanManage } from "@/lib/useCanManage";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -116,6 +117,7 @@ function ReviewList<T>({
   renderDetail: (item: T) => React.ReactNode;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const canManage = useCanManage("verifications");
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (items.length === 0) return <p className="text-sm text-muted-foreground">{emptyText}</p>;
@@ -138,7 +140,8 @@ function ReviewList<T>({
             {open && (
               <div className="px-4 pb-4 space-y-4 border-t bg-muted/20">
                 <div className="pt-4">{renderDetail(item)}</div>
-                <div className="flex gap-2 justify-end">
+                {!canManage && <p className="text-xs text-muted-foreground text-right">View only. Your role can&apos;t approve or reject.</p>}
+                {canManage && <div className="flex gap-2 justify-end">
                   <Button size="sm" variant="outline" disabled={busyId === id} onClick={() => onReject(item)}>
                     <ShieldX className="h-3.5 w-3.5 mr-1" /> Reject
                   </Button>
@@ -153,7 +156,7 @@ function ReviewList<T>({
                   >
                     <ShieldCheck className="h-3.5 w-3.5 mr-1" /> Approve
                   </Button>
-                </div>
+                </div>}
               </div>
             )}
           </div>
@@ -230,7 +233,7 @@ export default function AdminVerificationsPage() {
     setAddressBusyId(profileId);
     try {
       await api.adminReviewAddressVerification(profileId, status, note);
-      toast.success(status === "verified" ? "Approved, professional is now Tier 3" : "Rejected");
+      toast.success(status === "verified" ? "Approved, address badge added" : "Rejected");
       loadAddress();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not update address verification");
@@ -267,7 +270,7 @@ export default function AdminVerificationsPage() {
 
   const tabs: { key: Tab; label: string; count: number }[] = [
     { key: "tier2", label: "Tier 2 · Identity", count: items.length },
-    { key: "tier3", label: "Tier 3 · Address", count: addressItems.length },
+    { key: "tier3", label: "Address (optional)", count: addressItems.length },
     { key: "certs", label: "Certifications", count: certItems.length },
     { key: "business", label: "Business (CAC)", count: businessItems.length },
   ];

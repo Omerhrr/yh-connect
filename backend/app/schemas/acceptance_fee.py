@@ -12,8 +12,10 @@ class AcceptanceFeeSettingsOut(BaseModel):
     mode: str = "general"  # "general" | "rule_based"
     general_amount: float = 0.0
     rules: list[AcceptanceFeeRule] = []
+    payer: str = "talent"  # "talent" | "platform"
 
 class AcceptanceFeeSettingsUpdate(BaseModel):
+    payer: Optional[str] = None
     mode: Optional[str] = None
     general_amount: Optional[float] = None
     rules: Optional[list[AcceptanceFeeRule]] = None

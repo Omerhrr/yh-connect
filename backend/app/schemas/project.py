@@ -25,6 +25,7 @@ class ProjectCreate(BaseModel):
 
     image_urls: list[str] = []
     video_url: Optional[str] = None
+    needs_consultant: bool = False
 
 class ProjectUpdate(BaseModel):
     """Client-editable project fields. status / progress /
@@ -45,6 +46,7 @@ class ProjectUpdate(BaseModel):
     hiring_deadline: Optional[datetime] = None
     image_urls: Optional[list[str]] = None
     video_url: Optional[str] = None
+    needs_consultant: Optional[bool] = None
     status: Optional[ProjectStatus] = None
     progress: Optional[int] = None
     assigned_professional_id: Optional[str] = None
@@ -71,6 +73,8 @@ class ProjectOut(BaseModel):
     progress: int
     assigned_professional_id: Optional[str] = None
     closing_note: Optional[str] = None
+    needs_consultant: bool = False
+    consultant_id: Optional[str] = None
     created_at: datetime
     bid_count: int = 0
 

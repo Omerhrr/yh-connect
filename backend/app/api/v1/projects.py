@@ -134,6 +134,8 @@ def _to_out(project: Project, db: Session) -> ProjectOut:
         progress=project.computed_progress,
         assigned_professional_id=project.assigned_professional_id,
         closing_note=project.closing_note,
+        needs_consultant=bool(project.needs_consultant),
+        consultant_id=project.consultant_id,
         created_at=project.created_at,
         bid_count=len(project.bids),
         contract_amount=contract_amount,
@@ -157,6 +159,8 @@ def list_projects(
     client_id: Optional[str] = None,
     q: Optional[str] = None,
     location: Optional[str] = None,
+    state: Optional[str] = None,
+    near: Optional[str] = None,
     budget_min: Optional[float] = None,
     budget_max: Optional[float] = None,
     sort_by: Optional[str] = None,
@@ -181,6 +185,8 @@ def list_projects(
         query = query.filter(Project.status == ProjectStatus.open)
     if location:
         query = query.filter(Project.location.ilike(f"%{location}%"))
+    if state:
+        query = query.filter(Project.state.ilike(state))
     if budget_min is not None:
         query = query.filter(Project.budget_max >= budget_min)
     if budget_max is not None:
@@ -221,6 +227,14 @@ def list_projects(
     if sort_by in sort_map:
         projects = sorted(projects, key=sort_map[sort_by], reverse=(sort_by == "newest"))
 
+    # Location preference: projects in (or mentioning) the caller's area come
+    # first; the original ordering is preserved within each group (stable sort).
+    if near:
+        n = near.strip().lower()
+        def _is_near(p: Project) -> bool:
+            return n in (p.state or "").lower() or n in (p.location or "").lower()
+        projects = sorted(projects, key=lambda p: 0 if _is_near(p) else 1)
+
     projects = projects[offset : offset + limit]
     return [_to_out(p, db) for p in projects]
 
@@ -257,6 +271,7 @@ def create_project(
         hiring_deadline=payload.hiring_deadline,
         image_urls=image_urls or None,
         video_url=video_url,
+        needs_consultant=payload.needs_consultant,
     )
     db.add(project)
     db.commit()
@@ -361,6 +376,10 @@ def update_project(
     if "category_id" in data and data["category_id"] is not None:
         if not db.get(Category, data["category_id"]):
             raise HTTPException(status_code=400, detail="Unknown category")
+    if data.get("needs_consultant") is None:
+        data.pop("needs_consultant", None)
+    elif data["needs_consultant"] is False and project.consultant_id:
+        raise HTTPException(status_code=400, detail="Remove the appointed consultant first")
     if "skills" in data and data["skills"] is not None:
         data["skills"] = ",".join(data["skills"])
     if "image_urls" in data or "video_url" in data:
@@ -542,6 +561,43 @@ def post_closing_note(
         body=note or "The professional cleared their closing note.",
         link=f"/client/dashboard/projects/{project.id}", email_also=True,
     )
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+@router.post("/{project_id}/close-bidding", response_model=ProjectOut)
+def close_bidding(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    """Client is satisfied with the proposals received: stop accepting new
+    ones (project stays open so they can still shortlist/hire). Implemented
+    by setting the hiring deadline to now, which create_bid enforces."""
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if project.status != ProjectStatus.open:
+        raise HTTPException(status_code=400, detail="Only open projects can stop accepting proposals")
+    project.hiring_deadline = datetime.utcnow()
+    db.commit()
+    db.refresh(project)
+    return _to_out(project, db)
+
+@router.post("/{project_id}/reopen-bidding", response_model=ProjectOut)
+def reopen_bidding(
+    project_id: str,
+    current_user: User = Depends(require_role(UserRole.client)),
+    db: Session = Depends(get_db),
+):
+    project = db.get(Project, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.client_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    project.hiring_deadline = None
     db.commit()
     db.refresh(project)
     return _to_out(project, db)

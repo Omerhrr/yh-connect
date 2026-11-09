@@ -127,6 +127,8 @@ export type UserOut = {
   is_verified_business: boolean;
   business_verification_status?: "unverified" | "pending" | "verified" | "rejected";
   business_verification_note?: string | null;
+  admin_permissions?: string[] | null;
+  admin_role_name?: string | null;
   preferred_categories?: string[] | null;
   is_verified: boolean;
   email_verified: boolean;
@@ -375,6 +377,28 @@ export type ProjectOut = {
   client_member_since?: string | null;
   client_open_project_count: number;
   client_hire_rate?: number | null;
+  needs_consultant?: boolean;
+  consultant_id?: string | null;
+};
+
+export type ConsultantApplication = {
+  id: string; professional_id: string; professional_name: string; note?: string | null;
+  proposed_fee?: number | null; status: "pending" | "appointed" | "declined" | "withdrawn"; created_at: string;
+};
+export type ConsultantNote = {
+  id: string; bid_id?: string | null; verdict: "recommend" | "not_recommend" | "neutral";
+  body: string; consultant_name: string; created_at: string;
+};
+export type ConsultantState = {
+  needs_consultant: boolean; consultant_id?: string | null; consultant_name?: string | null;
+  role: "client" | "consultant" | "applicant" | "other";
+  my_application?: ConsultantApplication | null;
+  applications: ConsultantApplication[]; notes: ConsultantNote[];
+  bids: { id: string; professional_id: string; professional_name: string; amount: number; estimated_days?: number | null; cover_letter?: string | null; status: string }[];
+};
+export type ConsultantProject = {
+  id: string; title: string; location?: string | null; budget_min: number; budget_max: number;
+  status: string; created_at: string; already_applied?: boolean;
 };
 
 export type BidStatus = "pending" | "shortlisted" | "offered" | "accepted" | "rejected" | "withdrawn";
@@ -455,6 +479,7 @@ export type ContractOut = {
   client_approved: boolean;
   professional_approved: boolean;
   last_edited_by?: string | null;
+  contract_type?: "fixed" | "flexible";
   agreed_amount?: number | null;
   milestone_total?: number | null;
   amounts_tally?: boolean | null;
@@ -498,10 +523,50 @@ export type AcceptanceFeeRule = {
   amount: number;
 };
 
+export type StaffRole = { id: string; name: string; description: string; permissions: string[]; member_count: number };
+export type StaffMember = {
+  id: string; email: string; first_name: string; last_name: string; is_active: boolean;
+  role_id?: string | null; role_name?: string | null; is_full_admin: boolean; created_at: string;
+};
+export type AdminIssuingBody = { id: string; name: string; aliases: string; is_active: boolean; account_count: number };
+export type AdminVerifierAccount = {
+  id: string; body_id: string; body_name: string; name: string; email: string;
+  is_active: boolean; last_login_at?: string | null; created_at: string;
+};
+
+export type ContractAddendumOut = {
+  id: string;
+  contract_id: string;
+  project_id: string;
+  proposed_by: string;
+  title: string;
+  content: string;
+  amount_delta: number;
+  status: "pending" | "approved" | "rejected";
+  client_approved: boolean;
+  professional_approved: boolean;
+  resulting_milestone_id?: string | null;
+  created_at: string;
+  approved_at?: string | null;
+};
+
+export type GuarantorOut = {
+  id: string;
+  status: "pending" | "accepted" | "declined" | "revoked";
+  message?: string | null;
+  created_at: string;
+  responded_at?: string | null;
+  professional_id: string;
+  professional_name?: string | null;
+  guarantor_id: string;
+  guarantor_name?: string | null;
+};
+
 export type AcceptanceFeeSettings = {
   mode: "general" | "rule_based";
   general_amount: number;
   rules: AcceptanceFeeRule[];
+  payer?: "talent" | "platform";
 };
 
 export type AcceptanceFeeQuote = {
@@ -1283,7 +1348,7 @@ export const api = {
     request<CertificationOut>("/professionals/me/certifications", { method: "POST", body: JSON.stringify(payload) }),
   deleteCertification: (id: string) => request<void>(`/professionals/me/certifications/${id}`, { method: "DELETE" }),
 
-  projects: (params?: { category_id?: string; client_id?: string; status_filter?: string; q?: string; location?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
+  projects: (params?: { category_id?: string; client_id?: string; status_filter?: string; q?: string; location?: string; state?: string; near?: string; budget_min?: number; budget_max?: number; sort_by?: string; limit?: number; offset?: number }) => {
     const qs = new URLSearchParams(
       Object.entries(params || {})
         .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -1314,8 +1379,60 @@ export const api = {
     hiring_deadline?: string;
     image_urls?: string[];
     video_url?: string | null;
+    needs_consultant?: boolean;
   }) => request<ProjectOut>("/projects", { method: "POST", body: JSON.stringify(payload) }),
+  consultantState: (projectId: string) => request<ConsultantState>(`/projects/${projectId}/consultant`),
+  consultantApply: (projectId: string, p: { note?: string; proposed_fee?: number | null }) =>
+    request<ConsultantApplication>(`/projects/${projectId}/consultant/apply`, { method: "POST", body: JSON.stringify(p) }),
+  consultantWithdraw: (projectId: string) => request<void>(`/projects/${projectId}/consultant/withdraw`, { method: "POST" }),
+  consultantAppoint: (projectId: string, applicationId: string) =>
+    request<ConsultantState>(`/projects/${projectId}/consultant/applications/${applicationId}/appoint`, { method: "POST" }),
+  consultantRemove: (projectId: string) => request<ConsultantState>(`/projects/${projectId}/consultant/remove`, { method: "POST" }),
+  consultantAddNote: (projectId: string, p: { body: string; bid_id?: string | null; verdict?: "recommend" | "not_recommend" | "neutral" }) =>
+    request<ConsultantNote>(`/projects/${projectId}/consultant/notes`, { method: "POST", body: JSON.stringify(p) }),
+  consultantOpenProjects: () => request<ConsultantProject[]>("/consultant/open-projects"),
+  consultantMine: () => request<ConsultantProject[]>("/consultant/mine"),
+  setNeedsConsultant: (projectId: string, needs: boolean) =>
+    request<ProjectOut>(`/projects/${projectId}`, { method: "PATCH", body: JSON.stringify({ needs_consultant: needs }) }),
   projectMediaSettings: () => request<ProjectMediaSettingsOut>("/projects/media-settings"),
+  staffCatalog: () => request<{ areas: { key: string; label: string; description: string }[]; levels: string[] }>("/admin/staff/catalog"),
+  staffRoles: () => request<StaffRole[]>("/admin/staff/roles"),
+  staffCreateRole: (p: { name: string; description?: string; permissions: string[] }) =>
+    request<StaffRole>("/admin/staff/roles", { method: "POST", body: JSON.stringify(p) }),
+  staffUpdateRole: (id: string, p: { name: string; description?: string; permissions: string[] }) =>
+    request<StaffRole>(`/admin/staff/roles/${id}`, { method: "PUT", body: JSON.stringify(p) }),
+  staffDeleteRole: (id: string) => request<void>(`/admin/staff/roles/${id}`, { method: "DELETE" }),
+  staffMembers: () => request<StaffMember[]>("/admin/staff/members"),
+  staffCreateMember: (p: { email: string; first_name: string; last_name: string; role_id?: string | null }) =>
+    request<StaffMember & { temporary_password: string }>("/admin/staff/members", { method: "POST", body: JSON.stringify(p) }),
+  staffUpdateMember: (id: string, p: { role_id?: string; set_full_admin?: boolean; is_active?: boolean; reset_password?: boolean }) =>
+    request<StaffMember & { temporary_password?: string }>(`/admin/staff/members/${id}`, { method: "PATCH", body: JSON.stringify(p) }),
+  adminIssuingBodies: () => request<AdminIssuingBody[]>("/admin/verifier-portal/bodies"),
+  adminCreateIssuingBody: (payload: { name: string; aliases?: string }) =>
+    request<AdminIssuingBody>("/admin/verifier-portal/bodies", { method: "POST", body: JSON.stringify(payload) }),
+  adminUpdateIssuingBody: (id: string, payload: { name?: string; aliases?: string; is_active?: boolean }) =>
+    request<AdminIssuingBody>(`/admin/verifier-portal/bodies/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  adminVerifierAccounts: () => request<AdminVerifierAccount[]>("/admin/verifier-portal/accounts"),
+  adminCreateVerifierAccount: (payload: { body_id: string; name: string; email: string }) =>
+    request<AdminVerifierAccount & { temporary_password: string }>("/admin/verifier-portal/accounts", { method: "POST", body: JSON.stringify(payload) }),
+  adminUpdateVerifierAccount: (id: string, payload: { is_active?: boolean; reset_password?: boolean }) =>
+    request<AdminVerifierAccount & { temporary_password?: string }>(`/admin/verifier-portal/accounts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  publicFeatures: () => request<{ guarantors: boolean; kasupda_terms: boolean }>("/public/features"),
+  contractAddenda: (projectId: string) => request<ContractAddendumOut[]>(`/projects/${projectId}/contract/addenda`),
+  createContractAddendum: (projectId: string, payload: { title: string; content: string; amount_delta: number }) =>
+    request<ContractAddendumOut>(`/projects/${projectId}/contract/addenda`, { method: "POST", body: JSON.stringify(payload) }),
+  approveContractAddendum: (id: string) => request<ContractAddendumOut>(`/contract-addenda/${id}/approve`, { method: "POST" }),
+  rejectContractAddendum: (id: string) => request<ContractAddendumOut>(`/contract-addenda/${id}/reject`, { method: "POST" }),
+  requestGuarantor: (email: string, message?: string) =>
+    request<GuarantorOut>("/guarantors", { method: "POST", body: JSON.stringify({ email, message }) }),
+  myGuarantors: () => request<GuarantorOut[]>("/guarantors/mine"),
+  guarantorRequests: () => request<GuarantorOut[]>("/guarantors/requests"),
+  respondGuarantor: (id: string, accept: boolean) =>
+    request<GuarantorOut>(`/guarantors/${id}/respond?accept=${accept}`, { method: "POST" }),
+  revokeGuarantor: (id: string) => request<GuarantorOut>(`/guarantors/${id}`, { method: "DELETE" }),
+  publicGuarantors: (profileId: string) => request<{ id: string; name: string | null }[]>(`/professionals/${profileId}/guarantors`),
+  closeBidding: (id: string) => request<ProjectOut>(`/projects/${id}/close-bidding`, { method: "POST" }),
+  reopenBidding: (id: string) => request<ProjectOut>(`/projects/${id}/reopen-bidding`, { method: "POST" }),
   closeProject: (id: string) => request<ProjectOut>(`/projects/${id}/close`, { method: "POST" }),
   completeProject: (id: string) => request<ProjectOut>(`/projects/${id}/complete`, { method: "POST" }),
   confirmProject: (id: string) => request<ProjectOut>(`/projects/${id}/confirm`, { method: "POST" }),
@@ -1371,8 +1488,8 @@ export const api = {
     request<AccessRequestOut>(`/access-requests/${requestId}/schedule`, { method: "POST", body: JSON.stringify(payload) }),
 
   getProjectContract: (projectId: string) => request<ContractOut>(`/projects/${projectId}/contract`),
-  generateContract: (projectId: string) =>
-    request<ContractOut>(`/projects/${projectId}/contract/generate`, { method: "POST" }),
+  generateContract: (projectId: string, contractType: "fixed" | "flexible" = "fixed") =>
+    request<ContractOut>(`/projects/${projectId}/contract/generate?contract_type=${contractType}`, { method: "POST" }),
   editContract: (contractId: string, content: string) =>
     request<ContractOut>(`/contracts/${contractId}`, { method: "PATCH", body: JSON.stringify({ content }) }),
   sendContract: (contractId: string) => request<ContractOut>(`/contracts/${contractId}/send`, { method: "POST" }),

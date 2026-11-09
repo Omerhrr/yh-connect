@@ -3,14 +3,19 @@ from fastapi import APIRouter
 from app.api.v1 import (
     acceptance_fee,
     admin,
+    admin_staff,
     auth,
     bids,
     categories,
     clients,
+    consultants,
     content,
+    contract_addenda,
     contracts,
     disputes,
+    guarantors,
     favorites,
+    features,
     internal,
     invites,
     locations,
@@ -25,12 +30,14 @@ from app.api.v1 import (
     reviews,
     uploads,
     verification,
+    verifier,
     wallet,
 )
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(admin.router)
+api_router.include_router(admin_staff.router)
 api_router.include_router(content.router)
 api_router.include_router(categories.router)
 api_router.include_router(locations.router)
@@ -44,6 +51,11 @@ api_router.include_router(bids.router)
 api_router.include_router(invites.router)
 api_router.include_router(project_access_requests.router)
 api_router.include_router(contracts.router)
+api_router.include_router(contract_addenda.router)
+api_router.include_router(guarantors.router)
+api_router.include_router(consultants.router)
+api_router.include_router(features.router)
+api_router.include_router(verifier.router)
 api_router.include_router(acceptance_fee.router)
 api_router.include_router(milestones.router)
 api_router.include_router(wallet.router)

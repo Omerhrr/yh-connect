@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApplyDialog } from "@/components/site/pages/DashboardPages";
 import { ProjectChat } from "@/components/site/chat/ProjectChat";
+import { ConsultantPanel } from "@/components/site/shared/ConsultantPanel";
 import { api, ApiError, type ProjectOut, type BidStatus, type AccessRequestOut, type AccessRequestType } from "@/lib/api";
 import { BID_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
@@ -598,6 +599,7 @@ export function ProjectPreview({ projectId }: { projectId: string; backHref?: st
         </div>
 
         <AboutClientPanel project={project} />
+        {project.needs_consultant && <ConsultantPanel project={project} />}
       </div>
 
       {applyOpen && (

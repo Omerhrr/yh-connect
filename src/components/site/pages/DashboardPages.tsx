@@ -105,6 +105,7 @@ import { useProjectUnread } from "@/hooks/useProjectUnread";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Inbox } from "lucide-react";
 import { ReviewCard } from "@/components/site/shared/ReviewCard";
+import { GuarantorsCard } from "@/components/site/shared/GuarantorsCard";
 import { ProfessionalProfileView, StatsBar, WorkHistoryFeed } from "@/components/site/pages/ProfessionalProfileView";
 import { TierTag, CertificationBadges } from "@/components/site/shared/TalentTier";
 import { LocationPicker, type LocationValue } from "@/components/site/shared/LocationPicker";
@@ -833,6 +834,7 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
   const [customSkill, setCustomSkill] = useState("");
   const [timeline, setTimeline] = useState("");
   const [hiringDeadline, setHiringDeadline] = useState("");
+  const [needsConsultant, setNeedsConsultant] = useState(false);
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [mediaSettings, setMediaSettings] = useState<ProjectMediaSettingsOut | null>(null);
@@ -1052,7 +1054,9 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
         hiring_deadline: hiringDeadline ? new Date(hiringDeadline).toISOString() : undefined,
         image_urls: imageUrls,
         video_url: videoUrl.trim() || undefined,
+        needs_consultant: needsConsultant,
       });
+      setNeedsConsultant(false);
       setCreatedId(project.id);
       localStorage.removeItem(POST_DRAFT_KEY);
       setRestoredDraft(false);
@@ -1201,6 +1205,13 @@ export function PostProjectDialog({ open, onClose, onCreated }: { open: boolean;
                   <Input id="pp-hiring-deadline" type="date" value={hiringDeadline} onChange={(e) => setHiringDeadline(e.target.value)} />
                   <p className="text-xs text-muted-foreground">Lets talents know how long you'll be accepting bids for.</p>
                 </div>
+                <label className="flex items-start gap-2 rounded-lg border p-3 text-sm cursor-pointer">
+                  <input type="checkbox" className="mt-0.5" checked={needsConsultant} onChange={(e) => setNeedsConsultant(e.target.checked)} />
+                  <span>
+                    <span className="font-medium">This is a big or complex project. I'd like a consultant.</span>
+                    <span className="block text-xs text-muted-foreground">A consultant supervises the project and advises you on bids. Professionals apply to consult, and you choose one after posting.</span>
+                  </span>
+                </label>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium" htmlFor="pp-category">Category</label>
                   <select
@@ -2987,7 +2998,13 @@ export function ClientSettings() {
       )}
       {tab === "preferences" && <ClientPreferencesTab />}
       {tab === "verification" && <ClientKycCard />}
-      {tab === "security" && <SecurityPanel />}
+      {tab === "security" && (
+        <div className="space-y-5">
+          <SecurityPanel />
+          {/* Clients can be guarantors too; this lets them answer requests. */}
+          <GuarantorsCard canRequest={false} />
+        </div>
+      )}
     </div>
   );
 }
@@ -4883,15 +4900,17 @@ function VerificationForm() {
       </div>
 
 
+      <GuarantorsCard />
+
       <div className="rounded-xl border bg-background p-6 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="font-semibold">Proof of Address &amp; Tier 3</h3>
+          <h3 className="font-semibold">Proof of Address <span className="text-xs font-normal text-muted-foreground">(optional)</span></h3>
           <Badge className={`text-xs rounded-full ${addressMeta.className}`}>{addressMeta.label}</Badge>
         </div>
         {!identityVerified ? (
-          <p className="text-sm text-muted-foreground">Verify your identity first, that's Tier 2 before Tier 3.</p>
+          <p className="text-sm text-muted-foreground">Verify your identity first (that makes you Tier 2), then you can optionally add proof of address as an extra trust badge.</p>
         ) : addressStatus === "verified" ? (
-          <p className="text-sm text-muted-foreground">Your address is verified. You're on Tier 3, no bid or project caps.</p>
+          <p className="text-sm text-muted-foreground">Your address is verified and shows as a trust badge on your profile.</p>
         ) : (
           <>
             {addressStatus === "rejected" && (

@@ -46,6 +46,10 @@ def post_system_message(db: Session, project: Project, actor_id: str, body: str,
         db, recipient_id, NotificationType.general,
         f"Update on \"{project.title}\"",
         body=body,
-        link=f"/{role_path}/dashboard/messages",
+        link=(
+            f"/client/dashboard/projects/{project.id}"
+            if role_path == "client"
+            else f"/talent/dashboard/find-work/{project.id}"
+        ),
     )
     return message

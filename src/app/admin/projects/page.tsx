@@ -10,6 +10,7 @@ import { formatBudgetRange } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
 import { AlertTriangle, Search, X } from "lucide-react";
+import { useCanManage } from "@/lib/useCanManage";
 
 const STATUS_TABS: { value: string; label: string }[] = [
   { value: "", label: "All" },
@@ -55,6 +56,7 @@ export default function AdminProjectsPage() {
   const applySearch = () => setQ(qDraft);
   const clearSearch = () => { setQDraft(""); setQ(""); };
 
+  const canManage = useCanManage("projects");
   const cancel = async (id: string) => {
     if (!confirm("Force-cancel this project? Any escrowed milestone funds are refunded to the client automatically.")) return;
     setBusyId(id);
@@ -155,7 +157,7 @@ export default function AdminProjectsPage() {
               </p>
             </Link>
             <div className="flex items-center gap-2 shrink-0">
-              {p.status !== "cancelled" && p.status !== "completed" && (
+              {canManage && p.status !== "cancelled" && p.status !== "completed" && (
                 <Button size="sm" variant="outline" disabled={busyId === p.id} onClick={() => cancel(p.id)}>
                   {busyId === p.id ? "Cancelling..." : "Cancel"}
                 </Button>

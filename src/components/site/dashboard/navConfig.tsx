@@ -6,6 +6,7 @@ import {
   FolderKanban,
   Gauge,
   Heart,
+  KeyRound,
   LayoutDashboard,
   MessageSquare,
   Newspaper,
@@ -15,6 +16,7 @@ import {
   Settings,
   ShieldAlert,
   User,
+  UserCog,
   Users,
   Wallet,
 } from "lucide-react";
@@ -56,6 +58,7 @@ export const TALENT_NAV: DashboardNavItem[] = [
 export const ADMIN_NAV: DashboardNavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/verifications", label: "Verifications", icon: BadgeCheck },
+  { href: "/admin/verifier-portal", label: "Verifier Portal", icon: KeyRound },
   { href: "/admin/disputes", label: "Disputes", icon: ShieldAlert },
   { href: "/admin/contracts", label: "Contracts", icon: FileText },
   { href: "/admin/payments", label: "Payments", icon: Wallet },
@@ -63,6 +66,7 @@ export const ADMIN_NAV: DashboardNavItem[] = [
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/projects", label: "Projects", icon: FolderKanban },
   { href: "/admin/content", label: "Content", icon: Newspaper },
+  { href: "/admin/team", label: "Team & Access", icon: UserCog },
   { href: "/admin/settings", label: "Settings", icon: Settings },
   { href: "/admin/analytics", label: "Analytics", icon: Gauge },
 ];

@@ -3,6 +3,10 @@
 Tier is derived, never stored directly, from two independent admin-reviewed
 verification stages on top of a professional's account:
 
+NOTE (two-tier model): only Tiers 1 and 2 exist. Tier 1 = no verification
+needed (capped). Tier 2 = identity verified (uncapped). The Tier 3 text below
+is historical; proof of address is now an optional badge.
+
 - Tier 1 (default): no verification yet.
 - Tier 2: identity verified - either the automated NIN check
   (`User.kyc_status`, same mechanism already used for client identity
@@ -30,7 +34,7 @@ from app.models.project import Project, ProjectStatus
 from app.models.platform_setting import PlatformSetting
 from app.models.user import KycStatus, User, UserRole
 
-TIER_LABELS = {1: "Tier 1", 2: "Tier 2", 3: "Tier 3"}
+TIER_LABELS = {1: "Tier 1", 2: "Tier 2"}
 
 _ACTIVE_PROJECT_STATUSES = (ProjectStatus.in_progress, ProjectStatus.review)
 
@@ -44,12 +48,10 @@ def get_tier(user: User, profile: Optional[ProfessionalProfile]) -> int:
         user.kyc_status == KycStatus.verified
         or bool(profile and profile.verification_status == "verified")
     )
-    address_verified = bool(profile and profile.address_verification_status == "verified")
-    if identity_verified and address_verified:
-        return 3
-    if identity_verified:
-        return 2
-    return 1
+    # Two tiers only (stakeholder feedback F5/F14): Tier 1 needs no
+    # verification; Tier 2 is identity-verified. Proof of address is now an
+    # optional trust badge and no longer affects the tier.
+    return 2 if identity_verified else 1
 
 
 def _setting_int(db: Session, key: str, default: int) -> int:
@@ -63,20 +65,21 @@ def _setting_int(db: Session, key: str, default: int) -> int:
 
 
 def get_daily_proposal_limit(db: Session, tier: int) -> Optional[int]:
-    """Returns None for "no limit" (tier 3)."""
-    if tier >= 3:
-        return None
-    if tier == 2:
-        return _setting_int(db, "tier2_daily_proposal_limit", settings.TIER2_DAILY_PROPOSAL_LIMIT)
+    """Returns None for "no limit". Tier 2 (verified) is unlimited unless an
+    admin sets `tier2_daily_proposal_limit` to a number greater than 0."""
+    if tier >= 2:
+        v = _setting_int(db, "tier2_daily_proposal_limit", 0)
+        return v if v > 0 else None
     return _setting_int(db, "tier1_daily_proposal_limit", settings.TIER1_DAILY_PROPOSAL_LIMIT)
 
 
 def get_concurrent_project_limit(db: Session, tier: int) -> Optional[int]:
-    """Returns None for "no limit" (tier 3)."""
-    if tier >= 3:
-        return None
-    if tier == 2:
-        return _setting_int(db, "tier2_concurrent_project_limit", settings.TIER2_CONCURRENT_PROJECT_LIMIT)
+    """Returns None for "no limit". Tier 2 (verified) is unlimited unless an
+    admin sets `tier2_concurrent_project_limit` to a number greater than 0
+    (how many jobs a verified talent may run at once, Q4)."""
+    if tier >= 2:
+        v = _setting_int(db, "tier2_concurrent_project_limit", 0)
+        return v if v > 0 else None
     return _setting_int(db, "tier1_concurrent_project_limit", settings.TIER1_CONCURRENT_PROJECT_LIMIT)
 
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronDown, ChevronUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ViewOnlyGuard } from "@/components/admin/ViewOnlyGuard";
 import { Input } from "@/components/ui/input";
 import {
   api,
@@ -1299,6 +1300,7 @@ export default function AdminContentPage() {
       {/* Every tab stays mounted (just hidden) once the page loads, instead
           of being torn down on tab switch — unmounting a tab wiped out any
           unsaved edits in its local state with no warning. */}
+      <ViewOnlyGuard area="content">
       <div className={tab === "pages" ? "" : "hidden"}><PagesTab /></div>
       <div className={tab === "site-content" ? "" : "hidden"}><SiteContentTab /></div>
       <div className={tab === "blog" ? "" : "hidden"}><BlogTab /></div>
@@ -1306,6 +1308,7 @@ export default function AdminContentPage() {
       <div className={tab === "faq" ? "" : "hidden"}><FaqTab /></div>
       <div className={tab === "categories" ? "" : "hidden"}><CategoriesTab /></div>
       <div className={tab === "locations" ? "" : "hidden"}><LocationsTab /></div>
+      </ViewOnlyGuard>
     </div>
   );
 }

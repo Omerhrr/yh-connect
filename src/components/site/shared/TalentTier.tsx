@@ -10,18 +10,20 @@ const TIER_STYLES: Record<1 | 2 | 3, string> = {
 };
 
 const TIER_TITLES: Record<1 | 2 | 3, string> = {
-  1: "Tier 1: not yet identity-verified",
-  2: "Tier 2: identity (NIN) verified",
-  3: "Tier 3: identity and address fully verified",
+  1: "Tier 1: open to everyone, no verification needed",
+  2: "Tier 2: identity verified",
+  3: "Tier 2: identity verified",
 };
 
 export function TierTag({ tier, className = "" }: { tier: 1 | 2 | 3; className?: string }) {
+  // Only two tiers exist now; any legacy value of 3 is shown as Tier 2.
+  const t = (tier >= 2 ? 2 : 1) as 1 | 2;
   return (
     <span
-      title={TIER_TITLES[tier]}
-      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLES[tier]} ${className}`}
+      title={TIER_TITLES[t]}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${TIER_STYLES[t]} ${className}`}
     >
-      Tier {tier}
+      Tier {t}
     </span>
   );
 }

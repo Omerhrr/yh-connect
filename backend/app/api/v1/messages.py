@@ -368,7 +368,7 @@ async def send_project_message(
         db, payload.recipient_id, NotificationType.message_received,
         f"New message from {current_user.first_name}",
         body=notify_body,
-        link=f"/{'talent' if is_client else 'client'}/dashboard/messages",
+        link=f"/client/dashboard/projects/{project_id}" if not is_client else f"/talent/dashboard/find-work/{project_id}",
     )
     db.commit()
     db.refresh(message)
@@ -415,7 +415,7 @@ async def post_project_update(
         db, recipient_id, NotificationType.general,
         f"Project update on \"{project.title}\"",
         body=payload.note.strip()[:140],
-        link=f"/{'talent' if is_client else 'client'}/dashboard/messages",
+        link=f"/client/dashboard/projects/{project_id}" if not is_client else f"/talent/dashboard/find-work/{project_id}",
     )
     db.commit()
     db.refresh(message)

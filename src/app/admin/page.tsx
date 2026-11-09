@@ -23,6 +23,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { formatNaira as fmtNaira } from "@/lib/utils";
+import { useAuth } from "@/store/auth";
+import { canAccess } from "@/lib/adminAccess";
 
 function StatCard({ label, value, icon: Icon, href, tone }: { label: string; value: string; icon: React.ElementType; href?: string; tone?: string }) {
   const content = (
@@ -121,26 +123,38 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [announceOpen, setAnnounceOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const me = useAuth((s) => s.user);
+  const canUsers = canAccess(me, "users");
+  const canPayments = canAccess(me, "payments");
+  const canVerifs = canAccess(me, "verifications");
+  const canDisputes = canAccess(me, "disputes");
+  const canProjects = canAccess(me, "projects");
+  const canSettings = canAccess(me, "settings");
+  const canAnnounce = canAccess(me, "content", "manage");
 
   const load = () => {
     setLoading(true);
-    Promise.all([
+    // Only ask for what this admin's role can see, and let each piece fail on
+    // its own so one missing permission never blanks the whole overview.
+    const none = <T,>(v: T) => Promise.resolve(v);
+    Promise.allSettled([
       api.adminAnalyticsOverview(),
-      api.adminUsers({ limit: 5 }),
-      api.adminWalletTransactions({ limit: 5 }),
-      api.adminWalletSummary(),
-      api.pendingVerifications(),
-      api.adminPendingAddressVerifications(),
-      api.adminPendingCertifications(),
+      canUsers ? api.adminUsers({ limit: 5 }) : none([] as Awaited<ReturnType<typeof api.adminUsers>>),
+      canPayments ? api.adminWalletTransactions({ limit: 5 }) : none([] as AdminWalletTransactionOut[]),
+      canPayments ? api.adminWalletSummary() : none(null),
+      canVerifs ? api.pendingVerifications() : none([] as unknown[]),
+      canVerifs ? api.adminPendingAddressVerifications() : none([] as unknown[]),
+      canVerifs ? api.adminPendingCertifications() : none([] as unknown[]),
     ])
       .then(([overview, users, txs, wallet, v, a, c]) => {
-        setData(overview);
-        setRecentUsers(users);
-        setRecentTxs(txs);
-        setSummary(wallet);
-        setAttentionCounts({ verifications: v.length, address: a.length, certs: c.length });
+        const ok = <T,>(r: PromiseSettledResult<T>, fallback: T): T => (r.status === "fulfilled" ? r.value : fallback);
+        if (overview.status === "rejected") toast.error("Could not load overview data");
+        setData(ok(overview, null as unknown as AnalyticsOverview) ?? null);
+        setRecentUsers(ok(users, []));
+        setRecentTxs(ok(txs, []));
+        setSummary(ok(wallet, null) as typeof summary);
+        setAttentionCounts({ verifications: ok(v, []).length, address: ok(a, []).length, certs: ok(c, []).length });
       })
-      .catch(() => toast.error("Could not load overview data"))
       .finally(() => setLoading(false));
   };
 
@@ -154,8 +168,8 @@ export default function AdminOverviewPage() {
   const attentionItems: { label: string; count: number; href: string; tone: string }[] = [];
   if (data) {
     const totalVerifications = attentionCounts.verifications + attentionCounts.address + attentionCounts.certs;
-    if (totalVerifications > 0) attentionItems.push({ label: "Verifications to review", count: totalVerifications, href: "/admin/verifications", tone: "bg-amber-100 text-amber-700" });
-    if (data.open_disputes > 0) attentionItems.push({ label: "Open disputes", count: data.open_disputes, href: "/admin/disputes", tone: "bg-red-100 text-red-600" });
+    if (canVerifs && totalVerifications > 0) attentionItems.push({ label: "Verifications to review", count: totalVerifications, href: "/admin/verifications", tone: "bg-amber-100 text-amber-700" });
+    if (canDisputes && data.open_disputes > 0) attentionItems.push({ label: "Open disputes", count: data.open_disputes, href: "/admin/disputes", tone: "bg-red-100 text-red-600" });
   }
   if (summary && summary.failed_transaction_count > 0) {
     attentionItems.push({ label: "Failed transactions", count: summary.failed_transaction_count, href: "/admin/payments", tone: "bg-red-100 text-red-600" });
@@ -175,9 +189,11 @@ export default function AdminOverviewPage() {
           <Button variant="outline" size="sm" onClick={refresh} disabled={refreshing}>
             <RefreshCw className={`h-3.5 w-3.5 mr-1 ${refreshing ? "animate-spin" : ""}`} /> Refresh
           </Button>
-          <Button size="sm" className="bg-slate-800 hover:bg-slate-900" onClick={() => setAnnounceOpen(true)}>
-            <Megaphone className="h-3.5 w-3.5 mr-1" /> Announce
-          </Button>
+          {canAnnounce && (
+            <Button size="sm" className="bg-slate-800 hover:bg-slate-900" onClick={() => setAnnounceOpen(true)}>
+              <Megaphone className="h-3.5 w-3.5 mr-1" /> Announce
+            </Button>
+          )}
         </div>
       </div>
 
@@ -185,14 +201,14 @@ export default function AdminOverviewPage() {
 
       {data && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard label="Pending Verifications" value={String(attentionCounts.verifications + attentionCounts.address + attentionCounts.certs)} icon={BadgeCheck} href="/admin/verifications" />
-          <StatCard label="Open Disputes" value={String(data.open_disputes)} icon={ShieldAlert} href="/admin/disputes" />
-          <StatCard label="Active Projects" value={String(data.active_projects)} icon={FolderKanban} href="/admin/projects" />
-          <StatCard label="Total Users" value={String(data.total_users)} icon={Users} href="/admin/users" />
+          {canVerifs && <StatCard label="Pending Verifications" value={String(attentionCounts.verifications + attentionCounts.address + attentionCounts.certs)} icon={BadgeCheck} href="/admin/verifications" />}
+          <StatCard label="Open Disputes" value={String(data.open_disputes)} icon={ShieldAlert} href={canDisputes ? "/admin/disputes" : undefined} />
+          <StatCard label="Active Projects" value={String(data.active_projects)} icon={FolderKanban} href={canProjects ? "/admin/projects" : undefined} />
+          <StatCard label="Total Users" value={String(data.total_users)} icon={Users} href={canUsers ? "/admin/users" : undefined} />
           <StatCard label="Signups (7d)" value={String(data.signups_this_week)} icon={TrendingUp} />
           <StatCard label="GMV" value={fmtNaira(data.gmv)} icon={DollarSign} href="/admin/analytics" />
           <StatCard label="Platform Revenue" value={fmtNaira(data.platform_revenue)} icon={DollarSign} href="/admin/analytics" />
-          <StatCard label="In Escrow" value={summary ? fmtNaira(summary.total_in_escrow) : "—"} icon={Wallet} href="/admin/payments" tone="text-emerald-600" />
+          {canPayments && <StatCard label="In Escrow" value={summary ? fmtNaira(summary.total_in_escrow) : "—"} icon={Wallet} href="/admin/payments" tone="text-emerald-600" />}
         </div>
       )}
 
@@ -210,7 +226,7 @@ export default function AdminOverviewPage() {
       )}
 
       <div className="grid lg:grid-cols-2 gap-5">
-        <SectionCard title="Recent Signups" href="/admin/users" hrefLabel="Manage users">
+        {canUsers && <SectionCard title="Recent Signups" href="/admin/users" hrefLabel="Manage users">
           <div className="divide-y">
             {recentUsers.length === 0 && <p className="p-4 text-sm text-muted-foreground">No users yet.</p>}
             {recentUsers.map((u) => (
@@ -226,9 +242,9 @@ export default function AdminOverviewPage() {
               </Link>
             ))}
           </div>
-        </SectionCard>
+        </SectionCard>}
 
-        <SectionCard title="Recent Transactions" href="/admin/payments">
+        {canPayments && <SectionCard title="Recent Transactions" href="/admin/payments">
           <div className="divide-y">
             {recentTxs.length === 0 && <p className="p-4 text-sm text-muted-foreground">No transactions yet.</p>}
             {recentTxs.map((tx) => (
@@ -248,39 +264,39 @@ export default function AdminOverviewPage() {
               </Link>
             ))}
           </div>
-        </SectionCard>
+        </SectionCard>}
       </div>
 
       <SectionCard title="Quick Actions">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100">
-          <Link href="/admin/verifications" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
+          {canVerifs && <Link href="/admin/verifications" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
             <BadgeCheck className="h-4 w-4 text-emerald-600" />
             <div>
               <p className="text-sm font-medium">Review verifications</p>
               <p className="text-xs text-muted-foreground">Documents, address, badges</p>
             </div>
-          </Link>
-          <Link href="/admin/disputes" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
+          </Link>}
+          {canDisputes && <Link href="/admin/disputes" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
             <ShieldAlert className="h-4 w-4 text-red-600" />
             <div>
               <p className="text-sm font-medium">Handle disputes</p>
               <p className="text-xs text-muted-foreground">Escalations and fund holds</p>
             </div>
-          </Link>
-          <Link href="/admin/users" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
+          </Link>}
+          {canUsers && <Link href="/admin/users" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
             <UserPlus className="h-4 w-4 text-blue-600" />
             <div>
               <p className="text-sm font-medium">Manage users</p>
               <p className="text-xs text-muted-foreground">Suspend, verify, adjust wallets</p>
             </div>
-          </Link>
-          <Link href="/admin/settings" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
+          </Link>}
+          {canSettings && <Link href="/admin/settings" className="p-4 hover:bg-muted/40 transition-colors flex items-center gap-3">
             <Settings className="h-4 w-4 text-slate-600" />
             <div>
               <p className="text-sm font-medium">Platform settings</p>
               <p className="text-xs text-muted-foreground">Fees, tiers, featured categories</p>
             </div>
-          </Link>
+          </Link>}
         </div>
       </SectionCard>
 

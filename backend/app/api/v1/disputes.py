@@ -27,8 +27,8 @@ from app.services.disputes import (
     check_and_expire_proposals,
     DisputeOutcomeError,
 )
-from app.services.platform_settings import get_dispute_direct_resolution_hours
-from app.services.notify import notify
+from app.services.platform_settings import get_dispute_direct_resolution_hours, get_dispute_window_days_after_completion
+from app.services.notify import notify, notify_admins
 
 router = APIRouter(prefix="/disputes", tags=["disputes"])
 
@@ -61,6 +61,18 @@ def create_dispute(payload: DisputeCreate, current_user: User = Depends(get_curr
         milestone = db.get(Milestone, payload.milestone_id)
         if not milestone or milestone.project_id != project.id:
             raise HTTPException(status_code=400, detail="Milestone does not belong to this project")
+
+    # Q9: disputes after completion are allowed only within an admin-set window.
+    if project.status.value == "completed":
+        window_days = get_dispute_window_days_after_completion(db)
+        completed_at = project.completed_at
+        if window_days <= 0:
+            raise HTTPException(status_code=400, detail="Disputes can't be raised once a project is completed")
+        if completed_at and datetime.utcnow() - completed_at > timedelta(days=window_days):
+            raise HTTPException(
+                status_code=400,
+                detail=f"The {window_days:.0f}-day window to raise a dispute after completion has passed",
+            )
 
     existing = (
         db.query(Dispute)
@@ -95,6 +107,12 @@ def create_dispute(payload: DisputeCreate, current_user: User = Depends(get_curr
             link=f"/{'talent' if other_party == project.assigned_professional_id else 'client'}/dashboard/disputes/{dispute.id}",
             email_also=True,
         )
+    notify_admins(
+        db, NotificationType.dispute_opened,
+        f"New dispute on \"{project.title}\"",
+        body=f"Filed by {'the client' if current_user.id == project.client_id else 'the professional'}: {dispute.reason[:200]}",
+        link=f"/admin/disputes/{dispute.id}",
+    )
     db.commit()
     db.refresh(dispute)
     return build_dispute_out(dispute, db)

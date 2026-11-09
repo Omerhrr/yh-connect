@@ -10,6 +10,7 @@ import { api, ApiError, type AdminProjectDetailOut, type AdminProjectParty } fro
 import { PROJECT_STATUS_COLORS, BID_STATUS_COLORS, MILESTONE_STATUS_COLORS, DISPUTE_STATUS_COLORS, WALLET_TX_TYPE_COLORS, WALLET_TX_STATUS_COLORS } from "@/lib/statusColors";
 import { formatNaira as fmtNaira, formatBudgetRange } from "@/lib/utils";
 import Link from "next/link";
+import { useCanManage } from "@/lib/useCanManage";
 import { toast } from "sonner";
 
 function PartyCard({ label, party, roleHref }: { label: string; party?: AdminProjectParty | null; roleHref?: string }) {
@@ -58,6 +59,7 @@ export default function AdminProjectDetailPage() {
   const [data, setData] = useState<AdminProjectDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const canManage = useCanManage("projects");
 
   const load = () => {
     setLoading(true);
@@ -89,7 +91,7 @@ export default function AdminProjectDetailPage() {
     <div className="space-y-5 max-w-4xl">
       <div className="flex items-center justify-between">
         <BackButton fallbackHref="/admin/projects" />
-        {project.status !== "cancelled" && project.status !== "completed" && (
+        {canManage && project.status !== "cancelled" && project.status !== "completed" && (
           <Button size="sm" variant="outline" disabled={cancelling} onClick={cancelProject}>
             {cancelling ? "Cancelling..." : "Force Cancel Project"}
           </Button>

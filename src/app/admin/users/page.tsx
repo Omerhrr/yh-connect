@@ -10,6 +10,9 @@ import { AdjustWalletDialog } from "@/components/admin/AdjustWalletDialog";
 import { SuspendUserDialog } from "@/components/admin/SuspendUserDialog";
 import { toast } from "sonner";
 import Link from "next/link";
+import { useAuth } from "@/store/auth";
+import { canAccess } from "@/lib/adminAccess";
+import { useCanManage } from "@/lib/useCanManage";
 import { formatNaira as fmtNaira } from "@/lib/utils";
 
 const KYC_LABELS: Record<string, string> = { unverified: "KYC unverified", pending: "KYC pending", verified: "KYC verified", rejected: "KYC rejected" };
@@ -88,6 +91,8 @@ export default function AdminUsersPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [addAdminOpen, setAddAdminOpen] = useState(false);
+  const canManage = useCanManage("users");
+  const isFull = canAccess(useAuth((s) => s.user), "staff");
   const [walletTarget, setWalletTarget] = useState<AdminUserOut | null>(null);
   const [suspendTarget, setSuspendTarget] = useState<AdminUserOut | null>(null);
 
@@ -146,9 +151,11 @@ export default function AdminUsersPage() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold">Users</h1>
-        <Button size="sm" className="bg-slate-800 hover:bg-slate-900" onClick={() => setAddAdminOpen(true)}>
-          <UserPlus className="h-3.5 w-3.5 mr-1" /> Add Admin
-        </Button>
+        {isFull && (
+          <Button size="sm" className="bg-slate-800 hover:bg-slate-900" onClick={() => setAddAdminOpen(true)}>
+            <UserPlus className="h-3.5 w-3.5 mr-1" /> Add Admin
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-3 flex-wrap">
@@ -206,17 +213,17 @@ export default function AdminUsersPage() {
               </div>
             </Link>
             <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-              {u.role !== "admin" && (
+              {canManage && u.role !== "admin" && (
                 <Button size="sm" variant="outline" disabled={busyId === u.id} onClick={() => setWalletTarget(u)}>
                   <Wallet className="h-3.5 w-3.5 mr-1" /> Wallet
                 </Button>
               )}
-              {u.role !== "admin" && u.company_name && (
+              {canManage && u.role !== "admin" && u.company_name && (
                 <Button size="sm" variant="outline" disabled={busyId === u.id} onClick={() => toggleVerifiedBusiness(u)}>
                   <BadgeCheck className="h-3.5 w-3.5 mr-1" /> {u.is_verified_business ? "Unverify Business" : "Verify Business"}
                 </Button>
               )}
-              {u.role !== "admin" && (
+              {canManage && u.role !== "admin" && (
                 <Button size="sm" variant={u.is_active ? "outline" : "default"} disabled={busyId === u.id} onClick={() => (u.is_active ? setSuspendTarget(u) : unsuspend(u))}>
                   {u.is_active ? "Suspend" : "Reactivate"}
                 </Button>

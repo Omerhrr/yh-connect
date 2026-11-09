@@ -76,9 +76,33 @@ class User(Base):
 
     token_version: Mapped[int] = mapped_column(default=0)
 
+    # Staff access. Only meaningful when role == admin. NULL = full
+    # (super) admin; otherwise the admin is restricted to the permissions of
+    # this role (see app/services/staff_access.py).
+    admin_role_id: Mapped[str | None] = mapped_column(String, nullable=True)
+
     email_notifications_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    admin_role: Mapped["AdminRole"] = relationship(
+        "AdminRole", primaryjoin="User.admin_role_id == AdminRole.id", foreign_keys=[admin_role_id], viewonly=True
+    )
+
+    @property
+    def admin_permissions(self) -> list[str] | None:
+        """None for non-admins; ["*"] for a full admin; else the role's list."""
+        if self.role != UserRole.admin:
+            return None
+        if not self.admin_role_id:
+            return ["*"]
+        return list((self.admin_role.permissions if self.admin_role else None) or [])
+
+    @property
+    def admin_role_name(self) -> str | None:
+        if self.role != UserRole.admin:
+            return None
+        return self.admin_role.name if self.admin_role else "Full admin"
 
     profile: Mapped["ProfessionalProfile"] = relationship(
         "ProfessionalProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"

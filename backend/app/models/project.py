@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import String, Float, Text, ForeignKey, DateTime, Enum, Integer, JSON
+from sqlalchemy import String, Float, Text, ForeignKey, DateTime, Enum, Integer, JSON, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -46,6 +46,10 @@ class Project(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
 
     closing_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # F11: optional consultant/middleman who supervises the project.
+    needs_consultant: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    consultant_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     image_urls: Mapped[list | None] = mapped_column(JSON, nullable=True)
     video_url: Mapped[str | None] = mapped_column(String, nullable=True)

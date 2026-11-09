@@ -7,6 +7,7 @@ import { api, ApiError, type AdminContractRow } from "@/lib/api";
 import { toast } from "sonner";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Circle, FileText } from "lucide-react";
+import { useCanManage } from "@/lib/useCanManage";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -20,6 +21,7 @@ export default function AdminContractsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "stalled" | "escalated" | "approved" | "pending">("all");
   const [nudging, setNudging] = useState<string | null>(null);
+  const canManage = useCanManage("contracts");
 
   const load = () => {
     setLoading(true);
@@ -119,7 +121,7 @@ export default function AdminContractsPage() {
               <Badge className={`text-xs rounded-full capitalize ${r.status === "approved" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}`}>
                 {STATUS_LABELS[r.status] || r.status}
               </Badge>
-              {r.status !== "approved" && (
+              {canManage && r.status !== "approved" && (
                 <Button size="sm" variant="outline" disabled={nudging === r.id} onClick={() => nudge(r.id)}>
                   {nudging === r.id ? "Sending..." : "Nudge"}
                 </Button>

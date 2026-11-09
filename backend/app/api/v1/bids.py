@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -52,6 +53,8 @@ def create_bid(
         raise HTTPException(status_code=404, detail="Project not found")
     if project.status != ProjectStatus.open:
         raise HTTPException(status_code=400, detail="This project is no longer accepting proposals")
+    if project.hiring_deadline and project.hiring_deadline <= datetime.utcnow():
+        raise HTTPException(status_code=400, detail="The client has closed this project to new proposals")
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Proposal amount must be greater than zero")
     existing = (

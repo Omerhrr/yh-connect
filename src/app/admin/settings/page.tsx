@@ -19,6 +19,7 @@ import {
   type AcceptanceFeeRule,
 } from "@/lib/api";
 import { toast } from "sonner";
+import { ViewOnlyGuard } from "@/components/admin/ViewOnlyGuard";
 
 const NUMERIC_KEYS = new Set([
   "platform_fee_percent",
@@ -30,6 +31,7 @@ const NUMERIC_KEYS = new Set([
   "profile_name_change_cooldown_hours",
   "payment_withholding_percent",
   "payment_withholding_release_days",
+  "dispute_window_days_after_completion",
 ]);
 
 const ALL_KEYS = [
@@ -43,6 +45,9 @@ const ALL_KEYS = [
   "profile_name_change_cooldown_hours",
   "payment_withholding_percent",
   "payment_withholding_release_days",
+  "dispute_window_days_after_completion",
+  "feature_guarantors_enabled",
+  "feature_kasupda_terms_enabled",
 ];
 
 function SectionCard({ icon: Icon, title, description, children }: { icon: React.ElementType; title: string; description: string; children: React.ReactNode }) {
@@ -155,6 +160,7 @@ function AcceptanceFeeSection() {
         amount: Number(r.amount) || 0,
       }));
       const updated = await api.adminSaveAcceptanceFeeSettings({
+        payer: draft.payer ?? "talent",
         mode: draft.mode,
         general_amount: Number(draft.general_amount) || 0,
         rules: cleanedRules,
@@ -178,6 +184,12 @@ function AcceptanceFeeSection() {
         title="Talent Acceptance Fee"
         description="A one-time fee talent must pay from their wallet after a project's contract is approved, before work can begin. Milestone funding stays locked until it's paid."
       >
+        <ToggleField
+          label="Platform covers the commitment fee"
+          help="On: YH Connect pays this fee out of its own platform fee, so talent pay nothing to start a project. Off: talent pay it from their wallet."
+          checked={draft.payer === "platform"}
+          onChange={(v) => setDraft({ ...draft, payer: v ? "platform" : "talent" })}
+        />
         <ToggleField
           label="Rule-based pricing"
           help="Off: everyone pays the same flat fee. On: the fee varies by the talent's skill tier and/or the agreed project price."
@@ -703,6 +715,7 @@ export default function AdminSettingsPage() {
       {/* Every tab stays mounted (just hidden) once visited, instead of
           being torn down on tab switch — unmounting a section wiped out
           any unsaved edits in its local draft state with no warning. */}
+      <ViewOnlyGuard area="settings">
       <div className={tab === "receipts" ? "" : "hidden"}><ReceiptBrandingSection /></div>
       <div className={tab === "project-media" ? "" : "hidden"}><ProjectMediaSection /></div>
       <div className={tab === "acceptance-fee" ? "" : "hidden"}><AcceptanceFeeSection /></div>
@@ -802,7 +815,7 @@ export default function AdminSettingsPage() {
             </div>
           </SectionCard>
 
-          <SectionCard icon={Users} title="Professional Tiers" description="Daily bid and concurrent-project caps by verification tier. Tier 3 (fully verified) has no cap and isn't configurable.">
+          <SectionCard icon={Users} title="Professional Tiers" description="Two tiers only. Tier 1 (no verification needed) is capped below; Tier 2 (identity verified) has no cap and isn't configurable.">
             <div className="grid sm:grid-cols-2 gap-x-6 gap-y-5">
               <div className="sm:col-span-2 flex items-center gap-2">
                 <Badge variant="outline" className="text-xs rounded-full">Tier 1</Badge>
@@ -825,28 +838,49 @@ export default function AdminSettingsPage() {
 
               <div className="sm:col-span-2 flex items-center gap-2 pt-2 border-t">
                 <Badge className="text-xs rounded-full bg-blue-100 text-blue-700">Tier 2</Badge>
-                <span className="text-xs text-muted-foreground">NIN-verified professionals</span>
+                <span className="text-xs text-muted-foreground">Identity (NIN) verified. Leave at 0 for no cap.</span>
               </div>
               <NumberField
                 label="Daily Bid Limit"
-                help="Max bids a Tier 2 professional can send per day."
+                help="0 = unlimited. Max bids a Tier 2 professional can send per day."
                 value={valueFor("tier2_daily_proposal_limit")}
                 onChange={(v) => setField("tier2_daily_proposal_limit", v)}
                 dirty={isDirty("tier2_daily_proposal_limit")}
               />
               <NumberField
                 label="Concurrent Project Limit"
-                help="Max active projects a Tier 2 professional can work on at once."
+                help="0 = unlimited. How many jobs a Tier 2 professional can run at once."
                 value={valueFor("tier2_concurrent_project_limit")}
                 onChange={(v) => setField("tier2_concurrent_project_limit", v)}
                 dirty={isDirty("tier2_concurrent_project_limit")}
               />
-
-              <div className="sm:col-span-2 flex items-center gap-2 pt-2 border-t">
-                <Badge className="text-xs rounded-full bg-emerald-100 text-emerald-700">Tier 3</Badge>
-                <span className="text-xs text-muted-foreground">Identity + address verified — no caps</span>
-              </div>
             </div>
+          </SectionCard>
+
+          <SectionCard icon={Sparkles} title="Optional features" description="Off by default. Switch on when you're ready to launch them.">
+            <ToggleField
+              label="Guarantors"
+              help="Lets professionals name a guarantor (another platform user) who vouches for their work. Accepted guarantors show on the public profile."
+              checked={valueFor("feature_guarantors_enabled") === "true"}
+              onChange={(v) => setField("feature_guarantors_enabled", v ? "true" : "false")}
+            />
+            <ToggleField
+              label="Permits & drawing-approval terms (KASUPDA)"
+              help="Adds the permits / drawing-approval and indemnity wording to the Terms page and to the project-posting terms clients accept."
+              checked={valueFor("feature_kasupda_terms_enabled") === "true"}
+              onChange={(v) => setField("feature_kasupda_terms_enabled", v ? "true" : "false")}
+            />
+          </SectionCard>
+
+          <SectionCard icon={ShieldAlert} title="Disputes after completion" description="How long after a project is completed either side can still raise a dispute.">
+            <NumberField
+              label="Dispute window"
+              help="Days after completion. 0 = no disputes once a project is completed. Default 14."
+              value={valueFor("dispute_window_days_after_completion")}
+              onChange={(v) => setField("dispute_window_days_after_completion", v)}
+              suffix="days"
+              dirty={isDirty("dispute_window_days_after_completion")}
+            />
           </SectionCard>
         </div>
       )}
@@ -870,6 +904,7 @@ export default function AdminSettingsPage() {
       )}
       </>
       )}
+      </ViewOnlyGuard>
     </div>
   );
 }

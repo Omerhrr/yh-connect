@@ -33,7 +33,10 @@ ACCEPTANCE_FEE_SETTINGS_KEY = "acceptance_fee_settings"
 
 SKILL_LEVELS = ["unskilled", "semi_skilled", "skilled"]
 
-DEFAULTS = {"mode": "general", "general_amount": 0.0, "rules": []}
+# payer: "talent" (default, talent pays from their wallet) or "platform" (the
+# hub covers the commitment fee out of its own platform fee, so the talent
+# pays nothing, F2).
+DEFAULTS = {"mode": "general", "general_amount": 0.0, "rules": [], "payer": "talent"}
 
 
 def get_acceptance_fee_settings(db: Session) -> dict:
@@ -78,6 +81,8 @@ def get_professional_skill_level(db: Session, professional_id: str) -> str:
 
 def compute_acceptance_fee(db: Session, professional_id: str, agreed_price: float) -> float:
     settings_data = get_acceptance_fee_settings(db)
+    if settings_data.get("payer") == "platform":
+        return 0.0
     if settings_data.get("mode") != "rule_based":
         return float(settings_data.get("general_amount") or 0.0)
 

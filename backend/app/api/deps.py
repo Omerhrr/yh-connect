@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -6,10 +6,12 @@ from app.core.config import settings
 from app.core.security import decode_access_token
 from app.db.session import get_db
 from app.models.user import KycStatus, User, UserRole
+from app.services.staff_access import enforce as enforce_staff_access
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -29,6 +31,9 @@ def get_current_user(
     if payload.get("tv", 0) != user.token_version:
 
         raise credentials_exception
+    # Restricted staff (admins with a role) only reach the admin areas their
+    # role grants; full admins and everyone else pass straight through.
+    enforce_staff_access(user, request.method, request.url.path, settings.API_V1_PREFIX)
     return user
 
 def require_role(*roles: UserRole):

@@ -38,6 +38,11 @@ class Contract(Base):
     client_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     professional_approved: Mapped[bool] = mapped_column(Boolean, default=False)
     last_edited_by: Mapped[str | None] = mapped_column(String, nullable=True)  # "client" | "professional"
+
+    # "fixed": locked once approved, no amendments. "flexible": can be amended
+    # after approval through separately-approved addenda (ContractAddendum),
+    # which leave this original contract untouched.
+    contract_type: Mapped[str] = mapped_column(String, default="fixed", server_default="fixed")
     version: Mapped[int] = mapped_column(Integer, default=1)
 
     # Prior versions, appended on every edit before the content is

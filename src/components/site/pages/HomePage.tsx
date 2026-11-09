@@ -44,6 +44,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useNav } from "@/store/nav";
+import { useAuth } from "@/store/auth";
+import { useFeatures } from "@/lib/features";
 import { formatNaira, formatBudgetRange } from "@/lib/utils";
 import { CmsPage } from "@/components/site/CmsPage";
 import { useSiteContent } from "@/lib/siteContent";
@@ -763,27 +765,31 @@ export function FindTalentPage() {
   const [categoryId, setCategoryId] = useState(searchParams?.get("category_id") || "");
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [locationFilter, setLocationFilter] = useState("");
+  const [minRating, setMinRating] = useState("");
+  const [states, setStates] = useState<string[]>([]);
 
   useEffect(() => {
     api.categories().then(setCategories).catch(() => setCategories([]));
+    api.activeStates().then((r) => setStates(r.map((s) => s.name))).catch(() => {});
   }, []);
 
   const load = () => {
     setPros(null);
     api
-      .professionals({ q: search || undefined, category_id: categoryId || undefined, limit: PAGE_SIZE, offset: 0 })
+      .professionals({ q: search || undefined, category_id: categoryId || undefined, location: locationFilter || undefined, min_rating: minRating ? Number(minRating) : undefined, limit: PAGE_SIZE, offset: 0 })
       .then((r) => {
         setPros(r);
         setHasMore(r.length === PAGE_SIZE);
       })
       .catch(() => setPros(null));
   };
-  useEffect(() => { load(); }, []);  useEffect(() => { load(); }, [categoryId]);
+  useEffect(() => { load(); }, [categoryId, locationFilter, minRating]);
   const loadMore = () => {
     if (!pros) return;
     setLoadingMore(true);
     api
-      .professionals({ q: search || undefined, category_id: categoryId || undefined, limit: PAGE_SIZE, offset: pros.length })
+      .professionals({ q: search || undefined, category_id: categoryId || undefined, location: locationFilter || undefined, min_rating: minRating ? Number(minRating) : undefined, limit: PAGE_SIZE, offset: pros.length })
       .then((r) => {
         setPros((prev) => [...(prev ?? []), ...r]);
         setHasMore(r.length === PAGE_SIZE);
@@ -816,6 +822,25 @@ export function FindTalentPage() {
         >
           <option value="">All categories</option>
           {categories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <select
+          value={locationFilter}
+          onChange={(e) => setLocationFilter(e.target.value)}
+          className="flex h-10 w-full sm:w-44 rounded-md border border-input bg-background px-3 py-2 text-sm"
+          aria-label="Filter by location"
+        >
+          <option value="">All locations</option>
+          {states.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          value={minRating}
+          onChange={(e) => setMinRating(e.target.value)}
+          className="flex h-10 w-full sm:w-36 rounded-md border border-input bg-background px-3 py-2 text-sm"
+          aria-label="Minimum rating"
+        >
+          <option value="">Any rating</option>
+          <option value="4">4★ &amp; up</option>
+          <option value="3">3★ &amp; up</option>
         </select>
         <Button onClick={load}>Search</Button>
       </div>
@@ -891,23 +916,43 @@ export function FindWorkPage() {
   const [search, setSearch] = useState("");
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [stateFilter, setStateFilter] = useState("");
+  const [states, setStates] = useState<string[]>([]);
+  const [nearMe, setNearMe] = useState<string>("");
+  const isPro = useAuth((s) => s.user?.role === "professional");
 
-  const load = () => {
+  useEffect(() => {
+    api.activeStates().then((r) => setStates(r.map((s) => s.name))).catch(() => {});
+    // Professionals see jobs near their own location first.
+    if (isPro) api.myProfile().then((p) => setNearMe(p.location || "")).catch(() => {});
+  }, [isPro]);
+
+  const baseParams = (offset: number) => ({
+    q: search || undefined,
+    state: stateFilter || undefined,
+    near: !stateFilter && nearMe ? nearMe : undefined,
+    limit: PAGE_SIZE,
+    offset,
+  });
+
+  const load = (overrides?: { state?: string }) => {
     setProjects(null);
+    const params = baseParams(0);
+    if (overrides && overrides.state !== undefined) params.state = overrides.state || undefined;
     api
-      .projects({ q: search || undefined, limit: PAGE_SIZE, offset: 0 })
+      .projects(params)
       .then((r) => {
         setProjects(r);
         setHasMore(r.length === PAGE_SIZE);
       })
       .catch(() => setProjects(null));
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [nearMe]);
   const loadMore = () => {
     if (!projects) return;
     setLoadingMore(true);
     api
-      .projects({ q: search || undefined, limit: PAGE_SIZE, offset: projects.length })
+      .projects(baseParams(projects.length))
       .then((r) => {
         setProjects((prev) => [...(prev ?? []), ...r]);
         setHasMore(r.length === PAGE_SIZE);
@@ -933,8 +978,20 @@ export function FindWorkPage() {
             onKeyDown={(e) => e.key === "Enter" && load()}
           />
         </div>
-        <Button onClick={load}>Search</Button>
+        <select
+          value={stateFilter}
+          onChange={(e) => { setStateFilter(e.target.value); load({ state: e.target.value }); }}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          aria-label="Filter by state"
+        >
+          <option value="">All locations</option>
+          {states.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <Button onClick={() => load()}>Search</Button>
       </div>
+      {!stateFilter && nearMe && (
+        <p className="-mt-5 mb-6 text-xs text-muted-foreground flex items-center gap-1"><MapPin className="h-3 w-3" /> Showing projects near {nearMe} first.</p>
+      )}
       <div className="grid md:grid-cols-3 gap-5">
         {(projects ?? []).map((proj) => (
           <Link
@@ -1383,6 +1440,7 @@ export function PrivacyPage() {
 }
 
 export function TermsPage() {
+  const { kasupda_terms: showPermits } = useFeatures();
   return (
     <CmsPage slug="terms">
       <LegalLayout
@@ -1416,12 +1474,27 @@ export function TermsPage() {
               <p>Clients and professionals are expected to communicate honestly, deliver work as agreed, and treat each other with respect. Misrepresenting qualifications, fraud, or abusive behavior may result in account suspension.</p>
             ),
           },
+          ...(!showPermits ? [] : [{
+            id: "permits-approvals",
+            title: "Permits, Drawings & Regulatory Approvals",
+            icon: ClipboardList,
+            content: (
+              <>
+                <p>YH Connect is a marketplace that connects clients and professionals. It is not a regulator, and it does not review, approve or certify designs, drawings or building work.</p>
+                <p className="mt-3">Clients are solely responsible for obtaining every permit and approval required for their project before construction begins, including approval of building drawings by the relevant planning authority (for example KASUPDA in Kaduna State, or the equivalent authority in the project&apos;s state). Professionals must not start work that requires approval until the client confirms it has been obtained.</p>
+                <p className="mt-3">YH Connect and its operators accept no liability for projects carried out without the necessary approvals, and users agree to indemnify YH Connect against claims arising from non-compliance with planning, building or other regulations.</p>
+              </>
+            ),
+          }]),
           {
             id: "dispute-resolution",
             title: "Dispute Resolution",
             icon: Scale,
             content: (
-              <p>If a disagreement arises over a project, either party can open a dispute from the project workspace. Our support team reviews the evidence from both sides and makes a final decision on how escrowed funds are handled.</p>
+              <>
+                <p>If a disagreement arises over a project, either party can open a dispute from the project workspace. Our support team reviews the evidence from both sides (messages, contracts, approved changes and payment records) and makes a final decision on how escrowed funds are handled.</p>
+                <p className="mt-3">Disputes can also be raised for a limited period after a project is completed. The length of that window is set by YH Connect and shown in the project workspace.</p>
+              </>
             ),
           },
           {
@@ -1467,6 +1540,65 @@ function BackToTop() {
     >
       <ArrowUp className="h-5 w-5" />
     </button>
+  );
+}
+
+/** Replaces the old header nav: every key destination, laid out on the home page. */
+function ExploreHub() {
+  const paths = [
+    {
+      href: "/for-clients", icon: Building2, eyebrow: "I need work done", title: "For Clients",
+      desc: "Post a project, compare proposals and pay safely through escrow.",
+      cls: "from-primary/15 to-primary/5 border-primary/20", iconCls: "bg-primary text-primary-foreground",
+    },
+    {
+      href: "/for-talents", icon: HardHat, eyebrow: "I do the work", title: "For Professionals",
+      desc: "Build your profile, win projects near you and get paid on approval.",
+      cls: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/20", iconCls: "bg-emerald-600 text-white",
+    },
+  ];
+  const tiles = [
+    { href: "/find-talent", icon: Search, title: "Find Professionals", desc: "Browse verified architects, engineers and tradespeople." },
+    { href: "/find-work", icon: Briefcase, title: "Find Projects", desc: "See open jobs by trade, budget and location." },
+    { href: "/how-it-works", icon: ClipboardList, title: "How It Works", desc: "From posting to payment in four simple steps." },
+  ];
+  return (
+    <section className="py-16">
+      <div className="container mx-auto px-4">
+        <div className="text-center mb-10">
+          <Badge variant="secondary" className="rounded-full mb-3">Start here</Badge>
+          <h2 className="text-3xl font-bold">What would you like to do?</h2>
+        </div>
+        <div className="grid md:grid-cols-2 gap-5">
+          {paths.map((p) => (
+            <Link key={p.href} href={p.href} className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br p-6 md:p-8 transition-all hover:-translate-y-1 hover:shadow-lg ${p.cls}`}>
+              <div className={`h-12 w-12 rounded-xl flex items-center justify-center shadow-md ${p.iconCls}`}>
+                <p.icon className="h-6 w-6" />
+              </div>
+              <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{p.eyebrow}</p>
+              <h3 className="text-2xl font-bold mt-1">{p.title}</h3>
+              <p className="mt-2 text-muted-foreground max-w-sm">{p.desc}</p>
+              <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-primary">
+                Learn more <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          ))}
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4 mt-5">
+          {tiles.map((t) => (
+            <Link key={t.href} href={t.href} className="group flex items-start gap-3 rounded-xl border bg-card p-4 transition-all hover:border-primary/40 hover:shadow-md">
+              <div className="h-10 w-10 shrink-0 rounded-lg bg-muted flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                <t.icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold">{t.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{t.desc}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1538,6 +1670,7 @@ export function HomePage() {
   return (
     <>
       <Hero />
+      <ExploreHub />
       <PlatformFacts />
       <Highlights />
       <Categories />

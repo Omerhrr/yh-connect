@@ -67,6 +67,31 @@ def get_payment_withholding_release_days(db: Session) -> float:
             pass
     return settings.PAYMENT_WITHHOLDING_RELEASE_DAYS
 
+def get_dispute_window_days_after_completion(db: Session) -> float:
+    """How many days after a project is completed a dispute can still be
+    raised (Q9). Admin-editable; 0 means no disputes once completed."""
+    row = db.get(PlatformSetting, "dispute_window_days_after_completion")
+    if row and row.value not in (None, ""):
+        try:
+            return max(0.0, float(row.value))
+        except ValueError:
+            pass
+    return 14.0
+
+FEATURE_FLAGS = ("feature_guarantors_enabled", "feature_kasupda_terms_enabled")
+
+def is_feature_enabled(db: Session, key: str) -> bool:
+    """Optional features an admin can switch on/off from Platform Settings.
+    All default to OFF until an admin activates them."""
+    row = db.get(PlatformSetting, key)
+    return bool(row and (row.value or "").strip().lower() in ("true", "1", "yes", "on"))
+
+def get_feature_flags(db: Session) -> dict:
+    return {
+        "guarantors": is_feature_enabled(db, "feature_guarantors_enabled"),
+        "kasupda_terms": is_feature_enabled(db, "feature_kasupda_terms_enabled"),
+    }
+
 def get_featured_category_ids(db: Session) -> list[str]:
     row = db.get(PlatformSetting, "featured_category_ids")
     if not row or not row.value:

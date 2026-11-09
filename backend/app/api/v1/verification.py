@@ -195,7 +195,7 @@ def submit_address_verification(
     db: Session = Depends(get_db),
 ):
     if current_user.kyc_status != KycStatus.verified:
-        raise HTTPException(status_code=400, detail="Verify your identity (NIN) first, that's tier 2 before tier 3.")
+        raise HTTPException(status_code=400, detail="Verify your identity (NIN) first, before you can add proof of address.")
     profile = _my_profile(current_user, db)
     if profile.address_verification_status == "verified":
         raise HTTPException(status_code=400, detail="Your address is already verified")
@@ -250,8 +250,8 @@ def review_address_verification(
     if payload.status == "verified":
         notify(
             db, profile.user_id, NotificationType.kyc_status_changed,
-            f"You're now {TIER_LABELS[tier]}",
-            body="Your proof of address was reviewed and approved. Tier 3 has no proposal or active-project caps.",
+            "Your address is verified",
+            body="Your proof of address was reviewed and approved. It now shows as a trust badge on your profile.",
             link="/talent/dashboard/settings", email_also=True,
         )
     else:

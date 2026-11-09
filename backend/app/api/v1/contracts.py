@@ -14,7 +14,7 @@ from app.models.user import User, UserRole
 from app.models.wallet import WalletTransaction, WalletTransactionStatus, WalletTransactionType
 from app.schemas.contract import ContractOut, ContractUpdate
 from app.services.contracts import generate_contract_content
-from app.services.notify import notify
+from app.services.notify import notify, notify_admins
 from app.services.reminders import check_contract_reminder, check_contract_escalation, CONTRACT_REMINDER_AFTER
 
 router = APIRouter(tags=["contracts"])
@@ -29,6 +29,11 @@ def _amounts(db: Session, contract: Contract) -> tuple[float, float]:
         agreed = bid.amount
     else:
         agreed = (project.budget_min + project.budget_max) / 2
+    from app.models.contract_addendum import ContractAddendum
+    agreed += sum(
+        a.amount_delta for a in db.query(ContractAddendum)
+        .filter(ContractAddendum.contract_id == contract.id, ContractAddendum.status == "approved").all()
+    )
     total = sum(
         m.amount for m in db.query(Milestone).filter(Milestone.project_id == contract.project_id).all()
         if str(getattr(m.status, "value", m.status)) != "refunded"
@@ -74,6 +79,7 @@ def get_project_contract(project_id: str, current_user: User = Depends(get_curre
 @router.post("/projects/{project_id}/contract/generate", response_model=ContractOut, status_code=201)
 def generate_contract(
     project_id: str,
+    contract_type: str = "fixed",
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -115,7 +121,11 @@ def generate_contract(
         .first()
     )
 
+    if contract_type not in ("fixed", "flexible"):
+        raise HTTPException(status_code=400, detail="contract_type must be 'fixed' or 'flexible'")
+
     contract = Contract(
+        contract_type=contract_type,
         project_id=project.id,
         bid_id=bid.id if bid else None,
         client_id=project.client_id,
@@ -183,6 +193,17 @@ def edit_contract(
     contract.updated_at = datetime.utcnow()
     contract.approval_reminder_sent = False
     contract.admin_escalated_at = None
+
+    # F16: repeated back-and-forth edits alert the hub (admin/support) so it
+    # can step in before the negotiation stalls. Fires at the 3rd revision
+    # and every 2nd one after (v3, v5, v7, ...).
+    if contract.version >= 3 and contract.version % 2 == 1:
+        notify_admins(
+            db, NotificationType.general,
+            f"Contract revised {contract.version - 1} times — \"{contract.project.title}\"",
+            body="The client and talent keep revising this contract. You may want to step in.",
+            link="/admin/contracts",
+        )
 
     other_id = contract.professional_id if role == "client" else contract.client_id
     other_label = "client" if role == "professional" else "professional"

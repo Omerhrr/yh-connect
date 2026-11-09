@@ -16,6 +16,7 @@ import { DISPUTE_STATUS_COLORS as STATUS_COLORS, MILESTONE_STATUS_COLORS } from 
 import { toast } from "sonner";
 import Link from "next/link";
 import { Landmark } from "lucide-react";
+import { useCanManage } from "@/lib/useCanManage";
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Open",
@@ -37,6 +38,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
   const [outcome, setOutcome] = useState<DisputeOutcome>("release_professional");
   const [splitAmount, setSplitAmount] = useState("");
   const [busy, setBusy] = useState(false);
+  const canManage = useCanManage("disputes");
 
   const load = () => {
     api.adminDisputeDetail(id).then(setDispute).catch(() => toast.error("Could not load this dispute")).finally(() => setLoading(false));
@@ -165,7 +167,7 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
         </div>
       )}
 
-      {!isClosed && (
+      {!isClosed && canManage && (
         <div className="rounded-xl border bg-background p-5 space-y-3">
           <h2 className="font-semibold text-sm">Take Action</h2>
           <textarea
@@ -231,7 +233,9 @@ export default function Page({ params }: { params: Promise<{ id: string }> }) {
             </div>
           ))}
         </div>
-        {!isClosed ? (
+        {!isClosed && !canManage ? (
+          <div className="p-4 border-t"><p className="text-xs text-muted-foreground">View only. Your role can&apos;t reply or resolve disputes.</p></div>
+        ) : !isClosed ? (
           <div className="p-4 border-t flex items-center gap-2">
             <Input value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendReply()} placeholder="Ask a clarifying question..." className="h-9" />
             <Button size="sm" onClick={sendReply} disabled={sending || !reply.trim()}>Send</Button>

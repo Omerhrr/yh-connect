@@ -13,6 +13,7 @@ import { AdjustWalletDialog } from "@/components/admin/AdjustWalletDialog";
 import { SuspendUserDialog } from "@/components/admin/SuspendUserDialog";
 import { toast } from "sonner";
 import { BadgeCheck, Wallet, ArrowRight } from "lucide-react";
+import { useCanManage } from "@/lib/useCanManage";
 
 const VERIFICATION_LABELS: Record<string, string> = {
   unverified: "Unverified",
@@ -29,9 +30,9 @@ const VERIFICATION_TONES: Record<string, string> = {
 };
 
 function tierFor(identity: string, address: string) {
-  if (identity === "verified" && address === "verified") return { tier: 3, label: "Tier 3 · Full trust, no caps" };
-  if (identity === "verified") return { tier: 2, label: "Tier 2 · NIN-verified" };
-  return { tier: 1, label: "Tier 1 · Identity unverified" };
+  void address;
+  if (identity === "verified") return { tier: 2, label: "Tier 2 · Identity verified, no caps" };
+  return { tier: 1, label: "Tier 1 · No verification needed" };
 }
 
 export default function AdminUserDetailPage() {
@@ -41,6 +42,7 @@ export default function AdminUserDetailPage() {
   const [walletTxs, setWalletTxs] = useState<AdminWalletTransactionOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const canManage = useCanManage("users");
   const [walletOpen, setWalletOpen] = useState(false);
   const [suspendOpen, setSuspendOpen] = useState(false);
 
@@ -106,7 +108,7 @@ export default function AdminUserDetailPage() {
             )}
           </div>
         </div>
-        {data.role !== "admin" && (
+        {canManage && data.role !== "admin" && (
           <div className="flex gap-2 flex-wrap">
             <Button
               size="sm"
@@ -158,9 +160,11 @@ export default function AdminUserDetailPage() {
             <Link href={`/admin/payments?user=${data.id}`} className="text-xs text-primary hover:underline flex items-center gap-0.5">
               View all in Payments <ArrowRight className="h-3 w-3" />
             </Link>
-            <Button size="sm" variant="outline" onClick={() => setWalletOpen(true)}>
-              <Wallet className="h-3.5 w-3.5 mr-1" /> Adjust
-            </Button>
+            {canManage && (
+              <Button size="sm" variant="outline" onClick={() => setWalletOpen(true)}>
+                <Wallet className="h-3.5 w-3.5 mr-1" /> Adjust
+              </Button>
+            )}
           </div>
         </div>
         <p className="text-2xl font-bold">{fmtNaira(data.wallet_balance ?? 0)}</p>
@@ -219,7 +223,7 @@ export default function AdminUserDetailPage() {
             </div>
             <div className="rounded-lg border p-3 space-y-1">
               <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-muted-foreground">Proof of Address (Tier 3)</p>
+                <p className="text-xs font-medium text-muted-foreground">Proof of Address (optional badge)</p>
                 <Badge className={`text-[10px] rounded-full ${VERIFICATION_TONES[prof.address_verification_status] || "bg-gray-100 text-gray-600"}`}>
                   {VERIFICATION_LABELS[prof.address_verification_status] || prof.address_verification_status}
                 </Badge>

@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useNav } from "@/store/nav";
 import { useAuth } from "@/store/auth";
 import { api, ApiError } from "@/lib/api";
+import { useFeatures } from "@/lib/features";
 import { SKILLS, CATEGORIES } from "@/data/content";
 import { inferCategoryId } from "@/lib/categoryInference";
 import { toast } from "sonner";
@@ -255,7 +256,7 @@ export function ClientLoginPage() {
   );
 }
 
-const CLIENT_STEPS = ["What you need", "Category", "Project", "Budget", "Skills", "Name", "Email", "Password", "Terms"];
+const CLIENT_STEPS = ["What you need", "Category", "Project", "Budget", "Skills", "Your details", "Secure & agree"];
 
 export function ClientRegisterPage() {
   const { navigate, setClientAuth } = useNav();
@@ -297,6 +298,7 @@ export function ClientRegisterPage() {
 
   const [projectTerms, setProjectTerms] = useState<{ title: string; body: string } | null>(null);
   const [termsAgreed, setTermsAgreed] = useState(false);
+  const { kasupda_terms: permitsClause } = useFeatures();
 
   // Restore a draft left over from a previous, unfinished attempt (e.g. the
   // user filled the wizard, registered, but hadn't verified their email yet
@@ -350,13 +352,9 @@ export function ClientRegisterPage() {
     if (step === 2 && !title) return toast.error("Please enter a project title");
     if (step === 3 && !budgetUnknown && (!budget || Number(budget) <= 0)) return toast.error("Please enter your estimated budget, or mark it as not set");
     if (step === 4 && skills.length === 0) return toast.error("Pick at least one skill from the suggestions or add your own");
-    if (step === 5 && (!firstName || !lastName)) return toast.error("Please enter your first and last name");
-    if (step === 6 && !email) return toast.error("Please enter your email address");
-    if (step === 7) {
-      if (!password || !confirmPassword) return toast.error("Please enter and confirm your password");
-      if (password !== confirmPassword) return toast.error("Passwords do not match");
-      if (password.length < 8) return toast.error("Password must be at least 8 characters");
-      if (!agreed) return toast.error("Please accept the Terms of Service");
+    if (step === 5) {
+      if (!firstName || !lastName) return toast.error("Please enter your first and last name");
+      if (!email) return toast.error("Please enter your email address");
     }
     setDirection("forward");
     setStep((s) => s + 1);
@@ -619,18 +617,27 @@ export function ClientRegisterPage() {
 
             {step === 5 && (
               <div>
-                <ChatBubble>Almost there. Who am I speaking with?</ChatBubble>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="firstName">First Name *</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" className="pl-9" />
+                <ChatBubble>Almost there. Just your name and email, that&apos;s all we need.</ChatBubble>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="firstName">First Name *</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input id="firstName" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" className="pl-9" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="lastName">Last Name *</Label>
+                      <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" />
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="lastName">Last Name *</Label>
-                    <Input id="lastName" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" />
+                    <Label htmlFor="email">Email Address *</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="pl-9" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -639,23 +646,7 @@ export function ClientRegisterPage() {
 
             {step === 6 && (
               <div>
-                <ChatBubble>
-                  {firstName ? `Nice to meet you, ${firstName}. What's your email address?` : "What's your email address?"}
-                </ChatBubble>
-                <div className="space-y-1.5">
-                  <Label htmlFor="email">Email Address *</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="pl-9" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-
-            {step === 7 && (
-              <div>
-                <ChatBubble>Last step, set a password to secure your account. We'll create it and post your project right after.</ChatBubble>
+                <ChatBubble>Last step: set a password, review the terms, and we&apos;ll create your account and post your project.</ChatBubble>
                 <div className="space-y-4">
                   <PasswordInput id="password" label="Password *" value={password} onChange={setPassword} />
                   <PasswordInput id="confirmPassword" label="Confirm Password *" value={confirmPassword} onChange={setConfirmPassword} placeholder="Repeat password" />
@@ -668,18 +659,10 @@ export function ClientRegisterPage() {
                       <button type="button" onClick={() => navigate("privacy")} className="text-primary hover:underline">Privacy Policy</button>
                     </span>
                   </label>
-                </div>
-              </div>
-            )}
-
-
-            {step === 8 && (
-              <div>
-                <ChatBubble>One last thing, please review and accept our project posting terms.</ChatBubble>
-                <div className="space-y-3">
-                  <div className="max-h-56 overflow-y-auto rounded-md border border-input bg-muted/30 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
+                  <div className="max-h-36 overflow-y-auto rounded-md border border-input bg-muted/30 p-3 text-xs text-muted-foreground whitespace-pre-wrap">
                     {projectTerms?.body?.trim() ||
-                      "By posting a project, you confirm the details you've provided are accurate, you intend to genuinely hire for this work, and you agree to fund and pay professionals through YH Connect's escrow system for any work you approve."}
+                      "By posting a project, you confirm the details you've provided are accurate, you intend to genuinely hire for this work, and you agree to fund and pay professionals through YH Connect's escrow system for any work you approve." +
+                      (permitsClause ? " You are responsible for obtaining all required permits and approvals (including approval of building drawings by the relevant planning authority, e.g. KASUPDA) before construction begins; YH Connect does not review or approve drawings and is indemnified against claims arising from non-compliance." : "")}
                   </div>
                   <label className="flex items-start gap-2 cursor-pointer">
                     <Checkbox checked={termsAgreed} onCheckedChange={(v) => setTermsAgreed(!!v)} className="mt-0.5" />

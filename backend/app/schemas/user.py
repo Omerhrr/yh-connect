@@ -52,6 +52,9 @@ class UserOut(UserBase):
     wallet_balance: float = 0.0
 
     has_professional_profile: bool = False
+    # Admins only: ["*"] = full admin, else the list of "area:level" grants.
+    admin_permissions: Optional[list[str]] = None
+    admin_role_name: Optional[str] = None
     name_changed_at: Optional[datetime] = None
     username: Optional[str] = None
 

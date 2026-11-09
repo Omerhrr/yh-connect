@@ -14,8 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/site/ThemeToggle";
 import { RoleSwitcher } from "@/components/site/dashboard/RoleSwitcher";
-import { SmartLink } from "@/components/site/SmartLink";
-import { useSiteContent } from "@/lib/siteContent";
 import { useNav } from "@/store/nav";
 import { useAuth } from "@/store/auth";
 
@@ -26,7 +24,6 @@ export function Header() {
   const clientAuthed = user?.role === "client";
   const talentAuthed = user?.role === "professional";
   const [menuOpen, setMenuOpen] = useState(false);
-  const { nav_links: navLinks } = useSiteContent("header");
 
   const menuRef = useRef<HTMLElement>(null);
   const [scrolled, setScrolled] = useState(false);
@@ -62,8 +59,6 @@ export function Header() {
     setMenuOpen(false);
   };
 
-  const isActive = (href: string) => pathname === href || (href !== "/" && pathname?.startsWith(href + "/"));
-
   return (
     <header ref={menuRef} className={`sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 transition-shadow ${scrolled ? "shadow-md" : "shadow-none"}`}>
       <div className="container mx-auto flex h-16 items-center justify-between gap-3 px-4">
@@ -79,19 +74,6 @@ export function Header() {
             YH <span className="text-primary">Connect</span>
           </span>
         </button>
-
-        {}
-        <nav className="hidden lg:flex items-center gap-1 xl:gap-2">
-          {navLinks.map((link) => (
-            <SmartLink
-              key={link.label + link.href}
-              href={link.href}
-              className={`rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors hover:text-primary hover:bg-primary/5 ${isActive(link.href) ? "text-primary bg-primary/10" : "text-muted-foreground"}`}
-            >
-              {link.label}
-            </SmartLink>
-          ))}
-        </nav>
 
         {}
         <div className="flex items-center gap-2 shrink-0">
@@ -145,21 +127,6 @@ export function Header() {
       {menuOpen && (
         <div className="relative">
           <div className="lg:absolute lg:right-4 lg:top-2 lg:w-80 lg:rounded-xl lg:border lg:bg-background lg:shadow-lg border-t bg-background px-4 py-4 space-y-1">
-            {}
-            <div className="lg:hidden space-y-1 pb-2">
-              {navLinks.map((link) => (
-                <SmartLink
-                  key={link.label + link.href}
-                  href={link.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="block w-full text-left py-2 text-sm font-medium"
-                >
-                  {link.label}
-                </SmartLink>
-              ))}
-            </div>
-            <hr className="border-border lg:hidden" />
-
             {}
             <div className="py-2 space-y-1">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
